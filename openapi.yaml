@@ -1,8 +1,8 @@
 openapi: 3.1.0
 info:
   title: QTSurfer API
-  description: QTSurfer backend services API
-  version: "0.10.14"
+  summary: QTSurfer backend services API
+  version: 0.10.18
   license:
     name: Apache-2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
@@ -27,6 +27,28 @@ security:
   - bearerAuth: []
 
 paths:
+  /exchanges:
+    get:
+      tags:
+        - exchange
+      summary: Get a list of available exchanges
+      operationId: getExchanges
+      security:
+        - bearerAuth: []
+      responses:
+        200:
+          description: A JSON array of Exchanges
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Exchange"
+              example:
+                - id: binance
+                  name: Binance
+                - id: kraken
+                  name: Kraken
   /{exchangeId}/instruments:
     get:
       tags:
@@ -43,7 +65,7 @@ paths:
           schema:
             type: string
       responses:
-        "200":
+        200:
           description: A JSON array of Instruments
           content:
             application/json:
@@ -51,8 +73,10 @@ paths:
                 type: array
                 items:
                   $ref: "#/components/schemas/Instrument"
-              example: ["BTC/USDT", "BTC/ETH"]
-        "404":
+              example: 
+                - BTC/USDT
+                - BTC/ETH
+        404:
           description: Exchange not found
 
 components:
@@ -65,4 +89,15 @@ components:
     Instrument:
       type: string
       description: Exchange instrument (eg. a currency pair)
-      example: "BTC/USDT"
+      example: BTC/USDT
+    Exchange:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the exchange
+          example: binance
+        name:
+          type: string
+          description: Name of the exchange
+          example: Binance
