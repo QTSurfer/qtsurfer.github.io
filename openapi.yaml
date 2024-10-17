@@ -32,7 +32,7 @@ paths:
       tags:
         - exchange
       summary: Get a list of Instruments from a specific exchange
-      operationId: getExchangeInstruments
+      operationId: getInstruments
       security:
         - bearerAuth: []
       parameters:
