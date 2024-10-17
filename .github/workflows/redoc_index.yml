@@ -1,0 +1,33 @@
+name: Generate Redoc HTML
+
+on:
+  push:
+    paths:
+      - 'openapi.yaml'
+    branches:
+      - '**'
+
+jobs:
+  generate-redoc:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Redoc CLI
+        run: |
+          npm install -g redoc-cli
+
+      - name: Generate HTML from OpenAPI
+        run: |
+          redoc-cli bundle openapi.yaml -o index.html
+
+      - name: Commit HTML file
+        run: |
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add index.html
+          git commit -m "chore: Updated OpenAPI HTML documentation"
+          git push
+          echo "🚀 Done!"
