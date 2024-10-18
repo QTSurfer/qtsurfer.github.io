@@ -12,16 +12,31 @@ externalDocs:
   url: https://qtsurfer.com/developers
 
 servers:
-  - url: https://api-dev.qtsurfer.com
-    description: Dev server
+  - url: https://api.staging.qtsurfer.com
+    description: Staging server
   - url: https://api.qtsurfer.com
     description: Production server
 
 tags:
-  - name: exchange
-    description: Exchange
-  - name: backtesting
-    description: Backtesting
+  - name: Exchange
+    description: |-   
+      This set of endpoints allows interaction with various **exchanges** for cryptocurrencies and financial assets. With these endpoints, users can access information about available exchanges, 
+      retrieve the instruments (currency pairs or assets) offered by each exchange, and perform analyses on them. The data provided by these endpoints is crucial for strategic decision-making 
+      within the trading platform.
+
+      **Key functionalities**:
+      - Retrieve the list of available exchanges on the platform.
+      - Get the instruments available on a specific exchange (currency pairs, assets, etc.).
+
+  - name: Backtesting
+    description: |-
+      The **backtesting** endpoints enable users to test trading strategies based on historical data before applying them in real-time trading. This functionality is essential for traders who want
+      to evaluate the performance of a strategy under past market conditions and optimize it before implementing it in a live trading environment.
+
+      **Key functionalities**:
+      - Compile rich Java&trade; based strategies.
+      - Run simulations of trading strategies using historical market data.
+      - Assess performance and optimize strategies based on past results and metrics.
 
 security:
   - bearerAuth: []
@@ -30,7 +45,7 @@ paths:
   /exchanges:
     get:
       tags:
-        - exchange
+        - Exchange
       summary: Get a list of available exchanges
       operationId: getExchanges
       security:
@@ -52,7 +67,7 @@ paths:
   /exchange/{exchangeId}/instruments:
     get:
       tags:
-        - exchange
+        - Exchange
       summary: Get a list of Instruments from a specific exchange
       operationId: getInstruments
       security:
