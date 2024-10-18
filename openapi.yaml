@@ -49,7 +49,7 @@ paths:
                   name: Binance
                 - id: kraken
                   name: Kraken
-  /{exchangeId}/instruments:
+  /exchange/{exchangeId}/instruments:
     get:
       tags:
         - exchange
