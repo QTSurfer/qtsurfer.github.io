@@ -5,7 +5,7 @@ on:
     paths:
       - "openapi.yaml"
     branches:
-      - "**"
+      - main
 
 jobs:
   generate-redoc:
