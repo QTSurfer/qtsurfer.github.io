@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.10.18
+  version: 0.10.24
   license:
     name: Apache-2.0
     url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
@@ -12,7 +12,7 @@ servers:
   - url: 'https://api.qtsurfer.com'
     description: Production server
 paths:
-  /exchanges:
+  '/exchanges':
     get:
       operationId: getExchanges
       summary: Get a list of available exchanges
@@ -63,13 +63,61 @@ paths:
         - bearerAuth: []
       tags:
         - Exchange
+  '/strategy':
+    post:
+      operationId: postStrategy
+      summary: Submits a strategy code to be compiled/validated
+      requestBody:
+        description: The strategy code to be submitted for validation
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              description: The raw strategy code submitted by the user
+      responses:
+        '200':
+          description: Strategy created/updated
+          content:
+            application/json:
+              schema:
+                type: string
+                description: Strategy unique identifier
+              example: '1218274906'
+        '400':
+          description: Invalid strategy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: '400'
+                message: 'Line 1, Column 18: syntax error'
+      security:
+        - bearerAuth: []
+      tags:
+        - Strategy
+
 components:
   schemas:
+    ResponseError:
+      description: General response errors
+      type: object
+      properties:
+        code:
+          description: Status code
+          type: string
+          example: 400
+        message:
+          description: Error description
+          type: string
+          example: Invalid request
     Instrument:
       description: Exchange instrument (eg. a currency pair)
       type: string
       example: BTC/USDT
     Exchange:
+      description: Exchange service provider
       type: object
       properties:
         id:
@@ -104,6 +152,16 @@ tags:
       - Compile rich Java&trade; based strategies.
       - Run simulations of trading strategies using historical market data.
       - Assess performance and optimize strategies based on past results and metrics.
+  - name: Strategy
+    description: |-
+      The **strategy** endpoints allow users to submit, compile, and validate trading strategies within the platform. This feature is crucial for traders who develop automated trading systems and
+      wish to ensure their strategy is both executable and effective before deploying it in a live/backtesting environment.
+
+      **Key functionalities**:
+      - Submit trading strategies for validation and compilation.
+      - Ensure strategies meet the required syntax and operational constraints.
+      - Validate strategies to identify potential issues or errors before execution.
+      - Integrate strategies with specific exchanges and market instruments for tailored use.
 externalDocs:
   description: Find out more about QTSurfer API
   url: 'https://qtsurfer.com/developers'
