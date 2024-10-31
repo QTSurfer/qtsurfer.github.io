@@ -81,9 +81,12 @@ paths:
           content:
             application/json:
               schema:
-                type: string
-                description: Strategy unique identifier
-              example: '1218274906'
+                type: object
+                properties:
+                  strategyId:
+                    $ref: '#/components/schemas/strategyId'
+              example:
+                strategyId: 6bsh31ikwkuivhtgcoa6s4
         '400':
           description: Invalid strategy
           content:
@@ -91,7 +94,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResponseError'
               example:
-                code: '400'
+                code: 400
                 message: 'Line 1, Column 18: syntax error'
       security:
         - bearerAuth: []
@@ -101,12 +104,12 @@ paths:
 components:
   schemas:
     ResponseError:
-      description: General response errors
+      description: General response error
       type: object
       properties:
         code:
           description: Status code
-          type: string
+          type: integer
           example: 400
         message:
           description: Error description
@@ -128,6 +131,10 @@ components:
           description: Name of the exchange
           type: string
           example: Binance
+    strategyId:
+      description: Unique identifier for a compiled strategy
+      type: string
+      example: 6bsh31ikwkuivhtgcoa6s4
   securitySchemes:
     bearerAuth:
       type: http
