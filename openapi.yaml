@@ -59,6 +59,10 @@ paths:
                 - BTC/ETH
         '404':
           description: Exchange not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
       security:
         - bearerAuth: []
       tags:
