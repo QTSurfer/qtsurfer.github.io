@@ -68,7 +68,7 @@ paths:
         - bearerAuth: []
       tags:
         - Exchange
-  '/exchange/{exchangeId}/{type}/prepare':
+  '/backtest/{exchangeId}/{type}/prepare':
     post:
       operationId: prepareBacktesting
       summary: Prepare backtesting data for an exchange
@@ -256,12 +256,12 @@ tags:
       - Get the instruments available on a specific exchange (currency pairs, assets, etc.).
   - name: Backtesting
     description: |-
-      The **backtesting** endpoints enable users to test trading strategies based on historical data before applying them in real-time trading. This functionality is essential for traders who want
+      The **backtest** endpoints enable users to test trading strategies based on historical data before applying them in real-time trading. This functionality is essential for traders who want
       to evaluate the performance of a strategy under past market conditions and optimize it before implementing it in a live trading environment.
 
       **Key functionalities**:
-      - Compile rich Java&trade; based strategies.
-      - Run simulations of trading strategies using historical market data.
+      - Prepare historical market data for fast access.
+      - Run simulations of trading strategies using prepared historical market data.
       - Assess performance and optimize strategies based on past results and metrics.
   - name: Strategy
     description: |-
@@ -269,7 +269,7 @@ tags:
       wish to ensure their strategy is both executable and effective before deploying it in a live/backtesting environment.
 
       **Key functionalities**:
-      - Submit trading strategies for validation and compilation.
+      - Submit rich Java&trade; based trading strategies for validation and compilation.
       - Ensure strategies meet the required syntax and operational constraints.
       - Validate strategies to identify potential issues or errors before execution.
       - Integrate strategies with specific exchanges and market instruments for tailored use.
