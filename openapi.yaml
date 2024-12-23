@@ -158,7 +158,7 @@ paths:
       security:
         - bearerAuth: []
       tags:
-        - Backesting
+        - Backtesting
   '/strategy':
     post:
       operationId: postStrategy
