@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.10.18
+  version: 0.10.24
   license:
     name: Apache-2.0
     url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
@@ -12,7 +12,7 @@ servers:
   - url: 'https://api.qtsurfer.com'
     description: Production server
 paths:
-  /exchanges:
+  '/exchanges':
     get:
       operationId: getExchanges
       summary: Get a list of available exchanges
@@ -45,6 +45,7 @@ paths:
           required: true
           schema:
             type: string
+            example: binance
       responses:
         '200':
           description: A JSON array of Instruments
@@ -59,17 +60,163 @@ paths:
                 - BTC/ETH
         '404':
           description: Exchange not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
       security:
         - bearerAuth: []
       tags:
         - Exchange
+  '/exchange/{exchangeId}/{type}/prepare':
+    post:
+      operationId: prepareBacktesting
+      summary: Prepare backtesting data for an exchange
+      description: |
+        This endpoint prepares backtesting data (e.g., tickers) for an exchange.
+        The user must provide a date range and a list of instruments to prepare for execution of backtests.
+      parameters:
+        - name: exchangeId
+          in: path
+          description: ID of the exchange to prepare the backtesting for
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          description: The type of data source to prepare
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+      requestBody:
+        description: The required data to prepare a backtesting
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                from:
+                  type: string
+                  description: |
+                    Start date for the preparation process. Supports the following formats:
+                    - ISO-8601 (e.g. 2024-12-14T23:59:59Z)
+                    - ISO DATE (e.g. 2024-12-14)
+                    - BASIC ISO DATE (e.g., 20241214)
+                  example: "2024-12-13T00:00:00Z"
+                to:
+                  type: string
+                  description: |
+                    End date for the preparation process. Supports the following formats:
+                    - ISO-8601 (e.g. 2024-12-14T23:59:59Z)
+                    - ISO DATE (e.g. 2024-12-14)
+                    - BASIC ISO DATE (e.g., 20241214)
+                  example: "2024-12-14"
+                instruments:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Instrument'
+                  description: List of instruments (e.g., currency pairs) to include in the preparation
+                  example:
+                    - BTC/USDT
+      responses:
+        '200':
+          description: Backtesting preparation started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batchId:
+                    type: string
+                    description: Unique identifier for the batch preparation process
+                    example: 13RBLGQlPnfDjO6wyKSX8i
+                  jobs:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: A mapping of instruments to their respective job preparation IDs
+                    example:
+                      BTC/USDT: 2o8heaioicr0edvx5ybcap
+              example:
+                batchId: "13RBLGQlPnfDjO6wyKSX8i"
+                jobs:
+                  BTC/USDT: "2o8heaioicr0edvx5ybcap"
+        '400':
+          description: Invalid request or parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: Exchange or data source type not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backesting
+  '/strategy':
+    post:
+      operationId: postStrategy
+      summary: Submits a strategy code to be compiled/validated
+      requestBody:
+        description: The strategy code to be submitted for validation
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              description: The raw strategy code submitted by the user
+      responses:
+        '200':
+          description: Strategy created/updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  strategyId:
+                    $ref: '#/components/schemas/strategyId'
+              example:
+                strategyId: 6bsh31ikwkuivhtgcoa6s4
+        '400':
+          description: Invalid strategy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 400
+                message: 'Line 1, Column 18: syntax error'
+      security:
+        - bearerAuth: []
+      tags:
+        - Strategy
+
 components:
   schemas:
+    ResponseError:
+      description: General response error
+      type: object
+      properties:
+        code:
+          description: Status code
+          type: integer
+          example: 400
+        message:
+          description: Error description
+          type: string
+          example: Invalid request
     Instrument:
-      description: Exchange instrument (eg. a currency pair)
+      description: Exchange instrument (e.g. a currency pair)
       type: string
       example: BTC/USDT
     Exchange:
+      description: Exchange service provider
       type: object
       properties:
         id:
@@ -80,6 +227,18 @@ components:
           description: Name of the exchange
           type: string
           example: Binance
+    DataSourceType:
+      type: string
+      description: Managed exchange data sources available for backtesting
+      enum:
+        - ticker
+        - kline
+        - frate
+      example: ticker
+    strategyId:
+      description: Unique identifier for a compiled strategy
+      type: string
+      example: 6bsh31ikwkuivhtgcoa6s4
   securitySchemes:
     bearerAuth:
       type: http
@@ -104,6 +263,16 @@ tags:
       - Compile rich Java&trade; based strategies.
       - Run simulations of trading strategies using historical market data.
       - Assess performance and optimize strategies based on past results and metrics.
+  - name: Strategy
+    description: |-
+      The **strategy** endpoints allow users to submit, compile, and validate trading strategies within the platform. This feature is crucial for traders who develop automated trading systems and
+      wish to ensure their strategy is both executable and effective before deploying it in a live/backtesting environment.
+
+      **Key functionalities**:
+      - Submit trading strategies for validation and compilation.
+      - Ensure strategies meet the required syntax and operational constraints.
+      - Validate strategies to identify potential issues or errors before execution.
+      - Integrate strategies with specific exchanges and market instruments for tailored use.
 externalDocs:
   description: Find out more about QTSurfer API
   url: 'https://qtsurfer.com/developers'
