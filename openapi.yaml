@@ -2,7 +2,12 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.10.24
+  version: 0.13.04
+  contact:
+    name: QTSurfer Support
+    email: support@qtsurfer.com
+    url: 'https://qtsurfer.com/support'
+  termsOfService: 'https://qtsurfer.com/terms'
   license:
     name: Apache-2.0
     url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
@@ -127,6 +132,9 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                  - batchId
+                  - jobs
                 properties:
                   batchId:
                     type: string
@@ -151,6 +159,66 @@ paths:
                 $ref: '#/components/schemas/ResponseError'
         '404':
           description: Exchange or data source type not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backtesting
+  '/backtest/{exchangeId}/{type}/prepare/{batchId}':
+    get:
+      operationId: getPreparationStatus
+      summary: Get the status of a backtest preparation batch
+      description: |
+        This endpoint retrieves the status of a backtest preparation batch for a specific exchange and data source type using the provided batch ID.
+      parameters:
+        - name: exchangeId
+          in: path
+          description: ID of the exchange for the backtesting process
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          description: The type of data source prepared
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+        - name: batchId
+          in: path
+          description: Unique identifier for the backtesting preparation batch
+          required: true
+          schema:
+            type: string
+            example: 13RBLGQlPnfDjO6wyKSX8i
+      responses:
+        '200':
+          description: Backtesting preparation status
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobState'
+              example:
+                - contextId: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:1rabbrpk5r4kkegs83w6qr:btc/usdt:0bjmoxd4vahkgc0hnvdldh"
+                  status: "Completed"
+                  statusDetail: null
+                  size: 0
+                  completed: 0
+                  startTime: null
+                  endTime: null
+        '404':
+          description: Batch not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '400':
+          description: Invalid request or parameters
           content:
             application/json:
               schema:
@@ -235,6 +303,54 @@ components:
         - kline
         - frate
       example: ticker
+    JobState:
+      type: object
+      description: Information about a single job
+      required:
+        - contextId
+        - status
+        - size
+        - completed
+      properties:
+          contextId:
+            type: string
+            description: Unique context ID for the job
+            example: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:1rabbrpk5r4kkegs83w6qr:btc/usdt:2o8heaioicr0edvx5ybcap"
+          status:
+            type: string
+            description: Current status of the job
+            enum:
+              - New
+              - Started
+              - Completed
+              - Aborted
+              - Failed
+            example: "Completed"
+          statusDetail:
+            type: string
+            description: Detailed status information, if available
+            nullable: true
+            example: "Job completed with error code 5001"
+          size:
+            type: integer
+            description: Total size of the data being prepared
+            example: 100
+          completed:
+            type: integer
+            description: The amount of data processed so far
+            example: 50
+          startTime:
+            type: string
+            format: date-time
+            description: Timestamp for when the preparation started
+            nullable: true
+            example: "2025-01-04T14:00:00Z"
+          endTime:
+            type: string
+            format: date-time
+            description: Timestamp for when the preparation finished
+            nullable: true
+            example: "2025-01-04T14:00:20Z"
     strategyId:
       description: Unique identifier for a compiled strategy
       type: string
