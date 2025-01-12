@@ -90,7 +90,7 @@ paths:
             example: binance
         - name: type
           in: path
-          description: The type of data source to prepare
+          description: The type of data source to prepare from
           required: true
           schema:
             $ref: '#/components/schemas/DataSourceType'
@@ -183,7 +183,7 @@ paths:
             example: binance
         - name: type
           in: path
-          description: The type of data source prepared
+          description: The type of data source to prepare from
           required: true
           schema:
             $ref: '#/components/schemas/DataSourceType'
