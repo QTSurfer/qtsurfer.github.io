@@ -131,26 +131,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required:
-                  - batchId
-                  - jobs
-                properties:
-                  batchId:
-                    type: string
-                    description: Unique identifier for the batch preparation process
-                    example: 13RBLGQlPnfDjO6wyKSX8i
-                  jobs:
-                    type: object
-                    additionalProperties:
-                      type: string
-                    description: A mapping of instruments to their respective job preparation IDs
-                    example:
-                      BTC/USDT: 2o8heaioicr0edvx5ybcap
-              example:
-                batchId: "13RBLGQlPnfDjO6wyKSX8i"
-                jobs:
-                  BTC/USDT: "2o8heaioicr0edvx5ybcap"
+                $ref: '#/components/schemas/BacktestJobRequest'
         '400':
           description: Invalid request or parameters
           content:
@@ -167,12 +148,12 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting
-  '/backtest/{exchangeId}/{type}/prepare/{batchId}':
+  '/backtest/{exchangeId}/{type}/prepare/{requestId}':
     get:
       operationId: getPreparationStatus
-      summary: Get the status of a backtest preparation batch
+      summary: Get the status of a backtest preparation job request
       description: |
-        This endpoint retrieves the status of a backtest preparation batch for a specific exchange and data source type using the provided batch ID.
+        This endpoint retrieves the status of a backtest preparation job for a specific exchange and data source type using the provided request ID.
       parameters:
         - name: exchangeId
           in: path
@@ -187,9 +168,9 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/DataSourceType'
-        - name: batchId
+        - name: requestId
           in: path
-          description: Unique identifier for the backtesting preparation batch
+          description: Unique identifier for the backtesting preparation job request
           required: true
           schema:
             type: string
@@ -212,7 +193,7 @@ paths:
                   startTime: null
                   endTime: null
         '404':
-          description: Batch not found
+          description: Job preparation request not found
           content:
             application/json:
               schema:
@@ -351,6 +332,28 @@ components:
             description: Timestamp for when the preparation finished
             nullable: true
             example: "2025-01-04T14:00:20Z"
+    BacktestJobRequest:
+      type: object
+      description: Information about a backtest job request and its associated jobs per instrument
+      required:
+        - requestId
+        - jobs
+      properties:
+        requestId:
+          type: string
+          description: Unique identifier for the job request
+          example: 13RBLGQlPnfDjO6wyKSX8i
+        jobs:
+          type: object
+          additionalProperties:
+            type: string
+          description: A mapping of instruments to their respective job context processing IDs
+          example:
+            BTC/USDT: 2o8heaioicr0edvx5ybcap
+      example:
+        requestId: "13RBLGQlPnfDjO6wyKSX8i"
+        jobs:
+          BTC/USDT: "2o8heaioicr0edvx5ybcap"
     strategyId:
       description: Unique identifier for a compiled strategy
       type: string
