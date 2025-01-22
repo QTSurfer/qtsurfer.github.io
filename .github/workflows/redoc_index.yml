@@ -18,13 +18,13 @@ jobs:
         with:
           ref: ${{ github.head_ref }}
 
-      - name: Install Redoc CLI
+      - name: Install Redocly CLI
         run: |
-          npm install -g redoc-cli
+          npm install -g @redocly/cli 
 
       - name: Generate HTML from OpenAPI
         run: |
-          redoc-cli bundle openapi.yaml -o index.html
+          redocly build-docs openapi.yaml --output=index.html
 
       - name: Commit HTML file
         uses: stefanzweifel/git-auto-commit-action@v5
