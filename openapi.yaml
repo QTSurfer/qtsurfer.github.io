@@ -208,6 +208,68 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting
+  '/backtest/{exchangeId}/{type}/execute/{requestId}':
+    post:
+      operationId: executeBacktesting
+      summary: Execute a strategy backtesting for a specific exchange, data source type 
+      description: |
+        This endpoint executes a strategy backtesting for a specific exchange, data source type using the provided request ID.
+      parameters:
+        - name: exchangeId
+          in: path
+          description: ID of the exchange for the backtesting process
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          description: The type of data source to prepare from
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+        - name: requestId
+          in: path
+          description: Unique identifier for the backtesting prepared job request
+          required: true
+          schema:
+            type: string
+            example: 13RBLGQlPnfDjO6wyKSX8i
+      requestBody:
+        description: The required data to execute a backtesting
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                strategyId:
+                  $ref: '#/components/schemas/strategyId'
+            example:
+              strategyId: 6bsh31ikwkuivhtgcoa6s4
+      responses:
+        '200':
+          description: Backtesting execution started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BacktestJobRequest'
+        '404':
+          description: Job preparation request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '400':
+          description: Invalid request or parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backtesting  
   '/strategy':
     post:
       operationId: postStrategy
