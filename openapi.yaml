@@ -224,7 +224,7 @@ paths:
             example: binance
         - name: type
           in: path
-          description: The type of data source to prepare from
+          description: The type of data source to execute from
           required: true
           schema:
             $ref: '#/components/schemas/DataSourceType'
@@ -270,6 +270,72 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting  
+    get:
+      operationId: getExecutionResults
+      summary: Get the results of a backtest execution job request
+      description: |
+        This endpoint retrieves the results of a backtest execution job for a specific exchange and data source type using the provided request ID.
+      parameters:
+        - name: exchangeId
+          in: path
+          description: ID of the exchange for the backtesting process
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          description: The type of data source to execute from
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+        - name: requestId
+          in: path
+          description: Unique identifier for the backtesting execution job request
+          required: true
+          schema:
+            type: string
+            example: 13RBLGQlPnfDjO6wyKSX8i
+      responses:
+        '200':
+          description: Backtesting execution result
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BacktestJobResult'
+              example:
+                - state:
+                  contextId: "jctx:ticker:qtsurfer:binance:1vw1rjqz1matugxe0clxeb:btc/usdt:4wuaga9b4uhkbiipuka7bm"
+                  status: "Completed"
+                  statusDetail: null
+                  size: 0
+                  completed: 78682
+                  startTime: "2025-03-02T19:27:55.548Z"
+                  endTime: "2025-03-02T19:27:58.053Z"
+                - results:
+                  hostName: "backtesting-job-worker-dg5qv"
+                  iops: 33498.14
+                  strategyId: "strategy:qtsurfer:ticker:6bsh31ikwkuivhtgcoa6s4"
+                  instrument: "BTC/USDT"
+                  signalsId: "6kdzSqd1GChojQAaMrw87L"
+        '404':
+          description: Job preparation request not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '400':
+          description: Invalid request or parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backtesting
   '/strategy':
     post:
       operationId: postStrategy
@@ -416,6 +482,22 @@ components:
         requestId: "13RBLGQlPnfDjO6wyKSX8i"
         jobs:
           BTC/USDT: "2o8heaioicr0edvx5ybcap"
+    BacktestJobResult:
+      type: object
+      description: Backtest job result.
+      required:
+        - results
+        - state
+      properties:
+        results:
+          $ref: '#/components/schemas/ResultMap'
+        state:
+          $ref: '#/components/schemas/JobState'
+    ResultMap:
+      type: object
+      description: Key value map of results
+      additionalProperties:
+        type: object
     strategyId:
       description: Unique identifier for a compiled strategy
       type: string
