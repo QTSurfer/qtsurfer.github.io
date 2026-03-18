@@ -319,7 +319,8 @@ paths:
                   iops: 33498.14
                   strategyId: "strategy:qtsurfer:ticker:6bsh31ikwkuivhtgcoa6s4"
                   instrument: "BTC/USDT"
-                  signalsId: "6kdzSqd1GChojQAaMrw87L"
+                  signalsId: "qtsurfer/exec/binance/1vw1rjqz1matugxe0clxeb"
+                  signalsUrl: "https://storage.qtsurfer.net/qtsurfer/exec/binance/1vw1rjqz1matugxe0clxeb.parquet"
         '404':
           description: Job preparation request not found
           content:
@@ -495,7 +496,10 @@ components:
           $ref: '#/components/schemas/JobState'
     ResultMap:
       type: object
-      description: Key value map of results
+      description: >-
+        Key value map of results. When signal storage is enabled, includes
+        `signalsId` (the storage key) and `signalsUrl` (public HTTPS URL
+        to the Parquet file, e.g. https://storage.qtsurfer.net/{userId}/exec/{exchange}/{requestId}.parquet).
       additionalProperties:
         type: object
     strategyId:
@@ -507,6 +511,10 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+      description: >-
+        JWT bearer token. The `sub` claim must contain the user identifier
+        (e.g. user UUID). This value is used to namespace storage paths
+        and trace requests back to the originating user.
 tags:
   - name: Exchange
     description: |-
