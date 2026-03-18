@@ -307,20 +307,23 @@ paths:
                   $ref: '#/components/schemas/BacktestJobResult'
               example:
                 - state:
-                  contextId: "jctx:ticker:qtsurfer:binance:1vw1rjqz1matugxe0clxeb:btc/usdt:4wuaga9b4uhkbiipuka7bm"
-                  status: "Completed"
-                  statusDetail: null
-                  size: 0
-                  completed: 78682
-                  startTime: "2025-03-02T19:27:55.548Z"
-                  endTime: "2025-03-02T19:27:58.053Z"
-                - results:
-                  hostName: "backtesting-job-worker-dg5qv"
-                  iops: 33498.14
-                  strategyId: "strategy:qtsurfer:ticker:6bsh31ikwkuivhtgcoa6s4"
-                  instrument: "BTC/USDT"
-                  signalsId: "qtsurfer/exec/binance/1vw1rjqz1matugxe0clxeb"
-                  signalsUrl: "https://storage.qtsurfer.net/qtsurfer/exec/binance/1vw1rjqz1matugxe0clxeb.parquet"
+                    contextId: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:3vsndwikcuaatjmb83fjtl:btc/usdt:2mnyblatqqw34kix2echpb"
+                    status: "Completed"
+                    statusDetail: null
+                    size: 0
+                    completed: 73158
+                    startTime: "2026-03-18T13:21:28.958Z"
+                    endTime: "2026-03-18T13:21:29.605Z"
+                  results:
+                    hostName: "backtesting-job-worker-84b569dff9-dr4lb"
+                    iops: 123956.53
+                    strategyId: "strategy:4a627755-7f5a-4297-b647-8dddd8aee416:ticker:2iyvtenlzh9dabqtxn7nbv"
+                    instrument: "BTC/USDT"
+                    signalCount: 100000
+                    signalsId: "4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl"
+                    signalsUrl: "https://storage.qtsurfer.com/4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
+                    signalsUpload: "Done"
+                    signalsUploadedAt: "2026-03-18T13:21:48.170Z"
         '404':
           description: Job preparation request not found
           content:
@@ -497,9 +500,41 @@ components:
     ResultMap:
       type: object
       description: >-
-        Key value map of results. When signal storage is enabled, includes
-        `signalsId` (the storage key) and `signalsUrl` (public HTTPS URL
-        to the Parquet file, e.g. https://storage.qtsurfer.net/{userId}/exec/{exchange}/{requestId}.parquet).
+        Execution result map. Always includes core fields (hostName, iops, strategyId, instrument).
+        When signal storage is enabled, includes signal fields described below.
+      properties:
+        signalCount:
+          type: integer
+          description: Number of signals emitted during strategy execution
+          example: 100000
+        signalsId:
+          type: string
+          description: >-
+            Storage key for the signal Parquet file. Format: {userId}/exec/{exchange}/{requestId}
+          example: "4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl"
+        signalsUrl:
+          type: string
+          format: uri
+          description: >-
+            Public HTTPS URL to the Parquet file. Computed at setup time from
+            publicBaseUrl + signalsId + .parquet. Available even before upload completes.
+          example: "https://storage.qtsurfer.com/4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
+        signalsUpload:
+          type: string
+          enum: [Done, Failed, Skipped]
+          description: >-
+            Upload status. Done = file uploaded to R2. Failed = upload error (see signalsUploadReason).
+            Skipped = no signals emitted or storage not configured.
+          example: "Done"
+        signalsUploadedAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp of when the upload completed. Only present when signalsUpload is Done.
+          example: "2026-03-18T13:21:48.170Z"
+        signalsUploadReason:
+          type: string
+          description: Human-readable reason when signalsUpload is Failed or Skipped.
+          example: "parquet file empty or missing after close"
       additionalProperties:
         type: object
     strategyId:
