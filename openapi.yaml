@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.14.0
+  version: 0.90.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
