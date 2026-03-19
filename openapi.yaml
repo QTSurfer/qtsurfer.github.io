@@ -319,6 +319,14 @@ paths:
                     iops: 123956.53
                     strategyId: "strategy:4a627755-7f5a-4297-b647-8dddd8aee416:ticker:2iyvtenlzh9dabqtxn7nbv"
                     instrument: "BTC/USDT"
+                    pnlTotal: 42.75
+                    totalTrades: 156
+                    winRate: 58.33
+                    sharpeRatio: 1.245
+                    sortinoRatio: 1.872
+                    cagr: 0.1534
+                    maxDrawdown: 12.50
+                    maxDrawdownPercent: 8.75
                     signalCount: 100000
                     signalsId: "4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl"
                     signalsUrl: "https://storage.qtsurfer.com/4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
@@ -501,8 +509,68 @@ components:
       type: object
       description: >-
         Execution result map. Always includes core fields (hostName, iops, strategyId, instrument).
+        Yield metrics (pnlTotal, totalTrades, winRate, etc.) are present when the strategy emitted at least one trade.
         When signal storage is enabled, includes signal fields described below.
       properties:
+        hostName:
+          type: string
+          description: Hostname of the worker node that executed the strategy
+          example: "backtesting-job-worker-84b569dff9-dr4lb"
+        iops:
+          type: number
+          format: double
+          description: Instrument operations per second throughput during execution
+          example: 123956.53
+        strategyId:
+          type: string
+          description: >-
+            Redis key of the compiled strategy used for execution.
+            Format: strategy:{userId}:ticker:{compilationId}
+          example: "strategy:4a627755-7f5a-4297-b647-8dddd8aee416:ticker:2iyvtenlzh9dabqtxn7nbv"
+        instrument:
+          type: string
+          description: The instrument (currency pair) that was backtested
+          example: "BTC/USDT"
+        pnlTotal:
+          type: number
+          format: double
+          description: Total profit and loss in the output currency
+          example: 42.75
+        totalTrades:
+          type: integer
+          format: int64
+          description: Total number of trades executed by the strategy
+          example: 156
+        winRate:
+          type: number
+          format: double
+          description: Percentage of profitable trades (0-100)
+          example: 58.33
+        sharpeRatio:
+          type: number
+          format: double
+          description: Risk-adjusted return ratio (mean return / standard deviation of returns)
+          example: 1.245
+        sortinoRatio:
+          type: number
+          format: double
+          description: Downside risk-adjusted return ratio (mean return / downside deviation)
+          example: 1.872
+        cagr:
+          type: number
+          format: double
+          description: Compound Annual Growth Rate
+          example: 0.1534
+        maxDrawdown:
+          type: number
+          format: double
+          description: Maximum absolute drawdown in the output currency
+          example: 12.50
+        maxDrawdownPercent:
+          type: number
+          format: double
+          description: Maximum percentage drawdown from peak equity
+          example: 8.75
         signalCount:
           type: integer
           description: Number of signals emitted during strategy execution
@@ -535,8 +603,6 @@ components:
           type: string
           description: Human-readable reason when signalsUpload is Failed or Skipped.
           example: "parquet file empty or missing after close"
-      additionalProperties:
-        type: object
     strategyId:
       description: Unique identifier for a compiled strategy
       type: string
