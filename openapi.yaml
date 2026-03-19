@@ -448,9 +448,8 @@ components:
               - Failed
             example: "Completed"
           statusDetail:
-            type: string
+            type: ['string', 'null']
             description: Detailed status information, if available
-            nullable: true
             example: "Job completed with error code 5001"
           size:
             type: integer
@@ -461,16 +460,14 @@ components:
             description: The amount of data processed so far
             example: 50
           startTime:
-            type: string
+            type: ['string', 'null']
             format: date-time
             description: Timestamp for when the preparation started
-            nullable: true
             example: "2025-01-04T14:00:00Z"
           endTime:
-            type: string
+            type: ['string', 'null']
             format: date-time
             description: Timestamp for when the preparation finished
-            nullable: true
             example: "2025-01-04T14:00:20Z"
     BacktestJobRequest:
       type: object
