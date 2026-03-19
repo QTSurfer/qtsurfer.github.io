@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - "openapi.yaml"
+      - ".github/workflows/redoc_index.yml"
+      - "redocly.yaml"
     branches:
       - main
 
@@ -23,7 +25,7 @@ jobs:
         run: redocly lint openapi.yaml
 
       - name: Generate HTML from OpenAPI
-        run: redocly build-docs openapi.yaml --output=index.html
+        run: redocly build-docs openapi.yaml --output=index.html --cdn https://cdn.redocly.com/redoc/v2.4.0/bundles/redoc.standalone.js
 
       - name: Commit HTML file
         uses: stefanzweifel/git-auto-commit-action@v5
