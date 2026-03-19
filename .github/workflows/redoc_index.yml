@@ -25,7 +25,9 @@ jobs:
         run: redocly lint openapi.yaml
 
       - name: Generate HTML from OpenAPI
-        run: redocly build-docs openapi.yaml --output=index.html --cdn https://cdn.redocly.com/redoc/v2.4.0/bundles/redoc.standalone.js
+        run: |
+          redocly build-docs openapi.yaml --output=index.html
+          sed -i 's|https://cdn.redocly.com/redoc/v[^/]*/bundles/redoc.standalone.js|https://cdn.redocly.com/redoc/v2.4.0/bundles/redoc.standalone.js|' index.html
 
       - name: Commit HTML file
         uses: stefanzweifel/git-auto-commit-action@v5
