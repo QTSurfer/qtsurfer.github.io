@@ -15,16 +15,15 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          ref: ${{ github.head_ref }}
 
       - name: Install Redocly CLI
-        run: |
-          npm install -g @redocly/cli 
+        run: npm install -g @redocly/cli@1.28.4
+
+      - name: Lint OpenAPI spec
+        run: redocly lint openapi.yaml
 
       - name: Generate HTML from OpenAPI
-        run: |
-          redocly build-docs openapi.yaml --output=index.html
+        run: redocly build-docs openapi.yaml --output=index.html
 
       - name: Commit HTML file
         uses: stefanzweifel/git-auto-commit-action@v5

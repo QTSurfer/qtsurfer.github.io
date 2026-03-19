@@ -1,0 +1,29 @@
+apis:
+  main:
+    root: openapi.yaml
+
+theme:
+  openapi:
+    hideDownloadButton: false
+    expandResponses: "200"
+    jsonSampleExpandLevel: 2
+    sortOperationsAlphabetically: false
+    hideSingleRequestSampleTab: true
+    theme:
+      colors:
+        primary:
+          main: "#1976d2"
+      sidebar:
+        backgroundColor: "#1a1a2e"
+        textColor: "#ffffff"
+      rightPanel:
+        backgroundColor: "#0f3460"
+
+rules:
+  no-unused-components: warn
+  no-ambiguous-paths: error
+  operation-operationId: error
+  operation-summary: warn
+  no-path-trailing-slash: error
+  path-declaration-must-exist: error
+  spec: error

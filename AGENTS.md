@@ -31,7 +31,7 @@ openapi.yaml ──► GitHub Actions ──► Redocly CLI ──► index.html
 ### Update the API spec
 Edit `openapi.yaml` directly. The spec follows OpenAPI 3.1.0 and uses:
 - `bearerAuth` security scheme (JWT)
-- Tags: `Exchange`, `Instrument`, `Strategy`, `BacktestTicker`, `BacktestFundingRate`
+- Tags: `Exchange`, `Backtesting`, `Strategy`
 - Schemas in `#/components/schemas/`
 
 ### Preview locally
