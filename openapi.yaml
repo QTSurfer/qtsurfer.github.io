@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.90.0
+  version: 0.91.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -33,8 +33,7 @@ paths:
               example:
                 - id: binance
                   name: Binance
-                - id: kraken
-                  name: Kraken
+                  description: Binance cryptocurrency exchange
       security: []
       tags:
         - Exchange
@@ -420,11 +419,9 @@ components:
           example: Binance cryptocurrency exchange
     DataSourceType:
       type: string
-      description: Managed exchange data sources available for backtesting
+      description: Managed exchange data sources available for backtesting. Currently only ticker is supported; kline and funding rate support is planned.
       enum:
         - ticker
-        - kline
-        - frate
       example: ticker
     JobState:
       type: object
