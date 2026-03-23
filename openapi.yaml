@@ -416,6 +416,10 @@ components:
           description: Name of the exchange
           type: string
           example: Binance
+        description:
+          description: Description of the exchange
+          type: string
+          example: Binance cryptocurrency exchange
     DataSourceType:
       type: string
       description: Managed exchange data sources available for backtesting
