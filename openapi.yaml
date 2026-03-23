@@ -34,7 +34,6 @@ paths:
                 - id: binance
                   name: Binance
                   description: Binance cryptocurrency exchange
-      security: []
       tags:
         - Exchange
   '/exchange/{exchangeId}/instruments':
@@ -67,7 +66,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
-      security: []
       tags:
         - Exchange
   '/backtest/{exchangeId}/{type}/prepare':
@@ -644,5 +642,3 @@ tags:
 externalDocs:
   description: Find out more about QTSurfer API
   url: 'https://qtsurfer.com/developers'
-security:
-  - bearerAuth: []
