@@ -35,8 +35,7 @@ paths:
                   name: Binance
                 - id: kraken
                   name: Kraken
-      security:
-        - bearerAuth: []
+      security: []
       tags:
         - Exchange
   '/exchange/{exchangeId}/instruments':
@@ -69,8 +68,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
-      security:
-        - bearerAuth: []
+      security: []
       tags:
         - Exchange
   '/backtest/{exchangeId}/{type}/prepare':
