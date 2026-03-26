@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.91.0
+  version: 0.92.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -128,17 +128,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/BacktestJobRequest'
         '400':
-          description: Invalid request or parameters
+          description: |
+            Invalid request or parameters. Also returned when instruments exceed the per-request limit (200).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 400
+                message: "Too many instruments: 201 (max 200)"
         '404':
           description: Exchange or data source type not found
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '429':
+          description: |
+            Rate limited. Returned when the global queue exceeds capacity (500 tasks) or the user has too many active backtests (10).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 429
+                message: "Too many active backtests (10/10). Wait for some to complete."
       security:
         - bearerAuth: []
       tags:
@@ -261,10 +275,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '429':
+          description: Rate limited (global queue at capacity or per-user limit reached)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
       security:
         - bearerAuth: []
       tags:
-        - Backtesting  
+        - Backtesting
+    delete:
+      operationId: cancelExecution
+      summary: Cancel a running backtest execution
+      description: |
+        Requests cancellation of the specified execution. The execution
+        status will transition to Aborted once the cancellation is
+        processed. Cancellation is asynchronous — poll the GET endpoint
+        to confirm the final status.
+      parameters:
+        - name: exchangeId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+        - name: requestId
+          in: path
+          description: Unique identifier for the backtesting execution job request to cancel
+          required: true
+          schema:
+            type: string
+            example: 13RBLGQlPnfDjO6wyKSX8i
+      responses:
+        '200':
+          description: Cancellation request accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [cancelling]
+                    example: cancelling
+                  requestId:
+                    type: string
+                    example: 13RBLGQlPnfDjO6wyKSX8i
+        '404':
+          description: Execution not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backtesting
     get:
       operationId: getExecutionResults
       summary: Get the results of a backtest execution job request
