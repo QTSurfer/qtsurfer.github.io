@@ -50,18 +50,30 @@ paths:
             example: binance
       responses:
         '200':
-          description: A JSON array of Instruments
+          description: A JSON array of Instrument details with data availability
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Instrument'
+                  $ref: '#/components/schemas/InstrumentDetail'
               example:
-                - BTC/USDT
-                - BTC/ETH
+                - id: BTC/USDT
+                  base: BTC
+                  quote: USDT
+                  dataFrom: "2026-03-17T00:00:00Z"
+                  dataTo: "2026-03-31T18:00:00Z"
+                  lastPrice: 84250.50
+                  volume24h: 1234567.89
+                - id: ETH/USDT
+                  base: ETH
+                  quote: USDT
+                  dataFrom: "2026-03-17T00:00:00Z"
+                  dataTo: "2026-03-31T18:00:00Z"
+                  lastPrice: 3120.75
+                  volume24h: 456789.12
         '404':
-          description: Exchange not found
+          description: Exchange not found or instrument catalog not available
           content:
             application/json:
               schema:
@@ -468,9 +480,49 @@ components:
           type: string
           example: Invalid request
     Instrument:
-      description: Exchange instrument (e.g. a currency pair)
+      description: Exchange instrument identifier (e.g. a currency pair)
       type: string
       example: BTC/USDT
+    InstrumentDetail:
+      description: Exchange instrument with data availability and market info
+      type: object
+      required:
+        - id
+        - base
+        - quote
+      properties:
+        id:
+          type: string
+          description: Instrument identifier (e.g. currency pair)
+          example: BTC/USDT
+        base:
+          type: string
+          description: Base currency
+          example: BTC
+        quote:
+          type: string
+          description: Quote currency
+          example: USDT
+        dataFrom:
+          type: string
+          format: date-time
+          description: Earliest timestamp with quality-verified data available for backtesting
+          example: "2026-03-17T00:00:00Z"
+        dataTo:
+          type: string
+          format: date-time
+          description: Latest timestamp with quality-verified data available for backtesting
+          example: "2026-03-31T18:00:00Z"
+        lastPrice:
+          type: number
+          format: double
+          description: Last traded price
+          example: 84250.50
+        volume24h:
+          type: number
+          format: double
+          description: Trading volume in the last 24 hours (in quote currency)
+          example: 1234567.89
     Exchange:
       description: Exchange service provider
       type: object
