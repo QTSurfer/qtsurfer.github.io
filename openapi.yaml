@@ -470,6 +470,9 @@ components:
     ResponseError:
       description: General response error
       type: object
+      required:
+        - code
+        - message
       properties:
         code:
           description: Status code
@@ -526,6 +529,9 @@ components:
     Exchange:
       description: Exchange service provider
       type: object
+      required:
+        - id
+        - name
       properties:
         id:
           description: Unique identifier for the exchange
@@ -629,6 +635,9 @@ components:
         Execution result map. Always includes core fields (hostName, iops, strategyId, instrument).
         Yield metrics (pnlTotal, totalTrades, winRate, etc.) are present when the strategy emitted at least one trade.
         When signal storage is enabled, includes signal fields described below.
+      required:
+        - strategyId
+        - instrument
       properties:
         hostName:
           type: string
