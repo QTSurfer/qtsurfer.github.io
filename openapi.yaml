@@ -82,7 +82,7 @@ paths:
         - Exchange
   '/backtest/{exchangeId}/{type}/prepare':
     post:
-      operationId: prepareBacktesting
+      operationId: prepareBatchBacktesting
       summary: Prepare backtesting data for an exchange
       description: |
         This endpoint prepares backtesting data (e.g., tickers) for an exchange.
@@ -171,7 +171,7 @@ paths:
         - Backtesting
   '/backtest/{exchangeId}/{type}/prepare/{requestId}':
     get:
-      operationId: getPreparationStatus
+      operationId: getBatchPreparationStatus
       summary: Get the status of a backtest preparation job request
       description: |
         This endpoint retrieves the status of a backtest preparation job for a specific exchange and data source type using the provided request ID.
@@ -231,7 +231,7 @@ paths:
         - Backtesting
   '/backtest/{exchangeId}/{type}/execute/{requestId}':
     post:
-      operationId: executeBacktesting
+      operationId: executeBatchBacktesting
       summary: Execute a strategy backtesting for a specific exchange, data source type 
       description: |
         This endpoint executes a strategy backtesting for a specific exchange, data source type using the provided request ID.
@@ -350,7 +350,7 @@ paths:
       tags:
         - Backtesting
     get:
-      operationId: getExecutionResults
+      operationId: getBatchExecutionResults
       summary: Get the results of a backtest execution job request
       description: |
         This endpoint retrieves the results of a backtest execution job for a specific exchange and data source type using the provided request ID.
