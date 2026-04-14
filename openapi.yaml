@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.92.1
+  version: 0.93.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -82,11 +82,15 @@ paths:
         - Exchange
   '/backtest/{exchangeId}/{type}/prepare':
     post:
-      operationId: prepareBatchBacktesting
-      summary: Prepare backtesting data for an exchange
+      operationId: prepareBacktesting
+      summary: Prepare backtesting data for one instrument (async)
       description: |
-        This endpoint prepares backtesting data (e.g., tickers) for an exchange.
-        The user must provide a date range and a list of instruments to prepare for execution of backtests.
+        Enqueues an asynchronous prepare task for a single instrument over the requested date range.
+        Returns immediately with a `jobId`; poll `GET /backtest/{exchangeId}/{type}/prepare/{jobId}`
+        for completion.
+
+        The same params always return the same `jobId` (idempotent). Repeated calls with identical
+        params do not enqueue duplicate work — they reuse the existing job.
       parameters:
         - name: exchangeId
           in: path
@@ -108,7 +112,10 @@ paths:
           application/json:
             schema:
               type: object
+              required: [instrument, from, to]
               properties:
+                instrument:
+                  $ref: '#/components/schemas/Instrument'
                 from:
                   type: string
                   description: |
@@ -125,30 +132,25 @@ paths:
                     - ISO DATE (e.g. 2024-12-14)
                     - BASIC ISO DATE (e.g., 20241214)
                   example: "2024-12-14"
-                instruments:
-                  type: array
-                  items:
-                    $ref: '#/components/schemas/Instrument'
-                  description: List of instruments (e.g., currency pairs) to include in the preparation
-                  example:
-                    - BTC/USDT
+            example:
+              instrument: BTC/USDT
+              from: "2024-12-13T00:00:00Z"
+              to: "2024-12-14T00:00:00Z"
       responses:
-        '200':
-          description: Backtesting preparation started
+        '202':
+          description: Prepare task accepted (queued for processing)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BacktestJobRequest'
+                $ref: '#/components/schemas/AcceptedJob'
         '400':
           description: |
-            Invalid request or parameters. Also returned when instruments exceed the per-request limit (200).
+            Invalid request or parameters. Also returned when `from` is older than the configured
+            lookback window or `to` is in the future.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
-              example:
-                code: 400
-                message: "Too many instruments: 201 (max 200)"
         '404':
           description: Exchange or data source type not found
           content:
@@ -157,24 +159,26 @@ paths:
                 $ref: '#/components/schemas/ResponseError'
         '429':
           description: |
-            Rate limited. Returned when the global queue exceeds capacity (500 tasks) or the user has too many active backtests (10).
+            Rate limited. Returned when the global queue exceeds capacity or the user has too many
+            active backtests.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
               example:
                 code: 429
-                message: "Too many active backtests (10/10). Wait for some to complete."
+                message: "Too many active backtests. Wait for some to complete."
       security:
         - bearerAuth: []
       tags:
         - Backtesting
-  '/backtest/{exchangeId}/{type}/prepare/{requestId}':
+  '/backtest/{exchangeId}/{type}/prepare/{jobId}':
     get:
-      operationId: getBatchPreparationStatus
-      summary: Get the status of a backtest preparation job request
+      operationId: getPreparationStatus
+      summary: Get the status of a prepare job
       description: |
-        This endpoint retrieves the status of a backtest preparation job for a specific exchange and data source type using the provided request ID.
+        Retrieves the current state of the prepare job identified by `jobId`.
+        Poll until `status` is `Completed`, `Failed`, or `Aborted`.
       parameters:
         - name: exchangeId
           in: path
@@ -189,32 +193,30 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/DataSourceType'
-        - name: requestId
+        - name: jobId
           in: path
-          description: Unique identifier for the backtesting preparation job request
+          description: Job ID returned by `POST /prepare`
           required: true
           schema:
             type: string
             example: 13RBLGQlPnfDjO6wyKSX8i
       responses:
         '200':
-          description: Backtesting preparation status
+          description: Current prepare job state
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/JobState'
+                $ref: '#/components/schemas/JobState'
               example:
-                - contextId: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:1rabbrpk5r4kkegs83w6qr:btc/usdt:0bjmoxd4vahkgc0hnvdldh"
-                  status: "Completed"
-                  statusDetail: null
-                  size: 0
-                  completed: 0
-                  startTime: null
-                  endTime: null
+                contextId: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:1rabbrpk5r4kkegs83w6qr:btc/usdt:0bjmoxd4vahkgc0hnvdldh"
+                status: "Completed"
+                statusDetail: null
+                size: 0
+                completed: 24
+                startTime: "2026-04-14T15:00:00Z"
+                endTime: "2026-04-14T15:00:01Z"
         '404':
-          description: Job preparation request not found
+          description: Prepare job not found or expired
           content:
             application/json:
               schema:
@@ -229,12 +231,20 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting
-  '/backtest/{exchangeId}/{type}/execute/{requestId}':
+  '/backtest/{exchangeId}/{type}/execute':
     post:
-      operationId: executeBatchBacktesting
-      summary: Execute a strategy backtesting for a specific exchange, data source type 
+      operationId: executeBacktesting
+      summary: Execute a compiled strategy against a prepared dataset (async)
       description: |
-        This endpoint executes a strategy backtesting for a specific exchange, data source type using the provided request ID.
+        Enqueues an execute task that runs the strategy identified by `strategyId` over the data
+        prepared by the prepare job identified by `prepareJobId`. The instrument and date range are
+        recovered from the prepare job — they do not need to be sent again.
+
+        Returns immediately with a `jobId`; poll `GET /backtest/{exchangeId}/{type}/execute/{jobId}`
+        for the result.
+
+        The same params (same `prepareJobId`, `strategyId`, `storeSignals`) always return the same
+        `jobId` (idempotent).
       parameters:
         - name: exchangeId
           in: path
@@ -249,34 +259,40 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/DataSourceType'
-        - name: requestId
-          in: path
-          description: Unique identifier for the backtesting prepared job request
-          required: true
-          schema:
-            type: string
-            example: 13RBLGQlPnfDjO6wyKSX8i
       requestBody:
-        description: The required data to execute a backtesting
+        description: Execute task parameters
         required: true
         content:
           application/json:
             schema:
               type: object
+              required: [prepareJobId, strategyId]
               properties:
+                prepareJobId:
+                  type: string
+                  description: Job ID returned by `POST /prepare` (must be in `Completed` state)
+                  example: 13RBLGQlPnfDjO6wyKSX8i
                 strategyId:
                   $ref: '#/components/schemas/strategyId'
+                storeSignals:
+                  type: boolean
+                  description: |
+                    When true, the worker uploads emitted signals to object storage and the
+                    response includes `signalsUrl` / `signalsId` fields. Defaults to false.
+                  default: false
             example:
-              strategyId: 6bsh31ikwkuivhtgcoa6s4
+              prepareJobId: "13RBLGQlPnfDjO6wyKSX8i"
+              strategyId: "6bsh31ikwkuivhtgcoa6s4"
+              storeSignals: false
       responses:
-        '200':
-          description: Backtesting execution started
+        '202':
+          description: Execute task accepted (queued for processing)
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/BacktestJobRequest'
+                $ref: '#/components/schemas/AcceptedJob'
         '404':
-          description: Job preparation request not found
+          description: Prepare job not found or expired
           content:
             application/json:
               schema:
@@ -297,12 +313,13 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting
+  '/backtest/{exchangeId}/{type}/execute/{jobId}':
     delete:
       operationId: cancelExecution
       summary: Cancel a running backtest execution
       description: |
         Requests cancellation of the specified execution. The execution
-        status will transition to Aborted once the cancellation is
+        status will transition to `Aborted` once the cancellation is
         processed. Cancellation is asynchronous — poll the GET endpoint
         to confirm the final status.
       parameters:
@@ -317,9 +334,9 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/DataSourceType'
-        - name: requestId
+        - name: jobId
           in: path
-          description: Unique identifier for the backtesting execution job request to cancel
+          description: Job ID returned by `POST /execute`
           required: true
           schema:
             type: string
@@ -336,7 +353,7 @@ paths:
                     type: string
                     enum: [cancelling]
                     example: cancelling
-                  requestId:
+                  jobId:
                     type: string
                     example: 13RBLGQlPnfDjO6wyKSX8i
         '404':
@@ -350,10 +367,11 @@ paths:
       tags:
         - Backtesting
     get:
-      operationId: getBatchExecutionResults
-      summary: Get the results of a backtest execution job request
+      operationId: getExecutionResult
+      summary: Get the result of a backtest execution job
       description: |
-        This endpoint retrieves the results of a backtest execution job for a specific exchange and data source type using the provided request ID.
+        Retrieves the current state and results of the execute job identified by `jobId`.
+        Poll until `state.status` is `Completed`, `Failed`, or `Aborted`.
       parameters:
         - name: exchangeId
           in: path
@@ -368,9 +386,9 @@ paths:
           required: true
           schema:
             $ref: '#/components/schemas/DataSourceType'
-        - name: requestId
+        - name: jobId
           in: path
-          description: Unique identifier for the backtesting execution job request
+          description: Job ID returned by `POST /execute`
           required: true
           schema:
             type: string
@@ -381,38 +399,36 @@ paths:
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/BacktestJobResult'
+                $ref: '#/components/schemas/BacktestJobResult'
               example:
-                - state:
-                    contextId: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:3vsndwikcuaatjmb83fjtl:btc/usdt:2mnyblatqqw34kix2echpb"
-                    status: "Completed"
-                    statusDetail: null
-                    size: 0
-                    completed: 73158
-                    startTime: "2026-03-18T13:21:28.958Z"
-                    endTime: "2026-03-18T13:21:29.605Z"
-                  results:
-                    hostName: "backtesting-job-worker-84b569dff9-dr4lb"
-                    iops: 123956.53
-                    strategyId: "strategy:4a627755-7f5a-4297-b647-8dddd8aee416:ticker:2iyvtenlzh9dabqtxn7nbv"
-                    instrument: "BTC/USDT"
-                    pnlTotal: 42.75
-                    totalTrades: 156
-                    winRate: 58.33
-                    sharpeRatio: 1.245
-                    sortinoRatio: 1.872
-                    cagr: 0.1534
-                    maxDrawdown: 12.50
-                    maxDrawdownPercent: 8.75
-                    signalCount: 100000
-                    signalsId: "4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl"
-                    signalsUrl: "https://storage.qtsurfer.com/4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
-                    signalsUpload: "Done"
-                    signalsUploadedAt: "2026-03-18T13:21:48.170Z"
+                state:
+                  contextId: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:3vsndwikcuaatjmb83fjtl:btc/usdt:2mnyblatqqw34kix2echpb"
+                  status: "Completed"
+                  statusDetail: null
+                  size: 0
+                  completed: 73158
+                  startTime: "2026-03-18T13:21:28.958Z"
+                  endTime: "2026-03-18T13:21:29.605Z"
+                results:
+                  hostName: "backtesting-job-worker-v2-688fc5c6fc-5khwk"
+                  iops: 123956.53
+                  strategyId: "strategy:4a627755-7f5a-4297-b647-8dddd8aee416:ticker:2iyvtenlzh9dabqtxn7nbv"
+                  instrument: "BTC/USDT"
+                  pnlTotal: 42.75
+                  totalTrades: 156
+                  winRate: 58.33
+                  sharpeRatio: 1.245
+                  sortinoRatio: 1.872
+                  cagr: 0.1534
+                  maxDrawdown: 12.50
+                  maxDrawdownPercent: 8.75
+                  signalCount: 100000
+                  signalsId: "4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl"
+                  signalsUrl: "https://storage.qtsurfer.com/4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
+                  signalsUpload: "Done"
+                  signalsUploadedAt: "2026-03-18T13:21:48.170Z"
         '404':
-          description: Job preparation request not found
+          description: Execution job not found
           content:
             application/json:
               schema:
@@ -430,29 +446,52 @@ paths:
   '/strategy':
     post:
       operationId: postStrategy
-      summary: Submits a strategy code to be compiled/validated
+      summary: Compile a strategy from source code
+      description: |
+        Submits raw strategy source for compilation. By default the call is synchronous and returns
+        the `strategyId` once compilation succeeds. Set the header `X-Compile-Async: true` to enqueue
+        the compile task and return immediately with a `jobId` — poll
+        `GET /strategy/{strategyId}` to check status.
+
+        The `strategyId` is deterministic: the same source for the same user always produces the
+        same id.
+      parameters:
+        - name: X-Compile-Async
+          in: header
+          required: false
+          description: When `true`, compile asynchronously and return `202` with a `jobId`.
+          schema:
+            type: boolean
+            default: false
       requestBody:
-        description: The strategy code to be submitted for validation
+        description: The raw strategy source code
         required: true
         content:
           text/plain:
             schema:
               type: string
-              description: The raw strategy code submitted by the user
+              description: Raw strategy Java source code
       responses:
         '200':
-          description: Strategy created/updated
+          description: Strategy compiled successfully (sync mode)
           content:
             application/json:
               schema:
                 type: object
+                required: [strategyId]
                 properties:
                   strategyId:
                     $ref: '#/components/schemas/strategyId'
               example:
                 strategyId: 6bsh31ikwkuivhtgcoa6s4
+        '202':
+          description: "Compile task accepted (async mode — set `X-Compile-Async: true`)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
         '400':
-          description: Invalid strategy
+          description: Invalid strategy (compilation error)
           content:
             application/json:
               schema:
@@ -460,6 +499,53 @@ paths:
               example:
                 code: 400
                 message: 'Line 1, Column 18: syntax error'
+      security:
+        - bearerAuth: []
+      tags:
+        - Strategy
+  '/strategy/{strategyId}':
+    get:
+      operationId: getStrategyStatus
+      summary: Get the status of an async compile task
+      description: |
+        Polls the status of a strategy compilation. Useful when the strategy was submitted with
+        `X-Compile-Async: true`. Returns the resolved `strategyId` once compilation completes.
+      parameters:
+        - name: strategyId
+          in: path
+          required: true
+          description: The id returned by `POST /strategy` (sync) or the `jobId` returned in async mode
+          schema:
+            type: string
+            example: 6bsh31ikwkuivhtgcoa6s4
+      responses:
+        '200':
+          description: Strategy compile state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  jobId:
+                    type: string
+                    description: Compile job id (only set in async mode)
+                    example: 6bsh31ikwkuivhtgcoa6s4
+                  status:
+                    type: string
+                    enum: [New, Started, Completed, Aborted, Failed]
+                    example: Completed
+                  strategyId:
+                    $ref: '#/components/schemas/strategyId'
+                  statusDetail:
+                    type: ['string', 'null']
+                    description: Compilation error messages when `status` is `Failed`
+        '404':
+          description: Strategy compile job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
       security:
         - bearerAuth: []
       tags:
@@ -596,28 +682,20 @@ components:
             format: date-time
             description: Timestamp for when the preparation finished
             example: "2025-01-04T14:00:20Z"
-    BacktestJobRequest:
+    AcceptedJob:
       type: object
-      description: Information about a backtest job request and its associated jobs per instrument
+      description: |
+        Response returned by async endpoints (`202 Accepted`). The `jobId` is deterministic for the
+        same input parameters — repeated calls with identical params return the same id.
       required:
-        - requestId
-        - jobs
+        - jobId
       properties:
-        requestId:
+        jobId:
           type: string
-          description: Unique identifier for the job request
+          description: Unique job identifier; use this to poll for completion.
           example: 13RBLGQlPnfDjO6wyKSX8i
-        jobs:
-          type: object
-          additionalProperties:
-            type: string
-          description: A mapping of instruments to their respective job context processing IDs
-          example:
-            BTC/USDT: 2o8heaioicr0edvx5ybcap
       example:
-        requestId: "13RBLGQlPnfDjO6wyKSX8i"
-        jobs:
-          BTC/USDT: "2o8heaioicr0edvx5ybcap"
+        jobId: "13RBLGQlPnfDjO6wyKSX8i"
     BacktestJobResult:
       type: object
       description: Backtest job result.
@@ -705,7 +783,7 @@ components:
         signalsId:
           type: string
           description: >-
-            Storage key for the signal Parquet file. Format: {userId}/exec/{exchange}/{requestId}
+            Storage key for the signal Parquet file. Format: {userId}/exec/{exchange}/{jobId}
           example: "4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl"
         signalsUrl:
           type: string
