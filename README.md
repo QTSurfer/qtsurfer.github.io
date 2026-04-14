@@ -2,7 +2,7 @@
 
 Quantitative trading strategy backtesting platform.
 
-Write trading strategies in Java, compile them on-the-fly, run backtests against historical exchange data, and visualize results with millions of data points — all through a REST API.
+Write trading strategies in Java, submit them to be compiled, run backtests against historical exchange data, and visualize results with millions of data points — all through a REST API.
 
 ## API Documentation
 
@@ -15,7 +15,7 @@ Strategy (Java) ──► Compile ──► Prepare Data ──► Execute ─�
 ```
 
 1. **Write** a trading strategy in Java using the strategy SDK (indicators, signals, execution)
-2. **Compile** it via `POST /strategy` — Janino compiles at runtime, no build tools needed
+2. **Compile** it via `POST /strategy` — no build tools needed on the client
 3. **Prepare** historical market data via `POST /backtest/{exchange}/{type}/prepare` — returns a `jobId`
 4. **Execute** the strategy against prepared data via `POST /backtest/{exchange}/{type}/execute` — returns a `jobId`
 5. **Visualize** results — signals are stored as Parquet files, loaded in-browser via DuckDB-WASM
@@ -134,7 +134,7 @@ The response includes yield metrics (PnL, win rate, Sharpe, Sortino, CAGR, max d
 
 | Layer | Technology |
 |-------|-----------|
-| Strategy runtime | Java, Janino (runtime compilation) |
+| Strategy runtime | Java |
 | Signal storage | Apache Parquet, S3-compatible object storage |
 | Visualization | [svelte-timeseries](https://github.com/QTSurfer/svelte-timeseries) (DuckDB-WASM + ECharts) |
 
