@@ -191,11 +191,10 @@ paths:
   '/backtest/{exchangeId}/{type}/prepare':
     post:
       operationId: prepareBacktesting
-      summary: Prepare backtesting data for one instrument (async)
+      summary: Prepare backtesting data
       description: |
-        Enqueues an asynchronous prepare task for a single instrument over the requested date range.
-        Returns immediately with a `jobId`; poll `GET /backtest/{exchangeId}/{type}/prepare/{jobId}`
-        for completion.
+        Enqueues a prepare task over the requested date range. Returns immediately with a `jobId`;
+        poll `GET /backtest/{exchangeId}/{type}/prepare/{jobId}` for completion.
 
         The same params always return the same `jobId` (idempotent). Repeated calls with identical
         params do not enqueue duplicate work — they reuse the existing job.
@@ -342,7 +341,7 @@ paths:
   '/backtest/{exchangeId}/{type}/execute':
     post:
       operationId: executeBacktesting
-      summary: Execute a compiled strategy against a prepared dataset (async)
+      summary: Execute a compiled strategy against a prepared dataset
       description: |
         Enqueues an execute task that runs the strategy identified by `strategyId` over the data
         prepared by the prepare job identified by `prepareJobId`. The instrument and date range are
