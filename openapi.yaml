@@ -80,6 +80,114 @@ paths:
                 $ref: '#/components/schemas/ResponseError'
       tags:
         - Exchange
+  '/strategy':
+    post:
+      operationId: postStrategy
+      summary: Compile a strategy from source code
+      description: |
+        Submits raw strategy source for compilation. By default the call is synchronous and returns
+        the `strategyId` once compilation succeeds. Set the header `X-Compile-Async: true` to enqueue
+        the compile task and return immediately with a `jobId` — poll
+        `GET /strategy/{strategyId}` to check status.
+
+        The `strategyId` is deterministic: the same source for the same user always produces the
+        same id.
+      parameters:
+        - name: X-Compile-Async
+          in: header
+          required: false
+          description: When `true`, compile asynchronously and return `202` with a `jobId`.
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        description: The raw strategy source code
+        required: true
+        content:
+          text/plain:
+            schema:
+              type: string
+              description: Raw strategy Java source code
+      responses:
+        '200':
+          description: Strategy compiled successfully (sync mode)
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [strategyId]
+                properties:
+                  strategyId:
+                    $ref: '#/components/schemas/strategyId'
+              example:
+                strategyId: 6bsh31ikwkuivhtgcoa6s4
+        '202':
+          description: "Compile task accepted (async mode — set `X-Compile-Async: true`)"
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AcceptedJob'
+        '400':
+          description: Invalid strategy (compilation error)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 400
+                message: 'Line 1, Column 18: syntax error'
+      security:
+        - bearerAuth: []
+      tags:
+        - Strategy
+  '/strategy/{strategyId}':
+    get:
+      operationId: getStrategyStatus
+      summary: Get the status of an async compile task
+      description: |
+        Polls the status of a strategy compilation. Useful when the strategy was submitted with
+        `X-Compile-Async: true`. Returns the resolved `strategyId` once compilation completes.
+      parameters:
+        - name: strategyId
+          in: path
+          required: true
+          description: The id returned by `POST /strategy` (sync) or the `jobId` returned in async mode
+          schema:
+            type: string
+            example: 6bsh31ikwkuivhtgcoa6s4
+      responses:
+        '200':
+          description: Strategy compile state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  jobId:
+                    type: string
+                    description: Compile job id (only set in async mode)
+                    example: 6bsh31ikwkuivhtgcoa6s4
+                  status:
+                    type: string
+                    enum: [New, Started, Completed, Aborted, Failed]
+                    example: Completed
+                  strategyId:
+                    $ref: '#/components/schemas/strategyId'
+                  statusDetail:
+                    type: ['string', 'null']
+                    description: Compilation error messages when `status` is `Failed`
+        '404':
+          description: Strategy compile job not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Strategy
+
   '/backtest/{exchangeId}/{type}/prepare':
     post:
       operationId: prepareBacktesting
@@ -443,114 +551,6 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting
-  '/strategy':
-    post:
-      operationId: postStrategy
-      summary: Compile a strategy from source code
-      description: |
-        Submits raw strategy source for compilation. By default the call is synchronous and returns
-        the `strategyId` once compilation succeeds. Set the header `X-Compile-Async: true` to enqueue
-        the compile task and return immediately with a `jobId` — poll
-        `GET /strategy/{strategyId}` to check status.
-
-        The `strategyId` is deterministic: the same source for the same user always produces the
-        same id.
-      parameters:
-        - name: X-Compile-Async
-          in: header
-          required: false
-          description: When `true`, compile asynchronously and return `202` with a `jobId`.
-          schema:
-            type: boolean
-            default: false
-      requestBody:
-        description: The raw strategy source code
-        required: true
-        content:
-          text/plain:
-            schema:
-              type: string
-              description: Raw strategy Java source code
-      responses:
-        '200':
-          description: Strategy compiled successfully (sync mode)
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [strategyId]
-                properties:
-                  strategyId:
-                    $ref: '#/components/schemas/strategyId'
-              example:
-                strategyId: 6bsh31ikwkuivhtgcoa6s4
-        '202':
-          description: "Compile task accepted (async mode — set `X-Compile-Async: true`)"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AcceptedJob'
-        '400':
-          description: Invalid strategy (compilation error)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResponseError'
-              example:
-                code: 400
-                message: 'Line 1, Column 18: syntax error'
-      security:
-        - bearerAuth: []
-      tags:
-        - Strategy
-  '/strategy/{strategyId}':
-    get:
-      operationId: getStrategyStatus
-      summary: Get the status of an async compile task
-      description: |
-        Polls the status of a strategy compilation. Useful when the strategy was submitted with
-        `X-Compile-Async: true`. Returns the resolved `strategyId` once compilation completes.
-      parameters:
-        - name: strategyId
-          in: path
-          required: true
-          description: The id returned by `POST /strategy` (sync) or the `jobId` returned in async mode
-          schema:
-            type: string
-            example: 6bsh31ikwkuivhtgcoa6s4
-      responses:
-        '200':
-          description: Strategy compile state
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [status]
-                properties:
-                  jobId:
-                    type: string
-                    description: Compile job id (only set in async mode)
-                    example: 6bsh31ikwkuivhtgcoa6s4
-                  status:
-                    type: string
-                    enum: [New, Started, Completed, Aborted, Failed]
-                    example: Completed
-                  strategyId:
-                    $ref: '#/components/schemas/strategyId'
-                  statusDetail:
-                    type: ['string', 'null']
-                    description: Compilation error messages when `status` is `Failed`
-        '404':
-          description: Strategy compile job not found
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ResponseError'
-      security:
-        - bearerAuth: []
-      tags:
-        - Strategy
-
 components:
   schemas:
     ResponseError:
