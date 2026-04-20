@@ -99,6 +99,14 @@ paths:
         cronjob. There is no hot-cache fallback in this MVP: hours that haven't
         been backfilled yet return `404`.
 
+        A `format=parquet` query parameter switches the response to an
+        on-the-fly Lastra→Parquet conversion (via
+        [lastra-convert](https://github.com/QTSurfer/lastra-convert) running on
+        the Vert.x worker pool). Lastra remains the primary serving format;
+        Parquet is a compatibility path for internal consumers that don't yet
+        read Lastra (e.g. Strategy Studio). Conversion is CPU-bound and
+        not cached, so Lastra is cheaper when the client can consume it.
+
         Clients:
         - [lastra-java](https://github.com/QTSurfer/lastra-java) — reference
           Java reader/writer with per-column codecs (ALP, Gorilla, delta-varint,
@@ -143,16 +151,39 @@ paths:
             type: string
             pattern: '^\d{4}-\d{2}-\d{2}T\d{2}$'
             example: '2026-01-15T10'
+        - name: format
+          in: query
+          required: false
+          description: |
+            Response wire format. `lastra` (default) streams the raw Lastra
+            bytes zero-copy. `parquet` runs a live Lastra→Parquet conversion
+            on the server (via
+            [lastra-convert](https://github.com/QTSurfer/lastra-convert)).
+          schema:
+            type: string
+            enum: [lastra, parquet]
+            default: lastra
+            example: lastra
       responses:
         '200':
-          description: One hour of tickers for the instrument, as a Lastra segment.
+          description: |
+            One hour of tickers for the instrument. `Content-Type` is
+            `application/vnd.lastra` by default or
+            `application/vnd.apache.parquet` when `format=parquet` was
+            requested.
           headers:
             Content-Disposition:
-              description: Attachment filename `{BASE}_{QUOTE}_{YYYY-MM-DD}_h{HH}.lastra`.
+              description: |
+                Attachment filename `{BASE}_{QUOTE}_{YYYY-MM-DD}_h{HH}.{ext}`
+                where `{ext}` is `lastra` or `parquet` to match the format.
               schema:
                 type: string
           content:
             application/vnd.lastra:
+              schema:
+                type: string
+                format: binary
+            application/vnd.apache.parquet:
               schema:
                 type: string
                 format: binary
@@ -222,16 +253,38 @@ paths:
             type: string
             pattern: '^\d{4}-\d{2}-\d{2}T\d{2}$'
             example: '2026-01-15T10'
+        - name: format
+          in: query
+          required: false
+          description: |
+            Response wire format. `lastra` (default) streams the raw Lastra
+            bytes zero-copy. `parquet` runs a live Lastra→Parquet conversion
+            on the server.
+          schema:
+            type: string
+            enum: [lastra, parquet]
+            default: lastra
+            example: lastra
       responses:
         '200':
-          description: One hour of klines for the instrument, as a Lastra segment.
+          description: |
+            One hour of klines for the instrument. `Content-Type` is
+            `application/vnd.lastra` by default or
+            `application/vnd.apache.parquet` when `format=parquet`.
           headers:
             Content-Disposition:
-              description: Attachment filename `{BASE}_{QUOTE}_{YYYY-MM-DD}_h{HH}.lastra`.
+              description: |
+                Attachment filename
+                `{BASE}_{QUOTE}_{YYYY-MM-DD}_h{HH}_klines.{ext}`
+                where `{ext}` is `lastra` or `parquet` to match the format.
               schema:
                 type: string
           content:
             application/vnd.lastra:
+              schema:
+                type: string
+                format: binary
+            application/vnd.apache.parquet:
               schema:
                 type: string
                 format: binary
