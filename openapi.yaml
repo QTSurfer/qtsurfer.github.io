@@ -80,6 +80,172 @@ paths:
                 $ref: '#/components/schemas/ResponseError'
       tags:
         - Exchange
+  '/exchange/{exchangeId}/tickers/{base}/{quote}':
+    get:
+      operationId: getExchangeTickersHour
+      summary: Download one hour of tickers for an instrument as a Lastra segment
+      description: |
+        Serves exactly one hour of raw ticker data for the given instrument on the
+        requested exchange. The payload is a native Lastra file (QTSurfer's columnar
+        format for timeseries at tick precision) streamed zero-copy from cold
+        storage — no JSON envelope, no conversion.
+
+        One segment = one hour, aligned to UTC. The `hour` query parameter selects
+        the segment and must match `YYYY-MM-DDTHH` (no minutes/seconds, no timezone
+        suffix). Example: `hour=2026-01-15T10` returns `h10.lastra` for
+        2026-01-15, covering `[10:00:00Z, 11:00:00Z)`.
+
+        Files are sourced from the cold Lastra tree produced by the hourly backfill
+        cronjob. There is no hot-cache fallback in this MVP: hours that haven't
+        been backfilled yet return `404`.
+
+        Useful clients:
+        - `lastra-ts` / `lastra-java` for in-process reading
+        - `curl -OJ` for offline dumps (the `Content-Disposition` header sets a
+          descriptive filename)
+      parameters:
+        - name: exchangeId
+          in: path
+          required: true
+          description: ID of the exchange (e.g. `binance`).
+          schema:
+            type: string
+            example: binance
+        - name: base
+          in: path
+          required: true
+          description: Base asset symbol (first leg of the pair).
+          schema:
+            type: string
+            example: BTC
+        - name: quote
+          in: path
+          required: true
+          description: Quote asset symbol (second leg of the pair).
+          schema:
+            type: string
+            example: USDT
+        - name: hour
+          in: query
+          required: true
+          description: |
+            Hour selector in `YYYY-MM-DDTHH` (UTC). The returned segment covers
+            `[HH:00:00Z, HH+1:00:00Z)`.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}$'
+            example: '2026-01-15T10'
+      responses:
+        '200':
+          description: One hour of tickers for the instrument, as a Lastra segment.
+          headers:
+            Content-Disposition:
+              description: Attachment filename `{BASE}_{QUOTE}_{YYYY-MM-DD}_h{HH}.lastra`.
+              schema:
+                type: string
+          content:
+            application/vnd.lastra:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: No Lastra segment exists for the requested instrument/hour.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '500':
+          description: Unexpected I/O error serving the file.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      tags:
+        - Exchange
+  '/exchange/{exchangeId}/klines/{base}/{quote}':
+    get:
+      operationId: getExchangeKlinesHour
+      summary: Download one hour of klines for an instrument as a Lastra segment
+      description: |
+        Same shape and semantics as `/exchange/{exchangeId}/tickers/{base}/{quote}`,
+        but serves klines (1-minute bars) instead of raw ticks. One Lastra segment
+        = one hour of 1m klines for the instrument, aligned to UTC.
+
+        The klines payload is the Vision-backfill / WebSocket-recorded stream in
+        the same columnar layout as tickers — readers that handle one format read
+        the other with the same code. Use this endpoint when a per-tick payload
+        would be too large for the window of interest.
+      parameters:
+        - name: exchangeId
+          in: path
+          required: true
+          description: ID of the exchange (e.g. `binance`).
+          schema:
+            type: string
+            example: binance
+        - name: base
+          in: path
+          required: true
+          description: Base asset symbol.
+          schema:
+            type: string
+            example: BTC
+        - name: quote
+          in: path
+          required: true
+          description: Quote asset symbol.
+          schema:
+            type: string
+            example: USDT
+        - name: hour
+          in: query
+          required: true
+          description: |
+            Hour selector in `YYYY-MM-DDTHH` (UTC). The returned segment covers
+            `[HH:00:00Z, HH+1:00:00Z)` and contains up to 60 one-minute bars.
+          schema:
+            type: string
+            pattern: '^\d{4}-\d{2}-\d{2}T\d{2}$'
+            example: '2026-01-15T10'
+      responses:
+        '200':
+          description: One hour of klines for the instrument, as a Lastra segment.
+          headers:
+            Content-Disposition:
+              description: Attachment filename `{BASE}_{QUOTE}_{YYYY-MM-DD}_h{HH}.lastra`.
+              schema:
+                type: string
+          content:
+            application/vnd.lastra:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: No Lastra segment exists for the requested instrument/hour.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '500':
+          description: Unexpected I/O error serving the file.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      tags:
+        - Exchange
   '/strategy':
     post:
       operationId: postStrategy
