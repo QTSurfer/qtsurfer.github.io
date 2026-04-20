@@ -86,9 +86,9 @@ paths:
       summary: Download one hour of tickers for an instrument as a Lastra segment
       description: |
         Serves exactly one hour of raw ticker data for the given instrument on the
-        requested exchange. The payload is a native Lastra file (QTSurfer's columnar
-        format for timeseries at tick precision) streamed zero-copy from cold
-        storage — no JSON envelope, no conversion.
+        requested exchange. The payload is a native [Lastra](https://github.com/QTSurfer/lastra-java)
+        file — QTSurfer's columnar format for timeseries at tick precision —
+        streamed zero-copy from cold storage, no JSON envelope, no conversion.
 
         One segment = one hour, aligned to UTC. The `hour` query parameter selects
         the segment and must match `YYYY-MM-DDTHH` (no minutes/seconds, no timezone
@@ -99,10 +99,18 @@ paths:
         cronjob. There is no hot-cache fallback in this MVP: hours that haven't
         been backfilled yet return `404`.
 
-        Useful clients:
-        - `lastra-ts` / `lastra-java` for in-process reading
+        Clients:
+        - [lastra-java](https://github.com/QTSurfer/lastra-java) — reference
+          Java reader/writer with per-column codecs (ALP, Gorilla, delta-varint,
+          ZSTD) and CRC32 integrity.
+        - [lastra-ts](https://github.com/QTSurfer/lastra-ts) — TypeScript reader
+          (~4 kB bundle, browser + Node.js).
+        - [duckdb-lastra](https://github.com/QTSurfer/duckdb-lastra) — DuckDB
+          extension for ad-hoc SQL over Lastra files.
+        - [lastra-convert](https://github.com/QTSurfer/lastra-convert) — CLI + Java
+          API for converting to/from Parquet, Reef, and CSV.
         - `curl -OJ` for offline dumps (the `Content-Disposition` header sets a
-          descriptive filename)
+          descriptive filename).
       parameters:
         - name: exchangeId
           in: path
@@ -174,8 +182,9 @@ paths:
       summary: Download one hour of klines for an instrument as a Lastra segment
       description: |
         Same shape and semantics as `/exchange/{exchangeId}/tickers/{base}/{quote}`,
-        but serves klines (1-minute bars) instead of raw ticks. One Lastra segment
-        = one hour of 1m klines for the instrument, aligned to UTC.
+        but serves klines (1-minute bars) instead of raw ticks. One
+        [Lastra](https://github.com/QTSurfer/lastra-java) segment = one hour of
+        1m klines for the instrument, aligned to UTC.
 
         The klines payload is the Vision-backfill / WebSocket-recorded stream in
         the same columnar layout as tickers — readers that handle one format read
