@@ -87,25 +87,19 @@ paths:
       description: |
         Serves exactly one hour of raw ticker data for the given instrument on the
         requested exchange. The payload is a native [Lastra](https://github.com/QTSurfer/lastra-java)
-        file — QTSurfer's columnar format for timeseries at tick precision —
-        streamed zero-copy from cold storage, no JSON envelope, no conversion.
+        file — QTSurfer's columnar format for tick-precision timeseries — with
+        no JSON envelope.
 
         One segment = one hour, aligned to UTC. The `hour` query parameter selects
         the segment and must match `YYYY-MM-DDTHH` (no minutes/seconds, no timezone
         suffix). Example: `hour=2026-01-15T10` returns `h10.lastra` for
-        2026-01-15, covering `[10:00:00Z, 11:00:00Z)`.
+        2026-01-15, covering `[10:00:00Z, 11:00:00Z)`. Hours not yet available
+        return `404`.
 
-        Files are sourced from the cold Lastra tree produced by the hourly backfill
-        cronjob. There is no hot-cache fallback in this MVP: hours that haven't
-        been backfilled yet return `404`.
-
-        A `format=parquet` query parameter switches the response to an
-        on-the-fly Lastra→Parquet conversion (via
-        [lastra-convert](https://github.com/QTSurfer/lastra-convert) running on
-        the Vert.x worker pool). Lastra remains the primary serving format;
-        Parquet is a compatibility path for internal consumers that don't yet
-        read Lastra (e.g. Strategy Studio). Conversion is CPU-bound and
-        not cached, so Lastra is cheaper when the client can consume it.
+        A `format=parquet` query parameter switches the response to on-the-fly
+        Parquet conversion via [lastra-convert](https://github.com/QTSurfer/lastra-convert)
+        for clients that don't yet read Lastra. Lastra is the primary format
+        and cheaper when the client can consume it.
 
         Clients:
         - [lastra-java](https://github.com/QTSurfer/lastra-java) — reference
@@ -155,10 +149,9 @@ paths:
           in: query
           required: false
           description: |
-            Response wire format. `lastra` (default) streams the raw Lastra
-            bytes zero-copy. `parquet` runs a live Lastra→Parquet conversion
-            on the server (via
-            [lastra-convert](https://github.com/QTSurfer/lastra-convert)).
+            Response wire format. `lastra` (default) returns raw Lastra bytes.
+            `parquet` returns Parquet via on-the-fly conversion using
+            [lastra-convert](https://github.com/QTSurfer/lastra-convert).
           schema:
             type: string
             enum: [lastra, parquet]
@@ -213,14 +206,13 @@ paths:
       summary: Download one hour of klines for an instrument as a Lastra segment
       description: |
         Same shape and semantics as `/exchange/{exchangeId}/tickers/{base}/{quote}`,
-        but serves klines (1-minute bars) instead of raw ticks. One
+        but serves klines (aggregated bars) instead of raw ticks. One
         [Lastra](https://github.com/QTSurfer/lastra-java) segment = one hour of
-        1m klines for the instrument, aligned to UTC.
+        klines at the exchange's native kline cadence, aligned to UTC.
 
-        The klines payload is the Vision-backfill / WebSocket-recorded stream in
-        the same columnar layout as tickers — readers that handle one format read
-        the other with the same code. Use this endpoint when a per-tick payload
-        would be too large for the window of interest.
+        Klines use the same columnar layout as tickers — readers that handle one
+        format read the other with the same code. Use this endpoint when a
+        per-tick payload would be too large for the window of interest.
       parameters:
         - name: exchangeId
           in: path
@@ -248,7 +240,7 @@ paths:
           required: true
           description: |
             Hour selector in `YYYY-MM-DDTHH` (UTC). The returned segment covers
-            `[HH:00:00Z, HH+1:00:00Z)` and contains up to 60 one-minute bars.
+            `[HH:00:00Z, HH+1:00:00Z)`.
           schema:
             type: string
             pattern: '^\d{4}-\d{2}-\d{2}T\d{2}$'
@@ -257,9 +249,8 @@ paths:
           in: query
           required: false
           description: |
-            Response wire format. `lastra` (default) streams the raw Lastra
-            bytes zero-copy. `parquet` runs a live Lastra→Parquet conversion
-            on the server.
+            Response wire format. `lastra` (default) returns raw Lastra bytes.
+            `parquet` returns Parquet via on-the-fly conversion.
           schema:
             type: string
             enum: [lastra, parquet]
@@ -554,7 +545,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/JobState'
               example:
-                contextId: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:1rabbrpk5r4kkegs83w6qr:btc/usdt:0bjmoxd4vahkgc0hnvdldh"
+                contextId: "ctx_0bjmoxd4vahkgc0hnvdldh"
                 status: "Completed"
                 statusDetail: null
                 size: 0
@@ -748,7 +739,7 @@ paths:
                 $ref: '#/components/schemas/BacktestJobResult'
               example:
                 state:
-                  contextId: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:3vsndwikcuaatjmb83fjtl:btc/usdt:2mnyblatqqw34kix2echpb"
+                  contextId: "ctx_2mnyblatqqw34kix2echpb"
                   status: "Completed"
                   statusDetail: null
                   size: 0
@@ -756,9 +747,9 @@ paths:
                   startTime: "2026-03-18T13:21:28.958Z"
                   endTime: "2026-03-18T13:21:29.605Z"
                 results:
-                  hostName: "backtesting-job-worker-v2-688fc5c6fc-5khwk"
+                  hostName: "executor10"
                   iops: 123956.53
-                  strategyId: "strategy:4a627755-7f5a-4297-b647-8dddd8aee416:ticker:2iyvtenlzh9dabqtxn7nbv"
+                  strategyId: "strategy:00000000-0000-0000-0000-000000000000:ticker:2iyvtenlzh9dabqtxn7nbv"
                   instrument: "BTC/USDT"
                   pnlTotal: 42.75
                   totalTrades: 156
@@ -769,8 +760,8 @@ paths:
                   maxDrawdown: 12.50
                   maxDrawdownPercent: 8.75
                   signalCount: 100000
-                  signalsId: "4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl"
-                  signalsUrl: "https://storage.qtsurfer.com/4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
+                  signalsId: "00000000-0000-0000-0000-000000000000/exec/binance/3vsndwikcuaatjmb83fjtl"
+                  signalsUrl: "https://storage.qtsurfer.com/00000000-0000-0000-0000-000000000000/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
                   signalsUpload: "Done"
                   signalsUploadedAt: "2026-03-18T13:21:48.170Z"
         '404':
@@ -871,7 +862,7 @@ components:
           example: Binance cryptocurrency exchange
     DataSourceType:
       type: string
-      description: Managed exchange data sources available for backtesting. Currently only ticker is supported; kline and funding rate support is planned.
+      description: Managed exchange data sources available for backtesting.
       enum:
         - ticker
       example: ticker
@@ -886,18 +877,15 @@ components:
       properties:
           contextId:
             type: string
-            description: Unique context ID for the job
-            example: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:1rabbrpk5r4kkegs83w6qr:btc/usdt:2o8heaioicr0edvx5ybcap"
+            description: Opaque context identifier for the job
+            example: "ctx_2o8heaioicr0edvx5ybcap"
           status:
             type: string
             description: |
-              Current status of the job. `Partial` is a prepare-only state: the
-              worker finished the synchronous portion (range validated, plan
-              persisted, cold-fallback dispatched) but some hours are still being
-              produced asynchronously. The GET handler re-evaluates the plan on
-              each poll and promotes to `Completed` once everything has landed.
+              Current status of the job. `Partial` (prepare only) means some
+              hours are still being produced asynchronously — keep polling.
               Treat `Completed | Aborted | Failed` as terminal; anything else
-              including `Partial` means keep polling.
+              means keep polling.
             enum:
               - New
               - Started
@@ -965,8 +953,8 @@ components:
       properties:
         hostName:
           type: string
-          description: Hostname of the worker node that executed the strategy
-          example: "backtesting-job-worker-84b569dff9-dr4lb"
+          description: Identifier of the worker that executed the strategy. Useful when reporting issues so support can correlate with logs.
+          example: "executor10"
         iops:
           type: number
           format: double
@@ -974,10 +962,8 @@ components:
           example: 123956.53
         strategyId:
           type: string
-          description: >-
-            Redis key of the compiled strategy used for execution.
-            Format: strategy:{userId}:ticker:{compilationId}
-          example: "strategy:4a627755-7f5a-4297-b647-8dddd8aee416:ticker:2iyvtenlzh9dabqtxn7nbv"
+          description: Identifier of the compiled strategy that produced this result
+          example: "strategy:00000000-0000-0000-0000-000000000000:ticker:2iyvtenlzh9dabqtxn7nbv"
         instrument:
           type: string
           description: The instrument (currency pair) that was backtested
@@ -1028,22 +1014,19 @@ components:
           example: 100000
         signalsId:
           type: string
-          description: >-
-            Storage key for the signal Parquet file. Format: {userId}/exec/{exchange}/{jobId}
-          example: "4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl"
+          description: Storage key for the signals file. Treat as opaque; use signalsUrl to download.
+          example: "00000000-0000-0000-0000-000000000000/exec/binance/3vsndwikcuaatjmb83fjtl"
         signalsUrl:
           type: string
           format: uri
-          description: >-
-            Public HTTPS URL to the Parquet file. Computed at setup time from
-            publicBaseUrl + signalsId + .parquet. Available even before upload completes.
-          example: "https://storage.qtsurfer.com/4a627755-7f5a-4297-b647-8dddd8aee416/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
+          description: HTTPS URL to download the signals Parquet file. Use signalsUpload to know when it's ready.
+          example: "https://storage.qtsurfer.com/00000000-0000-0000-0000-000000000000/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
         signalsUpload:
           type: string
           enum: [Done, Failed, Skipped]
           description: >-
-            Upload status. Done = file uploaded to R2. Failed = upload error (see signalsUploadReason).
-            Skipped = no signals emitted or storage not configured.
+            Upload status. Done = signal file is available at signalsUrl. Failed = upload error (see signalsUploadReason).
+            Skipped = no signals emitted.
           example: "Done"
         signalsUploadedAt:
           type: string
@@ -1053,7 +1036,7 @@ components:
         signalsUploadReason:
           type: string
           description: Human-readable reason when signalsUpload is Failed or Skipped.
-          example: "parquet file empty or missing after close"
+          example: "signal file generation failed"
     strategyId:
       description: Unique identifier for a compiled strategy
       type: string
@@ -1063,10 +1046,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: >-
-        JWT bearer token. The `sub` claim must contain the user identifier
-        (e.g. user UUID). This value is used to namespace storage paths
-        and trace requests back to the originating user.
+      description: JWT bearer token. The `sub` claim must contain the user identifier.
 tags:
   - name: Exchange
     description: |-
