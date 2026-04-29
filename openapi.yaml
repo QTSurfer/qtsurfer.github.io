@@ -467,10 +467,21 @@ paths:
                     - ISO DATE (e.g. 2024-12-14)
                     - BASIC ISO DATE (e.g., 20241214)
                   example: "2024-12-14"
+                cadence:
+                  type: string
+                  description: |
+                    Output bar cadence for the prepared range. Defaults to the publisher's
+                    native cadence (`1s`); coarser cadences are produced on demand via
+                    resampling and stored alongside the native blob in cache. Coarser-than-
+                    source values must be exact multiples of the source cadence — invalid
+                    labels return `400`.
+                  enum: [1s, 5s, 1m, 5m, 15m, 1h, 4h, 1d]
+                  default: "1s"
             example:
               instrument: BTC/USDT
               from: "2024-12-13T00:00:00Z"
               to: "2024-12-14T00:00:00Z"
+              cadence: "1m"
       responses:
         '202':
           description: Prepare task accepted (queued for processing)
@@ -879,10 +890,18 @@ components:
             example: "jctx:ticker:4a627755-7f5a-4297-b647-8dddd8aee416:binance:1rabbrpk5r4kkegs83w6qr:btc/usdt:2o8heaioicr0edvx5ybcap"
           status:
             type: string
-            description: Current status of the job
+            description: |
+              Current status of the job. `Partial` is a prepare-only state: the
+              worker finished the synchronous portion (range validated, plan
+              persisted, cold-fallback dispatched) but some hours are still being
+              produced asynchronously. The GET handler re-evaluates the plan on
+              each poll and promotes to `Completed` once everything has landed.
+              Treat `Completed | Aborted | Failed` as terminal; anything else
+              including `Partial` means keep polling.
             enum:
               - New
               - Started
+              - Partial
               - Completed
               - Aborted
               - Failed
