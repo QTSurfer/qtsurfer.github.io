@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.93.0
+  version: 0.94.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -752,6 +752,7 @@ paths:
                   strategyId: "strategy:00000000-0000-0000-0000-000000000000:ticker:2iyvtenlzh9dabqtxn7nbv"
                   instrument: "BTC/USDT"
                   pnlTotal: 42.75
+                  pnlTotalPercent: 2.25
                   totalTrades: 156
                   winRate: 58.33
                   sharpeRatio: 1.245
@@ -759,6 +760,13 @@ paths:
                   cagr: 0.1534
                   maxDrawdown: 12.50
                   maxDrawdownPercent: 8.75
+                  equityCurve:
+                    - timestamp: 1700000000000
+                      equity: 100.0
+                    - timestamp: 1700000060000
+                      equity: 110.5
+                    - timestamp: 1700000120000
+                      equity: 90.25
                   signalCount: 100000
                   signalsId: "00000000-0000-0000-0000-000000000000/exec/binance/3vsndwikcuaatjmb83fjtl"
                   signalsUrl: "https://storage.qtsurfer.com/00000000-0000-0000-0000-000000000000/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
@@ -945,7 +953,8 @@ components:
       type: object
       description: >-
         Execution result map. Always includes core fields (hostName, iops, strategyId, instrument).
-        Yield metrics (pnlTotal, totalTrades, winRate, etc.) are present when the strategy emitted at least one trade.
+        Yield metrics (pnlTotal, pnlTotalPercent, totalTrades, winRate, equityCurve, etc.) are present
+        when the strategy emitted at least one trade.
         When signal storage is enabled, includes signal fields described below.
       required:
         - strategyId
@@ -972,6 +981,11 @@ components:
           type: number
           format: double
           description: Total profit and loss in the output currency
+          example: 42.75
+        pnlTotalPercent:
+          type: number
+          format: double
+          description: Total PnL as a percentage of the initial capital (`backtestFunding`). Zero when `backtestFunding` is 0.
           example: 42.75
         totalTrades:
           type: integer
@@ -1008,6 +1022,22 @@ components:
           format: double
           description: Maximum percentage drawdown from peak equity
           example: 8.75
+        equityCurve:
+          type: array
+          description: >-
+            Equity curve over the backtest. Element 0 is an anchor at the backtest `from`
+            with `initialCapital`; the remaining points are one sample per emitted yield,
+            in order. Use it to plot the strategy's running equity without re-deriving
+            it from the yield history.
+          items:
+            $ref: '#/components/schemas/EquityPoint'
+          example:
+            - timestamp: 1700000000000
+              equity: 100.0
+            - timestamp: 1700000060000
+              equity: 110.5
+            - timestamp: 1700000120000
+              equity: 90.25
         signalCount:
           type: integer
           description: Number of signals emitted during strategy execution
@@ -1037,6 +1067,25 @@ components:
           type: string
           description: Human-readable reason when signalsUpload is Failed or Skipped.
           example: "signal file generation failed"
+    EquityPoint:
+      type: object
+      description: Single sample of the running equity at a yield event.
+      required:
+        - timestamp
+        - equity
+      properties:
+        timestamp:
+          type: integer
+          format: int64
+          description: >-
+            Epoch milliseconds. The first point in an equity curve is anchored at the
+            backtest `from`; subsequent points carry the timestamp of each emitted yield.
+          example: 1700000000000
+        equity:
+          type: number
+          format: double
+          description: Running equity at this point (`initialCapital + cumulativePnl`).
+          example: 110.5
     strategyId:
       description: Unique identifier for a compiled strategy
       type: string
