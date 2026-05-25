@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.95.0
+  version: 0.95.1
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -48,7 +48,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/AuthError'
+                $ref: '#/components/schemas/AuthTokenError'
               example:
                 code: invalid_apikey
                 message: API key not recognized
@@ -1157,7 +1157,7 @@ components:
           enum: [free, basic, pro, elite]
           description: Subscription tier this token was issued for. Drives rate limits and feature flags on downstream endpoints.
           example: free
-    AuthError:
+    AuthTokenError:
       type: object
       required: [code, message]
       description: Error envelope returned by `POST /auth/token` when the API key is rejected.
