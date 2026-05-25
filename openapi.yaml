@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.94.0
+  version: 0.95.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -17,6 +17,47 @@ servers:
   - url: 'https://api.qtsurfer.com/v1'
     description: Production server
 paths:
+  '/auth/token':
+    post:
+      operationId: auth
+      summary: Exchange API key for a short-lived JWT
+      description: |
+        Exchanges a long-lived API key for a short-lived JWT used by every other
+        endpoint. This is the only endpoint that accepts an API key directly —
+        callers should obtain a JWT here, then send it as `Authorization: Bearer
+        <token>` to all other operations.
+
+        The returned JWT carries the caller's subscription `tier` as a claim and
+        expires after `expires_in` seconds. Callers should refresh the token
+        before expiry (or on a `401` response) by calling this endpoint again.
+      responses:
+        '200':
+          description: API key accepted; JWT returned.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenResponse'
+              example:
+                access_token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3NmI5MDIwMy0wM2MyLTQ2ZjYtYjM2Ni05OTQ0ZjE2N2U4MTgiLCJzY29wZXMiOltdLCJ0aWVyIjoiZnJlZSIsImlhdCI6MTc3OTczNTQ2MiwiZXhwIjoxNzc5NzM5MDYyfQ.signature
+                token_type: Bearer
+                expires_in: 3600
+                scopes: []
+                tier: free
+        '401':
+          description: API key is invalid, revoked, or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthError'
+              example:
+                code: invalid_apikey
+                message: API key not recognized
+        '429':
+          description: Rate limit exceeded for this API key.
+      security:
+        - apiKeyAuth: []
+      tags:
+        - Auth
   '/exchanges':
     get:
       operationId: getExchanges
@@ -1090,13 +1131,70 @@ components:
       description: Unique identifier for a compiled strategy
       type: string
       example: 6bsh31ikwkuivhtgcoa6s4
+    AuthTokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, tier]
+      properties:
+        access_token:
+          type: string
+          description: "Short-lived HS256 JWT. Send as `Authorization: Bearer <token>` on all other endpoints."
+        token_type:
+          type: string
+          enum: [Bearer]
+          description: Always `Bearer`.
+        expires_in:
+          type: integer
+          description: Seconds until the JWT expires (typically 3600).
+          example: 3600
+        scopes:
+          type: array
+          description: Scopes granted to this token. Reserved for future use; currently always empty.
+          items:
+            type: string
+          example: []
+        tier:
+          type: string
+          enum: [free, basic, pro, elite]
+          description: Subscription tier this token was issued for. Drives rate limits and feature flags on downstream endpoints.
+          example: free
+    AuthError:
+      type: object
+      required: [code, message]
+      description: Error envelope returned by `POST /auth/token` when the API key is rejected.
+      properties:
+        code:
+          type: string
+          enum: [invalid_apikey, apikey_revoked, apikey_expired]
+          description: Machine-readable error reason.
+        message:
+          type: string
+          description: Human-readable description of the failure.
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
       description: JWT bearer token. The `sub` claim must contain the user identifier.
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: |
+        Long-lived API key, issued via the web app. Used **only** against
+        `POST /auth/token` to exchange for a short-lived JWT. All other
+        endpoints expect the resulting JWT via `bearerAuth`.
 tags:
+  - name: Auth
+    description: |-
+      The **auth** endpoint exchanges a long-lived API key for a short-lived
+      JWT used by every other endpoint. Issue an API key via the web app, then
+      call `POST /auth/token` at the start of each session (and on `401`
+      responses) to obtain a fresh JWT.
+
+      **Key functionalities**:
+      - Exchange an API key for a JWT carrying the caller's subscription tier.
+      - Refresh the JWT before expiry without re-using the API key against any
+        other endpoint.
   - name: Exchange
     description: |-
       This set of endpoints allows interaction with various **exchanges** for cryptocurrencies and financial assets. With these endpoints, users can access information about available exchanges, 
