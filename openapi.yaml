@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.95.1
+  version: 0.97.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -80,7 +80,12 @@ paths:
   '/exchange/{exchangeId}/instruments':
     get:
       operationId: getInstruments
-      summary: Get a list of Instruments from a specific exchange
+      summary: Get an exchange's instruments (default spot segment)
+      description: |
+        "Give me binance instruments" — returns the exchange's DEFAULT segment (`spot`)
+        in `data`, each instrument with per-data-type coverage and market info. `meta`
+        confirms the served `segment` (`spot`); HAL `_links` carry `self` plus the
+        `spot` / `futures` segment-discovery links.
       parameters:
         - name: exchangeId
           in: path
@@ -91,30 +96,117 @@ paths:
             example: binance
       responses:
         '200':
-          description: A JSON array of Instrument details with data availability
+          description: The default (spot) segment's instruments in `data`, `meta`, and HAL `_links` (self + spot/futures segment discovery)
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/InstrumentDetail'
+                $ref: '#/components/schemas/InstrumentListResponse'
               example:
-                - id: BTC/USDT
-                  base: BTC
-                  quote: USDT
-                  dataFrom: "2026-03-17T00:00:00Z"
-                  dataTo: "2026-03-31T18:00:00Z"
-                  lastPrice: 84250.50
-                  volume24h: 1234567.89
-                - id: ETH/USDT
-                  base: ETH
-                  quote: USDT
-                  dataFrom: "2026-03-17T00:00:00Z"
-                  dataTo: "2026-03-31T18:00:00Z"
-                  lastPrice: 3120.75
-                  volume24h: 456789.12
+                data:
+                  - id: BTC/USDT
+                    base: BTC
+                    quote: USDT
+                    coverage:
+                      tickers:
+                        from: "2026-04-10T21:00:00Z"
+                        to: "2026-07-09T20:29:05Z"
+                      klines:
+                        from: "2026-04-22T17:00:00Z"
+                        to: "2026-07-09T20:31:08Z"
+                    lastPrice: 84250.50
+                    volume24h: 1234567.89
+                meta:
+                  updatedAt: "2026-07-09T19:09:07Z"
+                  exchange: binance
+                  segment: spot
+                _links:
+                  self:
+                    href: /v1/exchange/binance/instruments
+                  spot:
+                    href: /v1/exchange/binance/spot/instruments
+                  futures:
+                    href: /v1/exchange/binance/futures/instruments
         '404':
           description: Exchange not found or instrument catalog not available
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      tags:
+        - Exchange
+  '/exchange/{exchangeId}/{segment}/instruments':
+    get:
+      operationId: getSegmentInstruments
+      summary: Get the instruments for a specific exchange segment
+      description: |
+        Returns the instruments for one market segment of the exchange, each with
+        per-data-type coverage and market info. HAL `_links` carry `self` plus the
+        `spot` / `futures` segment-discovery links; the default-segment shortcut is
+        `GET /exchange/{exchangeId}/instruments` (spot).
+      parameters:
+        - name: exchangeId
+          in: path
+          description: ID of the exchange to retrieve instruments for
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: segment
+          in: path
+          description: Market segment to list instruments for
+          required: true
+          schema:
+            type: string
+            enum: [spot, futures]
+            example: spot
+      responses:
+        '200':
+          description: An object with a `data` array of instrument details (each with per-data-type coverage) and a `meta` block
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InstrumentListResponse'
+              example:
+                data:
+                  - id: BTC/USDT
+                    base: BTC
+                    quote: USDT
+                    coverage:
+                      tickers:
+                        from: "2026-04-10T21:00:00Z"
+                        to: "2026-07-09T20:29:05Z"
+                      klines:
+                        from: "2026-04-22T17:00:00Z"
+                        to: "2026-07-09T20:31:08Z"
+                    lastPrice: 84250.50
+                    volume24h: 1234567.89
+                  - id: ETH/USDT
+                    base: ETH
+                    quote: USDT
+                    coverage:
+                      tickers:
+                        from: "2026-04-10T21:00:00Z"
+                        to: "2026-07-09T20:28:22Z"
+                        inactiveSince: "2026-07-09T20:28:22Z"
+                      klines:
+                        from: "2026-04-22T17:00:00Z"
+                        to: "2026-07-09T20:31:09Z"
+                        inactiveSince: "2026-07-09T20:31:09Z"
+                    lastPrice: 3120.75
+                    volume24h: 456789.12
+                meta:
+                  updatedAt: "2026-07-09T19:09:07Z"
+                  exchange: binance
+                  segment: spot
+                _links:
+                  self:
+                    href: /v1/exchange/binance/spot/instruments
+                  spot:
+                    href: /v1/exchange/binance/spot/instruments
+                  futures:
+                    href: /v1/exchange/binance/futures/instruments
+        '404':
+          description: Exchange, segment, or instrument catalog not found
           content:
             application/json:
               schema:
@@ -850,8 +942,80 @@ components:
       description: Exchange instrument identifier (e.g. a currency pair)
       type: string
       example: BTC/USDT
+    InstrumentListResponse:
+      description: HAL-style response envelope for the instruments listing
+      type: object
+      required:
+        - data
+        - meta
+        - _links
+      properties:
+        data:
+          type: array
+          description: The list of instruments for the segment
+          items:
+            $ref: '#/components/schemas/InstrumentDetail'
+        meta:
+          $ref: '#/components/schemas/InstrumentListMeta'
+        _links:
+          $ref: '#/components/schemas/InstrumentLinks'
+    InstrumentListMeta:
+      description: Metadata describing the instruments listing
+      type: object
+      required:
+        - updatedAt
+        - exchange
+        - segment
+      properties:
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this listing was last refreshed
+          example: "2026-07-09T19:09:07Z"
+        exchange:
+          type: string
+          description: The exchange the instruments belong to
+          example: binance
+        segment:
+          type: string
+          enum: [spot, futures]
+          description: The market segment served in `data`
+          example: spot
+    InstrumentLinks:
+      description: HAL `_links` — segment discovery for the instruments listing
+      type: object
+      required:
+        - self
+      properties:
+        self:
+          allOf:
+            - $ref: '#/components/schemas/HalLink'
+          description: Link to this listing
+        spot:
+          allOf:
+            - $ref: '#/components/schemas/HalLink'
+          description: Link to the spot instruments listing. Present when the exchange has a spot segment.
+        futures:
+          allOf:
+            - $ref: '#/components/schemas/HalLink'
+          description: Link to the futures instruments listing. Present only when the exchange has a futures segment.
+    HalLink:
+      description: A HAL link object (Hypertext Application Language)
+      type: object
+      required:
+        - href
+      properties:
+        href:
+          type: string
+          format: uri-reference
+          description: The link target as an absolute-path URI reference (resolve against the API base). A URI Template (RFC 6570) when `templated` is true.
+          example: /v1/exchange/binance/spot/instruments
+        templated:
+          type: boolean
+          description: True when `href` is an RFC 6570 URI Template.
+          example: false
     InstrumentDetail:
-      description: Exchange instrument with data availability and market info
+      description: Exchange instrument with per-data-type coverage and market info
       type: object
       required:
         - id
@@ -870,16 +1034,8 @@ components:
           type: string
           description: Quote currency
           example: USDT
-        dataFrom:
-          type: string
-          format: date-time
-          description: Earliest timestamp with quality-verified data available for backtesting
-          example: "2026-03-17T00:00:00Z"
-        dataTo:
-          type: string
-          format: date-time
-          description: Latest timestamp with quality-verified data available for backtesting
-          example: "2026-03-31T18:00:00Z"
+        coverage:
+          $ref: '#/components/schemas/InstrumentCoverage'
         lastPrice:
           type: number
           format: double
@@ -890,6 +1046,37 @@ components:
           format: double
           description: Trading volume in the last 24 hours (in quote currency)
           example: 1234567.89
+    InstrumentCoverage:
+      description: Time coverage of available data for this instrument, per data type
+      type: object
+      properties:
+        tickers:
+          allOf:
+            - $ref: '#/components/schemas/CoverageWindow'
+          description: Coverage of ticker data
+        klines:
+          allOf:
+            - $ref: '#/components/schemas/CoverageWindow'
+          description: Coverage of kline (candlestick) data
+    CoverageWindow:
+      description: The time range of available data for a single data type
+      type: object
+      properties:
+        from:
+          type: string
+          format: date-time
+          description: Earliest timestamp with data available
+          example: "2026-04-10T21:00:00Z"
+        to:
+          type: string
+          format: date-time
+          description: Latest timestamp with data available
+          example: "2026-07-09T20:31:08Z"
+        inactiveSince:
+          type: string
+          format: date-time
+          description: If the instrument stopped producing this data type (delisted/inactive), the timestamp it went inactive. Optional — omitted while the instrument is active.
+          example: "2026-06-30T12:00:00Z"
     Exchange:
       description: Exchange service provider
       type: object
