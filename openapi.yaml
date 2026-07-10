@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.97.0
+  version: 0.98.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -676,7 +676,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/JobState'
+                $ref: '#/components/schemas/PrepareJobState'
               example:
                 contextId: "ctx_0bjmoxd4vahkgc0hnvdldh"
                 status: "Completed"
@@ -685,6 +685,15 @@ paths:
                 completed: 24
                 startTime: "2026-04-14T15:00:00Z"
                 endTime: "2026-04-14T15:00:01Z"
+                dataFrom: "2026-04-14T13:00:00Z"
+                dataTo: "2026-04-14T15:30:05Z"
+                coverageRatio: 0.994
+                totalHours: 168
+                hoursWithData: 167
+                hoursWithoutData:
+                  - hour: "2026-04-14T02:00:00Z"
+                    expected: 0
+                    rationale: low_activity
         '404':
           description: Prepare job not found or expired
           content:
@@ -1118,14 +1127,13 @@ components:
           status:
             type: string
             description: |
-              Current status of the job. `Partial` (prepare only) means some
-              hours are still being produced asynchronously — keep polling.
-              Treat `Completed | Aborted | Failed` as terminal; anything else
-              means keep polling.
+              Current status of the job. Treat `Completed | Aborted | Failed` as
+              terminal; `New | Started` mean keep polling. A single-instrument prepare
+              is always terminal (`Completed`) — decide from
+              `PrepareJobState.coverageRatio`, not by polling.
             enum:
               - New
               - Started
-              - Partial
               - Completed
               - Aborted
               - Failed
@@ -1152,6 +1160,73 @@ components:
             format: date-time
             description: Timestamp for when the preparation finished
             example: "2025-01-04T14:00:20Z"
+    PrepareJobState:
+      description: |
+        State of a single-instrument prepare job — the `JobState` shape plus a per-hour
+        data-coverage summary. A single-instrument prepare is always terminal
+        (`status: Completed`): the client decides what to do from `coverageRatio` (e.g.
+        execute if it is at or above a chosen threshold) rather than polling for missing
+        hours that may never arrive — a missing hour for one instrument usually means low
+        activity, not missing data.
+      allOf:
+        - $ref: '#/components/schemas/JobState'
+        - type: object
+          properties:
+            dataFrom:
+              type: ['string', 'null']
+              format: date-time
+              description: Start of the available data range for the prepared instrument.
+              example: "2026-04-14T13:00:00Z"
+            dataTo:
+              type: ['string', 'null']
+              format: date-time
+              description: End of the available data range for the prepared instrument.
+              example: "2026-04-14T15:30:05Z"
+            coverageRatio:
+              type: number
+              format: double
+              minimum: 0
+              maximum: 1
+              description: |
+                `hoursWithData / totalHours` in `[0,1]` (`1.0` when `totalHours` is 0) — the
+                fraction of hours in the requested range that have served data.
+              example: 0.994
+            totalHours:
+              type: integer
+              description: Number of whole hours in the requested prepare range.
+              example: 168
+            hoursWithData:
+              type: integer
+              description: Number of hours in the range that have data.
+              example: 167
+            hoursWithoutData:
+              type: array
+              description: One entry per hour in the range that has no data, with a rationale.
+              items:
+                type: object
+                properties:
+                  hour:
+                    type: string
+                    format: date-time
+                    description: The hour (UTC, hour-aligned) that has no data.
+                    example: "2026-04-14T02:00:00Z"
+                  expected:
+                    type: integer
+                    description: |
+                      Expected row count for the hour (currently always 0; reserved for
+                      future use). The rationale never depends on it.
+                    example: 0
+                  rationale:
+                    type: string
+                    description: |
+                      Why the hour has no data. `pending_conversion`: data for this hour is
+                      still being produced — a re-poll may fill it. `low_activity`: the
+                      instrument did not trade that hour. `unknown`: no data to classify by.
+                    enum:
+                      - pending_conversion
+                      - low_activity
+                      - unknown
+                    example: low_activity
     AcceptedJob:
       type: object
       description: |
