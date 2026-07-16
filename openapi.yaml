@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.98.0
+  version: 0.99.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -710,6 +710,178 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting
+  '/backtest/{exchangeId}/{type}/executeSweep/{requestId}':
+    post:
+      operationId: executeSweepBacktesting
+      summary: Execute a parameter sweep over prepared data
+      description: |
+        Runs a parameter matrix over the single immutable dataset identified by `requestId`.
+        The backend expands and executes the matrix internally; clients poll the returned
+        `sweepId` for incremental results.
+      parameters:
+        - name: exchangeId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+        - name: requestId
+          in: path
+          required: true
+          description: Job ID returned by `POST /backtest/{exchangeId}/{type}/prepare`.
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteSweepRequest'
+      responses:
+        '202':
+          description: Sweep accepted. The effective seed is returned for reproducibility.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteSweepAccepted'
+        '400':
+          description: Invalid sweep specification or the expanded grid exceeds the server limit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: Prepared request not found or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '429':
+          description: Sweep queue or user concurrency limit reached.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backtesting
+  '/backtest/{exchangeId}/{type}/executeSweep/{requestId}/{sweepId}':
+    get:
+      operationId: getExecuteSweepResult
+      summary: Get sweep progress and results
+      description: |
+        Returns incremental sweep progress. The default `ranked` view sorts and may truncate the
+        display leaderboard. `order=natural` returns every available row, untruncated, ordered by
+        deterministic `runIx`; use that view when materialising durable trial rows.
+      parameters:
+        - name: exchangeId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sweepId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: objective
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [sharpe, sortino, pnl, maxdd]
+        - name: order
+          in: query
+          required: false
+          description: "`natural` is stable materialisation order; `ranked` is the display view."
+          schema:
+            type: string
+            enum: [ranked, natural]
+            default: ranked
+      responses:
+        '200':
+          description: Current sweep snapshot and all currently available result rows for the selected view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecuteSweepResult'
+        '404':
+          description: Sweep not found or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backtesting
+    delete:
+      operationId: cancelExecuteSweep
+      summary: Cancel a running parameter sweep
+      description: Requests cancellation between parameter vectors. Completed rows remain readable.
+      parameters:
+        - name: exchangeId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sweepId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Cancellation requested.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, sweepId]
+                properties:
+                  status:
+                    type: string
+                    enum: [cancelling]
+                  sweepId:
+                    type: string
+        '404':
+          description: Sweep not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backtesting
   '/backtest/{exchangeId}/{type}/execute':
     post:
       operationId: executeBacktesting
@@ -1227,6 +1399,265 @@ components:
                       - low_activity
                       - unknown
                     example: low_activity
+    SweepAxis:
+      description: A numeric range or an explicit list of values for one strategy property.
+      oneOf:
+        - type: object
+          required: [from, to, step]
+          additionalProperties: false
+          properties:
+            from:
+              type: number
+              format: double
+            to:
+              type: number
+              format: double
+            step:
+              type: number
+              format: double
+              exclusiveMinimum: 0
+        - type: object
+          required: [values]
+          additionalProperties: false
+          properties:
+            values:
+              type: array
+              minItems: 1
+              items:
+                oneOf:
+                  - type: number
+                  - type: boolean
+    SweepSpecRequest:
+      type: object
+      required: [params]
+      properties:
+        sampler:
+          type: string
+          enum: [grid, random, lhs]
+          default: grid
+        seed:
+          type: integer
+          format: int64
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: |
+            Reproducibility seed. If omitted, the server generates one with Java's
+            `L64X128MixRandom` generator and returns the effective value. The range
+            is limited to JavaScript-safe integers so generated clients can replay it exactly.
+        samples:
+          type: integer
+          minimum: 1
+          description: Number of samples for `random` and `lhs`; ignored by `grid`.
+        objective:
+          type: string
+          enum: [sharpe, sortino, pnl, maxdd]
+          default: sharpe
+        params:
+          type: object
+          minProperties: 1
+          additionalProperties:
+            $ref: '#/components/schemas/SweepAxis'
+      example:
+        sampler: lhs
+        seed: 487221
+        samples: 100
+        objective: sharpe
+        params:
+          rsiPeriod:
+            from: 7
+            to: 28
+            step: 1
+          useTrendFilter:
+            values: [true, false]
+    SweepBaseConfig:
+      type: object
+      properties:
+        initialFunding:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          default: 10000
+        feeRate:
+          type: number
+          format: double
+          minimum: 0
+          default: 0.001
+        buyFeeRate:
+          type: number
+          format: double
+          minimum: 0
+        sellFeeRate:
+          type: number
+          format: double
+          minimum: 0
+        feeLeg:
+          type: string
+          enum: [RECEIVED, QUOTE, BASE]
+          default: RECEIVED
+        percentAmountToLock:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 100
+    ExecuteSweepRequest:
+      type: object
+      required: [strategyId, sweep]
+      properties:
+        strategyId:
+          $ref: '#/components/schemas/strategyId'
+        sweep:
+          $ref: '#/components/schemas/SweepSpecRequest'
+        baseConfig:
+          $ref: '#/components/schemas/SweepBaseConfig'
+        storeSignals:
+          type: boolean
+          default: false
+          description: Store signals for every trial. Keep false for normal sweeps.
+        shards:
+          type: integer
+          minimum: 0
+          description: Requested horizontal shard count; 0 or omitted selects automatically.
+          default: 0
+        minTradeFloor:
+          type: integer
+          minimum: 0
+          default: 30
+          description: Trials below this trade count are flagged but remain in the results.
+    ExecuteSweepAccepted:
+      type: object
+      required: [sweepId, requestId, totalRuns, shards, seed, queued]
+      properties:
+        sweepId:
+          type: string
+          example: swp_95e47a7f0966ce11
+        requestId:
+          type: string
+        totalRuns:
+          type: integer
+          minimum: 1
+        shards:
+          type: integer
+          minimum: 1
+        seed:
+          type: integer
+          format: int64
+          minimum: -9007199254740991
+          maximum: 9007199254740991
+          description: Effective seed used to expand the sweep.
+        queued:
+          type: boolean
+          description: False when an identical sweep already exists and was not enqueued again.
+    SweepProgress:
+      type: object
+      required: [done, total, aborted, shardCount, pendingShards]
+      properties:
+        done:
+          type: integer
+          format: int64
+        total:
+          type: integer
+        aborted:
+          type: integer
+          format: int64
+        shardCount:
+          type: integer
+        pendingShards:
+          type: integer
+    SweepRunRow:
+      type: object
+      required:
+        - runIx
+        - params
+        - sharpe
+        - sortino
+        - pnl
+        - pnlPct
+        - cagr
+        - maxDdPct
+        - trades
+        - winRate
+        - belowTradeFloor
+        - aborted
+        - runtimeMs
+      properties:
+        runIx:
+          type: integer
+          minimum: 0
+          description: Deterministic zero-based expansion index, stable across shards and ranking.
+        rank:
+          type: integer
+          minimum: 1
+          description: Present only in the `ranked` view.
+        params:
+          type: object
+          additionalProperties: true
+        sharpe:
+          type: number
+          format: double
+        sortino:
+          type: number
+          format: double
+        pnl:
+          type: number
+          format: double
+          description: Absolute net PnL in the output currency.
+        pnlPct:
+          type: number
+          format: double
+        cagr:
+          type: number
+          format: double
+        maxDdPct:
+          type: number
+          format: double
+        trades:
+          type: integer
+          format: int64
+        winRate:
+          type: number
+          format: double
+        belowTradeFloor:
+          type: boolean
+        aborted:
+          type: boolean
+        runtimeMs:
+          type: integer
+          format: int64
+    ExecuteSweepResult:
+      type: object
+      required:
+        - sweepId
+        - status
+        - objective
+        - order
+        - progress
+        - leaderboardSize
+        - truncated
+        - leaderboard
+      properties:
+        sweepId:
+          type: string
+        status:
+          type: string
+          enum: [RUNNING, COMPLETED, PARTIAL, CANCELLED]
+        objective:
+          type: string
+          enum: [sharpe, sortino, pnl, maxdd]
+        order:
+          type: string
+          enum: [ranked, natural]
+        progress:
+          $ref: '#/components/schemas/SweepProgress'
+        leaderboardSize:
+          type: integer
+          description: Total result rows currently available.
+        truncated:
+          type: boolean
+          description: True only when the ranked view exceeds its display limit.
+        leaderboard:
+          type: array
+          items:
+            $ref: '#/components/schemas/SweepRunRow'
     AcceptedJob:
       type: object
       description: |
