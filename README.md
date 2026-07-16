@@ -11,14 +11,15 @@ Write trading strategies in Java, submit them to be compiled, run backtests agai
 ## How It Works
 
 ```
-Strategy (Java) ──► Compile ──► Prepare Data ──► Execute ──► Signals (Parquet) ──► Visualize
+Strategy (Java) ──► Compile ──► Prepare Data ──┬─► Execute ──► Signals (Parquet) ──► Visualize
+                                               └─► Execute Sweep ──► Ranked trials
 ```
 
 1. **Write** a trading strategy in Java using the strategy SDK (indicators, signals, execution)
 2. **Compile** it via `POST /strategy` — no build tools needed on the client
 3. **Prepare** historical market data via `POST /backtest/{exchange}/{type}/prepare` — returns a `jobId`
-4. **Execute** the strategy against prepared data via `POST /backtest/{exchange}/{type}/execute` — returns a `jobId`
-5. **Visualize** results — signals are stored as Parquet files, loaded in-browser via DuckDB-WASM
+4. **Execute** either one backtest via `POST /backtest/{exchange}/{type}/execute` or a parameter sweep via `POST /backtest/{exchange}/{type}/executeSweep/{prepareJobId}`
+5. **Inspect** the result or ranked sweep trials; individual backtest signals are stored as Parquet files and loaded in-browser via DuckDB-WASM
 
 ## Strategy Example
 
@@ -128,7 +129,41 @@ curl https://api.qtsurfer.com/v1/backtest/binance/ticker/execute/$EXECUTE_JOB_ID
 
 The response includes yield metrics (PnL, win rate, Sharpe, Sortino, CAGR, max drawdown) and a `signalsUrl` pointing to a Parquet file with all emitted signals, ready for visualization.
 
-> The same input parameters always return the same `jobId` — repeated calls don't re-enqueue work.
+### Execute a parameter sweep
+
+The sweep reuses the same prepared dataset. Its path `requestId` is the `jobId` returned by the existing prepare endpoint.
+
+```bash
+curl -X POST "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategyId": "2ul144qe9tlwzu5anhwvc6",
+    "sweep": {
+      "sampler": "grid",
+      "objective": "sharpe",
+      "params": {
+        "rsiPeriod": {"from": 7, "to": 28, "step": 1},
+        "useTrendFilter": {"values": [true, false]}
+      }
+    }
+  }'
+# → 202 {"sweepId":"swp_95e47a7f0966ce11","requestId":"5ikYAMIO...",
+#        "totalRuns":44,"shards":1,"seed":487221,"queued":true}
+```
+
+Poll the ranked leaderboard:
+
+```bash
+curl "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID/$SWEEP_ID?objective=sharpe&order=ranked" \
+  -H "Authorization: Bearer $TOKEN"
+# → {"status":"RUNNING","progress":{"done":31,"total":44,...},
+#    "leaderboard":[{"runIx":12,"rank":1,"params":{...},"sharpe":1.84,...}]}
+```
+
+Use `order=natural` to retrieve every available row in stable `runIx` order, without leaderboard truncation. The server returns the effective random seed so sampled sweeps can be reproduced exactly.
+
+> Identical prepare and execute requests are idempotent. Repeated sweeps return the same `sweepId` with `queued: false` instead of enqueueing duplicate work.
 
 ## Key Technologies
 
