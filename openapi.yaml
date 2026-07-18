@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.99.0
+  version: 0.99.1
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -19,7 +19,7 @@ servers:
 paths:
   '/auth/token':
     post:
-      operationId: auth
+      operationId: authenticate
       summary: Exchange API key for a short-lived JWT
       description: |
         Exchanges a long-lived API key for a short-lived JWT used by every other
@@ -60,8 +60,8 @@ paths:
         - Auth
   '/exchanges':
     get:
-      operationId: getExchanges
-      summary: Get a list of available exchanges
+      operationId: listExchanges
+      summary: List the available exchanges
       responses:
         '200':
           description: A JSON array of Exchanges
@@ -79,8 +79,8 @@ paths:
         - Exchange
   '/exchange/{exchangeId}/instruments':
     get:
-      operationId: getInstruments
-      summary: Get an exchange's instruments (default spot segment)
+      operationId: listInstruments
+      summary: List an exchange's instruments (default spot segment)
       description: |
         "Give me binance instruments" — returns the exchange's DEFAULT segment (`spot`)
         in `data`, each instrument with per-data-type coverage and market info. `meta`
@@ -136,8 +136,8 @@ paths:
         - Exchange
   '/exchange/{exchangeId}/{segment}/instruments':
     get:
-      operationId: getSegmentInstruments
-      summary: Get the instruments for a specific exchange segment
+      operationId: listSegmentInstruments
+      summary: List an exchange segment's instruments
       description: |
         Returns the instruments for one market segment of the exchange, each with
         per-data-type coverage and market info. HAL `_links` carry `self` plus the
@@ -215,7 +215,7 @@ paths:
         - Exchange
   '/exchange/{exchangeId}/tickers/{base}/{quote}':
     get:
-      operationId: getExchangeTickersHour
+      operationId: downloadTickers
       summary: Download one hour of tickers for an instrument as a Lastra segment
       description: |
         Serves exactly one hour of raw ticker data for the given instrument on the
@@ -335,7 +335,7 @@ paths:
         - Exchange
   '/exchange/{exchangeId}/klines/{base}/{quote}':
     get:
-      operationId: getExchangeKlinesHour
+      operationId: downloadKlines
       summary: Download one hour of klines for an instrument as a Lastra segment
       description: |
         Same shape and semantics as `/exchange/{exchangeId}/tickers/{base}/{quote}`,
@@ -434,7 +434,7 @@ paths:
         - Exchange
   '/strategy':
     post:
-      operationId: postStrategy
+      operationId: compileStrategy
       summary: Compile a strategy from source code
       description: |
         Submits raw strategy source for compilation. By default the call is synchronous and returns
@@ -494,8 +494,8 @@ paths:
         - Strategy
   '/strategy/{strategyId}':
     get:
-      operationId: getStrategyStatus
-      summary: Get the status of an async compile task
+      operationId: getStrategy
+      summary: Get a strategy by id, including its compile status
       description: |
         Polls the status of a strategy compilation. Useful when the strategy was submitted with
         `X-Compile-Async: true`. Returns the resolved `strategyId` once compilation completes.
@@ -542,8 +542,8 @@ paths:
 
   '/backtest/{exchangeId}/{type}/prepare':
     post:
-      operationId: prepareBacktesting
-      summary: Prepare backtesting data
+      operationId: prepareBacktest
+      summary: Prepare backtest data
       description: |
         Enqueues a prepare task over the requested date range. Returns immediately with a `jobId`;
         poll `GET /backtest/{exchangeId}/{type}/prepare/{jobId}` for completion.
@@ -609,7 +609,7 @@ paths:
         - Backtesting
   '/backtest/{exchangeId}/{type}/prepare/{jobId}':
     get:
-      operationId: getPreparationStatus
+      operationId: getPrepareStatus
       summary: Get the status of a prepare job
       description: |
         Retrieves the current state of the prepare job identified by `jobId`.
@@ -677,7 +677,7 @@ paths:
         - Backtesting
   '/backtest/{exchangeId}/{type}/executeSweep/{requestId}':
     post:
-      operationId: executeSweepBacktesting
+      operationId: executeSweep
       summary: Execute a parameter sweep over prepared data
       description: |
         Runs a parameter matrix over the single immutable dataset identified by `requestId`.
@@ -738,7 +738,7 @@ paths:
         - Backtesting
   '/backtest/{exchangeId}/{type}/executeSweep/{requestId}/{sweepId}':
     get:
-      operationId: getExecuteSweepResult
+      operationId: getSweepResult
       summary: Get sweep progress and results
       description: |
         Returns incremental sweep progress. The default `ranked` view sorts and may truncate the
@@ -798,7 +798,7 @@ paths:
       tags:
         - Backtesting
     delete:
-      operationId: cancelExecuteSweep
+      operationId: cancelSweep
       summary: Cancel a running parameter sweep
       description: Requests cancellation between parameter vectors. Completed rows remain readable.
       parameters:
@@ -849,7 +849,7 @@ paths:
         - Backtesting
   '/backtest/{exchangeId}/{type}/execute':
     post:
-      operationId: executeBacktesting
+      operationId: executeBacktest
       summary: Execute a compiled strategy against a prepared dataset
       description: |
         Enqueues an execute task that runs the strategy identified by `strategyId` over the data
@@ -931,7 +931,7 @@ paths:
         - Backtesting
   '/backtest/{exchangeId}/{type}/execute/{jobId}':
     delete:
-      operationId: cancelExecution
+      operationId: cancelBacktest
       summary: Cancel a running backtest execution
       description: |
         Requests cancellation of the specified execution. The execution
@@ -983,7 +983,7 @@ paths:
       tags:
         - Backtesting
     get:
-      operationId: getExecutionResult
+      operationId: getBacktestResult
       summary: Get the result of a backtest execution job
       description: |
         Retrieves the current state and results of the execute job identified by `jobId`.
