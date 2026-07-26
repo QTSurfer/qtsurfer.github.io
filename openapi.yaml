@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.99.1
+  version: 0.99.2
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -988,6 +988,10 @@ paths:
       description: |
         Retrieves the current state and results of the execute job identified by `jobId`.
         Poll until `state.status` is `Completed`, `Failed`, or `Aborted`.
+
+        A `202` means the result is not readable yet — keep polling. It is never a terminal
+        outcome, and it carries no `state`, so a poll loop that stops on a terminal status will
+        not stop on it.
       parameters:
         - name: exchangeId
           in: path
@@ -1051,6 +1055,23 @@ paths:
                   signalsUrl: "https://storage.qtsurfer.com/00000000-0000-0000-0000-000000000000/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
                   signalsUpload: "Done"
                   signalsUploadedAt: "2026-03-18T13:21:48.170Z"
+        '202':
+          description: |
+            The job is known but its result is not readable yet — keep polling.
+
+            Returned in two situations, both of which mean "ask again", never "you are done":
+            the job has not produced its result yet, or the job reached a terminal status while
+            its stored result could not be read back. The response body is an empty object: it
+            deliberately carries no `state`, so a client cannot mistake it for a finished result.
+
+            Treat any `202` as a signal to continue the poll loop under your existing timeout.
+            Never treat it as a terminal outcome.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+              example: {}
         '404':
           description: Execution job not found
           content:
