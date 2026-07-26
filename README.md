@@ -25,11 +25,11 @@ Strategy (Java) ──► Compile ──► Prepare Data ──┬─► Execute
 
 ```java
 import com.wualabs.qtsurfer.engine.strategy.AbstractTickerStrategy;
-import com.wualabs.qtsurfer.engine.strategy.AbstractOnChangeListener;
+import com.wualabs.qtsurfer.engine.strategy.AbstractWindowListener;
 import com.wualabs.qtsurfer.engine.strategy.event.signal.InfoStrategySignal;
 import com.wualabs.qtsurfer.engine.indicators.helpers.WindowTimeRTIndicator.WindowTime;
 import com.wualabs.qtsurfer.engine.indicators.helpers.group.InstrumentGroupRTIndicator;
-import com.wualabs.qtsurfer.engine.core.state.StateStoreSupport;
+import com.wualabs.qtsurfer.engine.core.state.StateStore;
 
 public class EmaCrossStrategy extends AbstractTickerStrategy {
 
@@ -42,14 +42,13 @@ public class EmaCrossStrategy extends AbstractTickerStrategy {
             .window("fast", WindowTime.s1, new CrossListener(indicators));
     }
 
-    private class CrossListener extends AbstractOnChangeListener {
+    private class CrossListener extends AbstractWindowListener {
         public CrossListener(InstrumentGroupRTIndicator indicators) {
             super(EmaCrossStrategy.this, indicators);
         }
 
         @Override
-        public void onChange(StateStoreSupport s, double prev, double actual) {
-            initStore(s);
+        public void onChange(StateStore store, double prev, double actual) {
             double price = indicators.getValue("price");
             double fast  = indicators.getValue("fast");
             double slow  = indicators.getValue("slow");
