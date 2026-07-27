@@ -56,9 +56,3 @@ npx @redocly/cli lint openapi.yaml
 - **index.html is generated** — the CI auto-commits it, so expect merge noise if editing the spec in a branch
 - **This is a public repo** — no internal URLs, credentials, or infrastructure details. Use `api.qtsurfer.com` and `api.staging.qtsurfer.com` as server URLs
 - **Version** is in `info.version` inside `openapi.yaml` — bump it when making API changes
-- The `qtsurfer-front-jobs` repo consumes this spec via `bun run api:up` to auto-generate the API client
-
-## API Client Generation
-
-Other repos consume `openapi.yaml`:
-- `qtsurfer-front-jobs`: runs `bun run api:up` which fetches the spec and regenerates TypeScript client code via Kubb
