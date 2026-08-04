@@ -445,8 +445,19 @@ paths:
         included, is read from `GET /strategy/{strategyId}`. One place to ask, so there is no second
         answer to keep in step.
 
-        The `strategyId` is deterministic: the same source from the same user always yields the same
-        id, and re-submitting unchanged source returns it again.
+        The `strategyId` is derived from what the code *means*, not from how it is written. Adding a
+        comment, inserting a blank line, re-indenting, reordering imports, or moving a method around
+        all return the **same** id — you have not created a second strategy. Renaming a variable,
+        changing an identifier's case, reordering fields, or reordering statements inside a method
+        return a **different** one.
+
+        Two rules follow, and they are worth designing around:
+
+        - re-submitting a strategy you have only reformatted is free, and gives you back the id you
+          already had, along with any validation already recorded against it;
+        - the id says nothing about *behaviour*. Two sources that compute the same thing by
+          different means are two strategies, because deciding otherwise would mean deciding program
+          equivalence.
       requestBody:
         description: The raw strategy source code
         required: true
@@ -1885,7 +1896,10 @@ components:
           description: Running equity at this point (`initialCapital + cumulativePnl`).
           example: 110.5
     strategyId:
-      description: Unique identifier for a compiled strategy
+      description: |
+        Unique identifier for a compiled strategy, derived from the source itself: the same code
+        always yields the same id, for every caller, whatever its formatting. See
+        `POST /strategy` for exactly which rewrites preserve it and which do not.
       type: string
       example: 6bsh31ikwkuivhtgcoa6s4
     Notice:
