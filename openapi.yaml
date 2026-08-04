@@ -435,23 +435,18 @@ paths:
   '/strategy':
     post:
       operationId: compileStrategy
-      summary: Compile a strategy from source code
+      summary: Compile and register a strategy
       description: |
-        Submits raw strategy source for compilation. By default the call is synchronous and returns
-        the `strategyId` once compilation succeeds. Set the header `X-Compile-Async: true` to enqueue
-        the compile task and return immediately with a `jobId` — poll
-        `GET /strategy/{strategyId}` to check status.
+        Compiles raw strategy source and registers it, returning its `strategyId`.
 
-        The `strategyId` is deterministic: the same source for the same user always produces the
-        same id.
-      parameters:
-        - name: X-Compile-Async
-          in: header
-          required: false
-          description: When `true`, compile asynchronously and return `202` with a `jobId`.
-          schema:
-            type: boolean
-            default: false
+        **This answers one question: is the source valid Java.** It compiles, registers, and hands
+        back the id — nothing more. Whether the class can actually run is
+        `POST /strategy/{strategyId}/validate`, and everything known about a strategy, validation
+        included, is read from `GET /strategy/{strategyId}`. One place to ask, so there is no second
+        answer to keep in step.
+
+        The `strategyId` is deterministic: the same source from the same user always yields the same
+        id, and re-submitting unchanged source returns it again.
       requestBody:
         description: The raw strategy source code
         required: true
@@ -462,7 +457,7 @@ paths:
               description: Raw strategy Java source code
       responses:
         '200':
-          description: Strategy compiled successfully (sync mode)
+          description: Compiled and registered
           content:
             application/json:
               schema:
@@ -473,14 +468,10 @@ paths:
                     $ref: '#/components/schemas/strategyId'
               example:
                 strategyId: 6bsh31ikwkuivhtgcoa6s4
-        '202':
-          description: "Compile task accepted (async mode — set `X-Compile-Async: true`)"
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AcceptedJob'
         '400':
-          description: Invalid strategy (compilation error)
+          description: |
+            The source is not valid Java; the message carries the compiler diagnostics. Nothing is
+            registered, so there is no id to look up afterwards.
           content:
             application/json:
               schema:
@@ -488,6 +479,69 @@ paths:
               example:
                 code: 400
                 message: 'Line 1, Column 18: syntax error'
+        '429':
+          description: Too many compilations in flight. Retry later.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Strategy
+  '/strategy/{strategyId}/validate':
+    post:
+      operationId: validateStrategy
+      summary: Check that a registered strategy can actually run
+      description: |
+        Instantiates the compiled class and drives it through a bounded synthetic series, so a wiring
+        fault surfaces here instead of at your first backtest. The verdict — pass or fail, plus any
+        engine notices — is recorded and served from `GET /strategy/{strategyId}`.
+
+        **Idempotent.** If a verdict already exists for the current compilation it comes straight
+        back with `200` and nothing is queued. Otherwise the check is queued and this returns `202`;
+        poll `GET /strategy/{strategyId}` until `validation` is `passed` or `failed`.
+
+        Recompiling supersedes a verdict, which makes this callable again — the old answer described
+        bytecode that is no longer what would run.
+      parameters:
+        - name: strategyId
+          in: path
+          required: true
+          description: The id returned by `POST /strategy`
+          schema:
+            $ref: '#/components/schemas/strategyId'
+      responses:
+        '200':
+          description: Already validated; the recorded verdict, unchanged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StrategyState'
+        '202':
+          description: |
+            Validation queued. Not a terminal outcome — poll `GET /strategy/{strategyId}` until
+            `validation` leaves `pending`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [strategyId, validation]
+                properties:
+                  strategyId:
+                    $ref: '#/components/schemas/strategyId'
+                  validation:
+                    type: string
+                    enum: [pending]
+              example:
+                strategyId: 6bsh31ikwkuivhtgcoa6s4
+                validation: pending
+        '404':
+          description: No such registered strategy for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
       security:
         - bearerAuth: []
       tags:
@@ -495,42 +549,29 @@ paths:
   '/strategy/{strategyId}':
     get:
       operationId: getStrategy
-      summary: Get a strategy by id, including its compile status
+      summary: Get a strategy by id, including its validation state
       description: |
-        Polls the status of a strategy compilation. Useful when the strategy was submitted with
-        `X-Compile-Async: true`. Returns the resolved `strategyId` once compilation completes.
+        Reports that the strategy is registered — implied by a `200` at all — and what validating it
+        found.
+
+        A `404` means one thing: no such registered strategy for this user. It is never a stale or
+        expired answer; registration and verdict are stored durably, not cached.
       parameters:
         - name: strategyId
           in: path
           required: true
-          description: The id returned by `POST /strategy` (sync) or the `jobId` returned in async mode
+          description: The id returned by `POST /strategy`
           schema:
-            type: string
-            example: 6bsh31ikwkuivhtgcoa6s4
+            $ref: '#/components/schemas/strategyId'
       responses:
         '200':
-          description: Strategy compile state
+          description: Strategy state
           content:
             application/json:
               schema:
-                type: object
-                required: [status]
-                properties:
-                  jobId:
-                    type: string
-                    description: Compile job id (only set in async mode)
-                    example: 6bsh31ikwkuivhtgcoa6s4
-                  status:
-                    type: string
-                    enum: [New, Started, Completed, Aborted, Failed]
-                    example: Completed
-                  strategyId:
-                    $ref: '#/components/schemas/strategyId'
-                  statusDetail:
-                    type: ['string', 'null']
-                    description: Compilation error messages when `status` is `Failed`
+                $ref: '#/components/schemas/StrategyState'
         '404':
-          description: Strategy compile job not found
+          description: No such registered strategy for this user
           content:
             application/json:
               schema:
@@ -1847,6 +1888,101 @@ components:
       description: Unique identifier for a compiled strategy
       type: string
       example: 6bsh31ikwkuivhtgcoa6s4
+    Notice:
+      type: object
+      description: |
+        A diagnostic the engine raised while the strategy ran. Advisory: it describes something worth
+        knowing about how the strategy is wired, not necessarily an error.
+      required: [level, code, message]
+      properties:
+        level:
+          type: string
+          description: Severity as the engine classified it.
+          example: WARN
+        code:
+          type: string
+          description: Stable identifier for the kind of finding; safe to match on.
+          example: indicator.bar-data-on-ticker-path
+        message:
+          type: string
+          description: Human-readable explanation.
+          example: Indicator requires bar data but is on the ticker path
+        provenance:
+          type: string
+          enum: [execute, compile-dry-run]
+          description: |
+            Where it came from, which matters because the two silences differ: an empty list from a
+            real run (`execute`) is a clean bill of health, while an empty list from
+            `compile-dry-run` is only a lower bound over a bounded synthetic series.
+          example: compile-dry-run
+    StrategyState:
+      type: object
+      description: |
+        What is known about a registered strategy: that it compiled, and what validating it found.
+
+        **`validation: passed` does not mean the strategy is correct.** It means the class loaded and
+        survived the first event of a short synthetic run — a floor, not a guarantee. When
+        `dryRunIncomplete` is true it is a lower floor still, because the run did not finish.
+      required: [strategyId, validation]
+      properties:
+        strategyId:
+          $ref: '#/components/schemas/strategyId'
+        validation:
+          type: string
+          enum: [not_validated, pending, passed, failed]
+          description: |
+            * `not_validated` — registered, never checked. `POST /strategy/{strategyId}/validate`
+              checks it.
+            * `pending` — a check was asked for and has not answered yet.
+            * `passed` — the class loaded and survived its first event.
+            * `failed` — it did not; `detail` says how.
+          example: passed
+        compiledAt:
+          type: string
+          format: date-time
+          description: When the live compilation was produced.
+        validatedAt:
+          type: string
+          format: date-time
+          description: When the verdict was recorded. Absent until there is one.
+        detail:
+          type: string
+          description: |
+            Why validation failed, or why a queued check has not reported. Present on `failed`, and
+            alongside `validationStalled`.
+        notices:
+          type: array
+          description: |
+            What the run surfaced. An empty or absent list is not a clean bill of health when
+            `dryRunIncomplete` is true — see that field.
+          items:
+            $ref: '#/components/schemas/Notice'
+        noticesTruncated:
+          type: integer
+          description: How many notices were dropped past the cap. Absent when none were.
+          example: 3
+        dryRunIncomplete:
+          type: boolean
+          description: |
+            The check did not finish its budget — it ran out of time, was refused because the
+            platform was already holding too many unfinishable runs, or hit a failure attributable to
+            the synthetic instrument rather than to your strategy. The verdict stands as far as it
+            went; it simply reached less than a full run would.
+        validationStalled:
+          type: boolean
+          description: |
+            A queued check has not reported for far longer than one takes. Nothing is disproved about
+            the strategy — the check has not run. Stop waiting and re-request it later.
+      example:
+        strategyId: 6bsh31ikwkuivhtgcoa6s4
+        validation: passed
+        compiledAt: '2026-08-04T16:23:04Z'
+        validatedAt: '2026-08-04T16:24:11Z'
+        notices:
+          - level: WARN
+            code: indicator.bar-data-on-ticker-path
+            message: Indicator requires bar data but is on the ticker path
+            provenance: compile-dry-run
     AuthTokenResponse:
       type: object
       required: [access_token, token_type, expires_in, tier]
