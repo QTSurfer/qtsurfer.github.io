@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.101.0
+  version: 0.102.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1084,7 +1084,7 @@ paths:
                 results:
                   hostName: "executor10"
                   iops: 123956.53
-                  strategyId: "strategy:00000000-0000-0000-0000-000000000000:ticker:2iyvtenlzh9dabqtxn7nbv"
+                  strategyId: "strategy:00000000-0000-0000-0000-000000000000:2iyvtenlzh9dabqtxn7nbv"
                   instrument: "BTC/USDT"
                   notices:
                     - level: WARN
@@ -1787,11 +1787,13 @@ components:
         strategyId:
           type: string
           description: |
-            **Not the `strategyId` you compiled with** — this is the internal execution context id,
-            `strategy:<user>:<marketDataSource>:<strategyId>`. The compiled strategy's id is the last
-            `:`-separated segment; that, not this whole string, is what
-            `GET /strategy/{strategyId}` takes.
-          example: "strategy:00000000-0000-0000-0000-000000000000:ticker:2iyvtenlzh9dabqtxn7nbv"
+            **Not the `strategyId` you compiled with** — this is the execution context id,
+            `strategy:<user>:<strategyId>`. The compiled strategy's id is the last `:`-separated
+            segment; that, not this whole string, is what `GET /strategy/{strategyId}` takes.
+
+            Take the segment after the last `:` rather than counting from the front: the shape has
+            changed once already and callers that indexed a fixed position broke on it.
+          example: "strategy:00000000-0000-0000-0000-000000000000:2iyvtenlzh9dabqtxn7nbv"
         instrument:
           type: string
           description: The instrument (currency pair) that was backtested
