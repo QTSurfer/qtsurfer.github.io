@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.100.0
+  version: 0.101.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1986,6 +1986,23 @@ components:
           type: string
           format: date-time
           description: When the live compilation was produced.
+        requiredSources:
+          type: array
+          description: |
+            The market data a strategy needs, read off the compiled class rather than off anything
+            you sent — `TickerStrategy`, `KlineStrategy` and `FundingRateStrategy` each declare one,
+            and a `MultiSourceStrategy` declares a set.
+
+            **Absent is not "needs nothing".** A strategy always needs market data, so an absent
+            field never means an empty requirement — it means the platform could not establish the
+            answer without constructing your strategy, which it will not do to fill in a field.
+            That happens for a `MultiSourceStrategy`, for a class that overrides
+            `getMarketDataSource()`, and for anything registered before this field existed;
+            re-registering the source fills it in.
+          items:
+            type: string
+            enum: [Ticker, KLine, FundingRate]
+          example: [Ticker]
         validatedAt:
           type: string
           format: date-time
@@ -2022,6 +2039,7 @@ components:
         strategyId: 6bsh31ikwkuivhtgcoa6s4
         validation: passed
         compiledAt: '2026-08-04T16:23:04Z'
+        requiredSources: [Ticker]
         validatedAt: '2026-08-04T16:24:11Z'
         notices:
           - level: WARN
