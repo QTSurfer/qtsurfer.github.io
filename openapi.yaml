@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.102.0
+  version: 0.103.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -796,6 +796,19 @@ paths:
         Returns incremental sweep progress. The default `ranked` view sorts and may truncate the
         display leaderboard. `order=natural` returns every available row, untruncated, ordered by
         deterministic `runIx`; use that view when materialising durable trial rows.
+
+        The `ranked` view is ordered by **plateau score** by default, not by the raw objective. A
+        plateau score is the objective of the worst run in a parameter point's immediate
+        neighbourhood, so a point scores well only if the region around it also does — the highest
+        raw score is frequently a spike that does not survive the parameters moving slightly. Pass
+        `ranking=raw` for the unadjusted objective order.
+
+        Rows in the `ranked` view carry `plateauScore` and `neighbourCount` when plateau ranking
+        applied. Read them together: `neighbourCount: 0` means the point had no neighbours to
+        compare against, so its plateau score is unevidenced rather than confirmed. Sweeps
+        submitted before plateau ranking existed have no stored parameter grid to rebuild a
+        neighbourhood from and are always ranked raw; the response's `ranking` field says which
+        ordering was actually used.
       parameters:
         - name: exchangeId
           in: path
@@ -832,6 +845,17 @@ paths:
             type: string
             enum: [ranked, natural]
             default: ranked
+        - name: ranking
+          in: query
+          required: false
+          description: >-
+            How the `ranked` view is ordered. `plateau` prefers points whose neighbourhood also
+            scores well; `raw` uses the objective alone. Ignored when `order=natural`, which is
+            always ordered by `runIx`.
+          schema:
+            type: string
+            enum: [plateau, raw]
+            default: plateau
       responses:
         '200':
           description: Current sweep snapshot and all currently available result rows for the selected view.
@@ -1668,6 +1692,31 @@ components:
           type: integer
           minimum: 1
           description: Present only in the `ranked` view.
+        plateauScore:
+          type: number
+          format: double
+          description: >-
+            The objective of the worst run in this point's immediate neighbourhood — how well the
+            region around it holds up, not how well it scored itself. Present only in the `ranked`
+            view when plateau ranking applied. Always read together with `neighbourCount`.
+        neighbourCount:
+          type: integer
+          minimum: 0
+          description: >-
+            How many neighbouring parameter points backed the `plateauScore`. Zero means the point
+            had no neighbours in the grid, so its score is unevidenced rather than confirmed —
+            the value alone cannot be distinguished from a genuinely robust one.
+        deflatedSharpe:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: >-
+            Probability that this run's Sharpe reflects real edge rather than the best draw from
+            however many parameter vectors were tried. Above ~0.95 the result survives the
+            multiple-testing correction; near 0.5 or below it is indistinguishable from the best of
+            a pile of coin flips. Absent on aborted runs, and on sweeps with too few trials to
+            establish any dispersion to deflate against.
         params:
           type: object
           additionalProperties: true
@@ -1726,6 +1775,27 @@ components:
         order:
           type: string
           enum: [ranked, natural]
+        ranking:
+          type: string
+          enum: [plateau, raw]
+          description: >-
+            Which ordering was actually applied, which is not always the one requested: a sweep
+            with no stored parameter grid cannot be plateau-ranked and falls back to `raw`. Always
+            `raw` when `order=natural`.
+        pbo:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: >-
+            Probability of backtest overfitting for the sweep as a whole, by combinatorially
+            symmetric cross-validation: how often the configuration that won in-sample lands below
+            median out-of-sample. Above ~0.5 the sweep is selecting noise, whatever its top row
+            says. Computed once when the last shard finishes, so it is absent while the sweep is
+            still running and on sweeps too small for the statistic to mean anything.
+        pboSplits:
+          type: integer
+          description: How many train/test splits the `pbo` figure was averaged over.
         progress:
           $ref: '#/components/schemas/SweepProgress'
         leaderboardSize:
