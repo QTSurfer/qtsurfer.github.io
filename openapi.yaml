@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.105.0
+  version: 0.106.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1796,7 +1796,19 @@ components:
             `totalRuns`, which stays the size of the grid that was submitted.
     SweepProgress:
       type: object
-      required: [done, total, aborted, shardCount, pendingShards]
+      description: >-
+        How far along a sweep is, and — when the sweep is still running — enough to tell a healthy
+        one from a stuck one. The counts partition the shards (or, for a walk-forward sweep, the
+        folds): every unit is either finished, failed, waiting to be retried, or not yet started.
+      required:
+        - done
+        - total
+        - aborted
+        - shardCount
+        - pendingShards
+        - failedShards
+        - retrying
+        - notStarted
       properties:
         done:
           type: integer
@@ -1806,10 +1818,49 @@ components:
         aborted:
           type: integer
           format: int64
+          description: >-
+            Individual runs that executed and aborted. A row-level count: a shard that fails before
+            producing any rows leaves this at 0, which is why `failedShards` exists alongside it.
         shardCount:
           type: integer
         pendingShards:
           type: integer
+        failedShards:
+          type: integer
+          format: int64
+          description: >-
+            Shards (or folds) that failed and will not be retried. Distinct from `aborted`: this
+            counts whole units that never reported, not runs that ran badly.
+        retrying:
+          type: integer
+          description: >-
+            Units whose last attempt failed on something transient — an I/O error, a worker that
+            died mid-read — and which are queued to be attempted again. Not counted as failures,
+            because they have not failed yet; a sweep with a non-zero value here is still expected
+            to complete.
+        notStarted:
+          type: integer
+          description: >-
+            Units that have not reported anything yet. Covers both work still queued behind other
+            work and work claimed by a worker that stopped before it began, which is why a sweep
+            with a persistent value here and a rising `stalledSeconds` is worth looking at.
+        stalledSeconds:
+          type: integer
+          format: int64
+          description: >-
+            Seconds since anything last advanced. Omitted on a finished sweep, where it would only
+            measure how long ago it finished, and on sweeps submitted before this field existed.
+        etaSeconds:
+          type: integer
+          format: int64
+          description: >-
+            Rough seconds remaining, extrapolated from the rate observed so far and assuming
+            nothing else competes for workers. Runs conservative in practice — it has measured
+            2–5× long when a sweep spent part of its life waiting to be retried, since that wait
+            dilutes the observed rate. **Omitted, never zero, when it cannot be computed**: a sweep
+            with nothing finished yet has no rate to extrapolate from, and a zero would read as
+            "about to finish". Excludes queue wait entirely; `retrying` and `stalledSeconds` are
+            where that shows up.
     SweepRunRow:
       type: object
       required:
