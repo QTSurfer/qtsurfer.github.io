@@ -154,15 +154,41 @@ curl -X POST "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$
 Poll the ranked leaderboard:
 
 ```bash
-curl "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID/$SWEEP_ID?objective=sharpe&order=ranked" \
+curl "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID/$SWEEP_ID" \
   -H "Authorization: Bearer $TOKEN"
-# → {"status":"RUNNING","progress":{"done":31,"total":44,...},
-#    "leaderboard":[{"runIx":12,"rank":1,"params":{...},"sharpe":1.84,...}]}
+# → {"status":"RUNNING","ranking":"plateau",
+#    "progress":{"done":31,"total":44,"aborted":0,"failedShards":0,"retrying":0,"notStarted":1,
+#                 "etaSeconds":12},
+#    "leaderboard":[{"runIx":12,"rank":1,"params":{...},"sharpe":1.84,
+#                     "plateauScore":1.61,"neighbourCount":6}]}
 ```
 
-Use `order=natural` to retrieve every available row in stable `runIx` order, without leaderboard truncation. The server returns the effective random seed so sampled sweeps can be reproduced exactly.
+Results rank by **plateau score** by default — the objective of the worst neighbour in a parameter point's immediate vicinity, so a spike that does not survive the parameters moving slightly does not win. Pass `?ranking=raw` for the unadjusted objective order, or `order=natural` to retrieve every available row in stable `runIx` order, without leaderboard truncation. The server returns the effective random seed so sampled sweeps can be reproduced exactly, and `progress` says whether a stalled sweep is retrying, still queueing shards, or actually dead.
 
 > Identical prepare and execute requests are idempotent. Repeated sweeps return the same `sweepId` with `queued: false` instead of enqueueing duplicate work.
+
+### Validate a sweep out of sample (walk-forward)
+
+Add `walkForward` to test whether the winning parameters keep working, not just which ones won. The data splits into sequential folds; each optimizes on its own window and is scored only on the window immediately after — data it was not chosen on.
+
+```bash
+curl -X POST "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategyId": "2ul144qe9tlwzu5anhwvc6",
+    "sweep": {"sampler":"grid","objective":"sharpe",
+              "params":{"rsiPeriod":{"from":7,"to":28,"step":1}}},
+    "walkForward": {"folds": 4}
+  }'
+# → 202 {"sweepId":"swp_...","walkForward":{"folds":4,"inSamplePct":66,"totalRuns":92}}
+```
+
+The leaderboard becomes one row per fold — that fold's winner, scored **out of sample** — and a `walkForward` section adds the in-sample/out-of-sample pair behind each row plus `paramDrift`: how much the winning parameters moved fold to fold. A tight, stable value means the parameter is real; one that jumps around every fold means the sweep is fitting noise.
+
+### Parameter sensitivity
+
+`GET .../executeSweep/{prepareJobId}/{sweepId}/sensitivity` aggregates the sweep's stored rows into per-parameter marginals (best/mean/worst at each value, collapsing every other axis) and pairwise heatmaps — which axes actually moved the objective, computed from rows already in, no re-run.
 
 ## Key Technologies
 
