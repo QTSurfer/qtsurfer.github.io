@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.103.0
+  version: 0.105.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -735,6 +735,17 @@ paths:
         Runs a parameter matrix over the single immutable dataset identified by `requestId`.
         The backend expands and executes the matrix internally; clients poll the returned
         `sweepId` for incremental results.
+
+        Supplying `walkForward` runs the sweep in a different mode entirely. Instead of scoring
+        every parameter vector once over the whole range, the data is split into F sequential
+        folds; each fold optimizes the full grid on its own window and then scores only its winner
+        on the window immediately after — data that winner was not chosen on. It answers a harder
+        question than a leaderboard: not "which parameters won", but "does re-optimizing this
+        periodically actually work". Omit the block and nothing changes, including the response.
+
+        The cost is the reason it is opt-in rather than always on: F folds × N vectors, so a
+        4-fold run over a 500-point grid is 2004 backtests where the plain sweep is 500. The
+        request is rejected when `folds × totalRuns` exceeds the server's sweep budget.
       parameters:
         - name: exchangeId
           in: path
@@ -809,6 +820,17 @@ paths:
         submitted before plateau ranking existed have no stored parameter grid to rebuild a
         neighbourhood from and are always ranked raw; the response's `ranking` field says which
         ordering was actually used.
+
+        A sweep submitted with `walkForward` answers in a different shape, and the `walkForward`
+        field on the response is what tells the two apart — it appears as soon as the sweep is
+        accepted, before any fold has finished, so it is safe to branch on while polling. There
+        the leaderboard is one row per completed fold: that fold's winner as it scored
+        **out-of-sample**, with `runIx` carrying the fold index rather than a grid position. The
+        in-sample runs behind those winners are not retained — they are an optimization's working
+        set, and only the winner survives its fold. `ranking` is always `raw` and no plateau, DSR
+        or PBO figure is reported: the out-of-sample scores are already the honest number, and
+        layering a certification computed over F observations on top of them would overstate what
+        was measured.
       parameters:
         - name: exchangeId
           in: path
@@ -923,6 +945,75 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting
+  '/backtest/{exchangeId}/{type}/executeSweep/{requestId}/{sweepId}/sensitivity':
+    get:
+      operationId: getSweepSensitivity
+      summary: Get sweep sensitivity surfaces
+      description: |
+        How the objective moves as each parameter moves — the question a leaderboard cannot answer.
+        A leaderboard says which point won; a sweep can spend its entire budget on an axis that
+        never moved the objective at all, and showing only the top rows hides that completely.
+
+        A **marginal** takes one axis and collapses every other one: for each value of that axis,
+        it aggregates every run that used it, whatever the rest of the parameters were. A flat
+        marginal means the axis is irrelevant over the range swept. `best`, `mean` and `worst` are
+        all reported because them disagreeing is itself the signal — a value with a high `best` and
+        a poor `mean` works only in specific company, which is an interaction between parameters
+        and would be invisible behind a single number.
+
+        A **heatmap** does the same over a pair of axes, where that interaction becomes visible
+        directly.
+
+        Served from the sweep's stored rows: no re-run, no engine call, and it works on a sweep
+        still in flight — the aggregates then describe the runs finished so far. Aborted runs are
+        excluded throughout, since a run that threw measured nothing and counting it as a bad
+        outcome would invent evidence against a parameter value that was never really tested.
+
+        This is a separate endpoint rather than extra fields on the result view because the
+        two-dimensional half is quadratic in the axis count (N axes give N(N-1)/2 surfaces, each
+        the product of two axes' value counts) and is not wanted on the poll that drives progress.
+      parameters:
+        - name: exchangeId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sweepId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: objective
+          in: query
+          required: false
+          description: Which metric to aggregate. Defaults to the objective the sweep was submitted with.
+          schema:
+            type: string
+            enum: [sharpe, sortino, pnl, maxdd]
+      responses:
+        '200':
+          description: Sensitivity aggregates over the rows available so far.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SweepSensitivity'
+        '404':
+          description: Sweep not found or expired.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   '/backtest/{exchangeId}/{type}/execute':
     post:
       operationId: executeBacktest
@@ -1627,6 +1718,39 @@ components:
           minimum: 0
           default: 30
           description: Trials below this trade count are flagged but remain in the results.
+        walkForward:
+          $ref: '#/components/schemas/WalkForwardRequest'
+    WalkForwardRequest:
+      type: object
+      description: >-
+        Opt in to walk-forward validation. Present, the sweep runs as F sequential folds and the
+        result gains a `walkForward` section; absent, nothing about the sweep changes. Two requests
+        that differ only in this block are two different sweeps and do not deduplicate against each
+        other.
+      required: [folds]
+      properties:
+        folds:
+          type: integer
+          minimum: 2
+          description: >-
+            How many sequential optimize-then-score windows to run. Two is the minimum for a
+            reason, and it is structural rather than a tuning choice: parameter drift is measured
+            between consecutive fold winners, and a single fold — one train/test split with no
+            sequence — has no consecutive pair to compare, so it would report the strongest
+            possible stability having measured nothing.
+
+            The upper bound is a server setting (12 by default) and is deliberately not pinned
+            here, since a spec that hardcodes a tunable limit lies the day it is raised. Exceeding
+            it, or exceeding the sweep budget once multiplied by the grid size, is a 400.
+        inSamplePct:
+          type: integer
+          minimum: 10
+          maximum: 90
+          default: 66
+          description: >-
+            Share of the session each fold spends optimizing; the remainder is where its winner is
+            scored. Lower values leave more data to be scored on and, on short sessions, are also
+            what lets the requested fold count tile the data at all.
     ExecuteSweepAccepted:
       type: object
       required: [sweepId, requestId, totalRuns, shards, seed, queued]
@@ -1651,6 +1775,25 @@ components:
         queued:
           type: boolean
           description: False when an identical sweep already exists and was not enqueued again.
+        walkForward:
+          $ref: '#/components/schemas/WalkForwardAccepted'
+    WalkForwardAccepted:
+      type: object
+      description: >-
+        Echo of the accepted walk-forward configuration, present only when the submit carried one.
+        `inSamplePct` is the resolved value, so a request that omitted it can see what it got.
+      required: [folds, inSamplePct, totalRuns]
+      properties:
+        folds:
+          type: integer
+        inSamplePct:
+          type: integer
+        totalRuns:
+          type: integer
+          description: >-
+            What this sweep actually costs, `folds × (grid size + 1)` — the in-sample runs for every
+            fold plus each fold's one out-of-sample run. Deliberately distinct from the top-level
+            `totalRuns`, which stays the size of the grid that was submitted.
     SweepProgress:
       type: object
       required: [done, total, aborted, shardCount, pendingShards]
@@ -1752,6 +1895,93 @@ components:
         runtimeMs:
           type: integer
           format: int64
+    SweepSensitivity:
+      type: object
+      description: >-
+        Sensitivity aggregates over a sweep's stored rows. Marginals are always complete; heatmaps
+        may be capped, in which case `heatmapsTruncated` is true.
+      properties:
+        sweepId:
+          type: string
+        status:
+          type: string
+          enum: [RUNNING, COMPLETED, PARTIAL, CANCELLED]
+        objective:
+          type: string
+          enum: [sharpe, sortino, pnl, maxdd]
+        rowsAnalysed:
+          type: integer
+          description: Rows available when this was computed. Grows while a sweep is still running.
+        marginals:
+          type: array
+          items:
+            $ref: '#/components/schemas/SweepMarginal'
+        heatmaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/SweepHeatmap'
+        heatmapsTruncated:
+          type: boolean
+          description: >-
+            True when at least one two-parameter surface was left out to stay inside the response
+            budget. Told explicitly because a silently short list would read as "these are all the
+            interactions", which is the wrong thing to conclude from a sensitivity view.
+    SweepMarginal:
+      type: object
+      description: One axis, with every other axis collapsed away.
+      properties:
+        param:
+          type: string
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/SweepMarginalPoint'
+    SweepMarginalPoint:
+      type: object
+      description: >-
+        How the objective behaved at one value of one axis. `best` and `mean` disagreeing is
+        informative rather than noise: a high `best` with a poor `mean` marks a value that only
+        works alongside particular settings of the other axes.
+      properties:
+        value:
+          description: The axis value, as it appears in a run's parameters.
+        count:
+          type: integer
+          description: Non-aborted runs that used this value.
+        best:
+          type: number
+          format: double
+        mean:
+          type: number
+          format: double
+        worst:
+          type: number
+          format: double
+    SweepHeatmap:
+      type: object
+      description: The surface for one pair of axes, with all others collapsed away.
+      properties:
+        paramA:
+          type: string
+        paramB:
+          type: string
+        cells:
+          type: array
+          items:
+            $ref: '#/components/schemas/SweepHeatmapCell'
+    SweepHeatmapCell:
+      type: object
+      properties:
+        valueA: {}
+        valueB: {}
+        count:
+          type: integer
+        best:
+          type: number
+          format: double
+        mean:
+          type: number
+          format: double
     ExecuteSweepResult:
       type: object
       required:
@@ -1808,6 +2038,83 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/SweepRunRow'
+        walkForward:
+          $ref: '#/components/schemas/WalkForwardResult'
+    WalkForwardResult:
+      type: object
+      description: >-
+        Present only on a sweep submitted with `walkForward`, and present from acceptance onward —
+        its presence, not its contents, is what identifies a walk-forward sweep. `completedFolds`
+        is 0 while the first fold is still running.
+      required: [folds, completedFolds, results]
+      properties:
+        folds:
+          type: integer
+          description: Folds requested at submit.
+        inSamplePct:
+          type: integer
+          description: Resolved in-sample share each fold optimized on.
+        completedFolds:
+          type: integer
+          description: Folds that have finished and reported a winner.
+        paramDrift:
+          type: number
+          format: double
+          minimum: 0
+          description: >-
+            Mean normalized lattice distance between consecutive fold winners. Low is good: winners
+            that stay in a tight band fold after fold are evidence the parameter means something,
+            while winners that jump across the grid every time are the sweep re-fitting noise, and
+            that backtest will not survive contact with live data. **Absent is not zero** — the
+            field is omitted whenever the figure could not be computed (fewer than two folds
+            finished, no stored grid to place winners on), because zero is itself a meaningful
+            reading here and a placeholder would be indistinguishable from perfect stability.
+        results:
+          type: array
+          description: One entry per completed fold, oldest first.
+          items:
+            $ref: '#/components/schemas/WalkForwardFold'
+    WalkForwardFold:
+      type: object
+      description: >-
+        What one fold concluded. The out-of-sample row is the answer; the in-sample figure is only
+        there to be compared against it, since any grid produces a flattering in-sample winner —
+        that is what optimizing does. The gap between them is the whole reading.
+      required:
+        - foldIx
+        - inSampleFrom
+        - inSampleTo
+        - outOfSampleTo
+        - params
+        - inSampleSharpe
+        - outOfSample
+        - vectorsRun
+      properties:
+        foldIx:
+          type: integer
+          description: Position in the walk-forward sequence, oldest first.
+        inSampleFrom:
+          type: integer
+          description: First index of the optimization window, into the prepared session.
+        inSampleTo:
+          type: integer
+          description: End of the optimization window, exclusive — and where scoring begins.
+        outOfSampleTo:
+          type: integer
+          description: End of the scoring window, exclusive.
+        params:
+          type: object
+          additionalProperties: true
+          description: The parameter vector that won this fold's optimization window.
+        inSampleSharpe:
+          type: number
+          format: double
+          description: How that winner scored on the window it was chosen on.
+        outOfSample:
+          $ref: '#/components/schemas/SweepRunRow'
+        vectorsRun:
+          type: integer
+          description: Vectors this fold evaluated in-sample before picking its winner.
     AcceptedJob:
       type: object
       description: |
