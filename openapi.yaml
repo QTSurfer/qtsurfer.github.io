@@ -1014,6 +1014,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backtesting
   '/backtest/{exchangeId}/{type}/execute':
     post:
       operationId: executeBacktest
