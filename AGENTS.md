@@ -54,5 +54,15 @@ npx @redocly/cli lint openapi.yaml
 
 - **openapi.yaml is the source of truth** — the spec is maintained here, not extracted from code
 - **index.html is generated** — the CI auto-commits it, so expect merge noise if editing the spec in a branch
-- **This is a public repo** — no internal URLs, credentials, or infrastructure details. Use `api.qtsurfer.com` and `api.staging.qtsurfer.com` as server URLs
-- **Version** is in `info.version` inside `openapi.yaml` — bump it when making API changes
+- **Only one CI generates it.** This repo is mirrored, and the mirror's CI reads `.github/workflows`
+  too, so the job is guarded to run on GitHub alone. Without that guard both sides regenerate
+  `index.html` and commit it, and the mirrors diverge by two content-identical commits on every spec
+  change. Do not remove the guard
+- **This is a public repo** — no internal URLs, credentials, or infrastructure details
+- **Server URLs**: staging is `api.qtsurfer.net`, and it is the one that actually serves the API.
+  `api.qtsurfer.com` is listed as production but is reserved and not yet live — do not point examples
+  or defaults at it. Generated clients take their default base URL from the **first** `servers`
+  entry, so its order is load-bearing, not cosmetic
+- **Version** is in `info.version` inside `openapi.yaml` — bump it when the API surface changes: a
+  schema, an operation, a parameter, a response. Editing `servers`, descriptions or examples is not
+  an API change and does not need one

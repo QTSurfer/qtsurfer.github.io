@@ -11,6 +11,11 @@ on:
 
 jobs:
   generate-redoc:
+    # This repository is mirrored, and the other host's CI also reads .github/workflows,
+    # so without this guard both sides regenerate index.html independently and commit it,
+    # leaving two content-identical commits that make the mirrors diverge on every spec
+    # change. Generating in one place is what keeps them in step.
+    if: github.server_url == 'https://github.com'
     runs-on: ubuntu-latest
     permissions:
       contents: write
