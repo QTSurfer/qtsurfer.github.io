@@ -77,13 +77,27 @@ public class EmaCrossStrategy extends AbstractTickerStrategy {
 }
 ```
 
+## Servers
+
+The spec lists two, and only one of them serves the API today:
+
+| | URL | Status |
+|---|---|---|
+| **Staging** | `https://api.qtsurfer.net/v1` | **Live.** What this specification describes, and what to develop against. Generated clients default here. |
+| Production | `https://api.qtsurfer.com/v1` | Reserved, not yet serving. Listed so the eventual address is known in advance. |
+
+While the API is pre-1.0 the staging host is the API: it is where the versions described here are
+deployed, and it can change shape between releases in the way a pre-1.0 spec implies. Pointing a
+client at the production URL today will not reach anything — it is a placeholder for an address that
+has not been switched on. The examples below use the live host for that reason.
+
 ## API Quick Start
 
 All endpoints require JWT authentication (`Authorization: Bearer <token>`).
 
 ### Compile a strategy
 ```bash
-curl -X POST https://api.qtsurfer.com/v1/strategy \
+curl -X POST https://api.qtsurfer.net/v1/strategy \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/plain" \
   --data-binary @MyStrategy.java
@@ -92,7 +106,7 @@ curl -X POST https://api.qtsurfer.com/v1/strategy \
 
 ### Prepare market data
 ```bash
-curl -X POST https://api.qtsurfer.com/v1/backtest/binance/ticker/prepare \
+curl -X POST https://api.qtsurfer.net/v1/backtest/binance/ticker/prepare \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"instrument":"BTC/USDT","from":"2026-03-14","to":"2026-03-15"}'
@@ -101,14 +115,14 @@ curl -X POST https://api.qtsurfer.com/v1/backtest/binance/ticker/prepare \
 
 Poll until completion:
 ```bash
-curl https://api.qtsurfer.com/v1/backtest/binance/ticker/prepare/$PREPARE_JOB_ID \
+curl https://api.qtsurfer.net/v1/backtest/binance/ticker/prepare/$PREPARE_JOB_ID \
   -H "Authorization: Bearer $TOKEN"
 # → {"status": "Completed", ...}
 ```
 
 ### Execute backtest
 ```bash
-curl -X POST https://api.qtsurfer.com/v1/backtest/binance/ticker/execute \
+curl -X POST https://api.qtsurfer.net/v1/backtest/binance/ticker/execute \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"prepareJobId":"5ikYAMIO...","strategyId":"2ul144qe9tlwzu5anhwvc6"}'
@@ -117,7 +131,7 @@ curl -X POST https://api.qtsurfer.com/v1/backtest/binance/ticker/execute \
 
 ### Poll results
 ```bash
-curl https://api.qtsurfer.com/v1/backtest/binance/ticker/execute/$EXECUTE_JOB_ID \
+curl https://api.qtsurfer.net/v1/backtest/binance/ticker/execute/$EXECUTE_JOB_ID \
   -H "Authorization: Bearer $TOKEN"
 # → {"state": {"status": "Completed", "completed": 85058},
 #    "results": {"pnlTotal": 42.75, "totalTrades": 156, "winRate": 58.33,
@@ -133,7 +147,7 @@ The response includes yield metrics (PnL, win rate, Sharpe, Sortino, CAGR, max d
 The sweep reuses the same prepared dataset. Its path `requestId` is the `jobId` returned by the existing prepare endpoint.
 
 ```bash
-curl -X POST "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID" \
+curl -X POST "https://api.qtsurfer.net/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -154,7 +168,7 @@ curl -X POST "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$
 Poll the ranked leaderboard:
 
 ```bash
-curl "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID/$SWEEP_ID" \
+curl "https://api.qtsurfer.net/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID/$SWEEP_ID" \
   -H "Authorization: Bearer $TOKEN"
 # → {"status":"RUNNING","ranking":"plateau",
 #    "progress":{"done":31,"total":44,"aborted":0,"failedShards":0,"retrying":0,"notStarted":1,
@@ -172,7 +186,7 @@ Results rank by **plateau score** by default — the objective of the worst neig
 Add `walkForward` to test whether the winning parameters keep working, not just which ones won. The data splits into sequential folds; each optimizes on its own window and is scored only on the window immediately after — data it was not chosen on.
 
 ```bash
-curl -X POST "https://api.qtsurfer.com/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID" \
+curl -X POST "https://api.qtsurfer.net/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

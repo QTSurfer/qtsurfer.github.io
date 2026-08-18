@@ -12,10 +12,15 @@ info:
     name: Apache-2.0
     url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
 servers:
-  - url: 'https://api.staging.qtsurfer.com/v1'
-    description: Staging server
+  - url: 'https://api.qtsurfer.net/v1'
+    description: >-
+      Staging — the API this specification describes, and the one to develop against today.
+      Generated clients take their default base URL from here.
   - url: 'https://api.qtsurfer.com/v1'
-    description: Production server
+    description: >-
+      Production — reserved, not yet serving. It is listed so the eventual address is known in
+      advance; pointing a client at it today will not reach the API. Stay on staging until this
+      one is announced.
 paths:
   '/auth/token':
     post:
