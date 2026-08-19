@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.109.0
+  version: 0.109.1
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1495,6 +1495,23 @@ components:
           allOf:
             - $ref: '#/components/schemas/HalLink'
           description: Link to the futures instruments listing. Present only when the exchange has a futures segment.
+    StrategyLinks:
+      description: |
+        HAL `_links` for a strategy — present on a full `StrategyState` body (`GET
+        /strategy/{strategyId}`, and `POST /strategy/{strategyId}/validate`'s already-validated
+        `200`), absent from that same endpoint's `202` — a deliberately partial stub carrying only
+        what is known before a check has even started. Following `code` can still `404` once
+        present: it documents its own honest "nothing to return" for a strategy with no source of
+        its own (a `REFERENCE` marketplace copy, or one resolved only through the platform's shared
+        pool). This link says where to look, not that something is there.
+      type: object
+      required:
+        - code
+      properties:
+        code:
+          allOf:
+            - $ref: '#/components/schemas/HalLink'
+          description: Link to this strategy's registered source, `GET /strategy/{strategyId}/code`.
     HalLink:
       description: A HAL link object (Hypertext Application Language)
       type: object
@@ -2635,6 +2652,8 @@ components:
           description: |
             A queued check has not reported for far longer than one takes. Nothing is disproved about
             the strategy — the check has not run. Stop waiting and re-request it later.
+        _links:
+          $ref: '#/components/schemas/StrategyLinks'
       example:
         strategyId: 6bsh31ikwkuivhtgcoa6s4
         validation: passed
@@ -2646,6 +2665,9 @@ components:
             code: indicator.bar-data-on-ticker-path
             message: Indicator requires bar data but is on the ticker path
             provenance: compile-dry-run
+        _links:
+          code:
+            href: /v1/strategy/6bsh31ikwkuivhtgcoa6s4/code
     AuthTokenResponse:
       type: object
       required: [access_token, token_type, expires_in, tier]
