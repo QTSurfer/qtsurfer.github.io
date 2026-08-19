@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.108.0
+  version: 0.109.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -437,6 +437,58 @@ paths:
                 $ref: '#/components/schemas/ResponseError'
       tags:
         - Exchange
+  '/strategies':
+    get:
+      operationId: listStrategies
+      summary: List your registered strategies
+      description: |
+        Every strategy you have registered and not deleted, most recently compiled first.
+
+        Each entry carries the same provenance `GET /strategy/{strategyId}` does — `compiledAt`,
+        `requiredSources` — but not its validation state, so listing stays cheap regardless of how
+        many strategies you have. Check a specific strategy's validation with `GET
+        /strategy/{strategyId}`.
+      responses:
+        '200':
+          description: |
+            Your registered strategies. An empty array if you have none — this is never a `404`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [strategies]
+                properties:
+                  strategies:
+                    type: array
+                    items:
+                      type: object
+                      required: [strategyId]
+                      properties:
+                        strategyId:
+                          $ref: '#/components/schemas/strategyId'
+                        compiledAt:
+                          type: string
+                          format: date-time
+                          description: When the live compilation was produced.
+                        requiredSources:
+                          type: array
+                          description: |
+                            The market data this strategy needs. Absent, not empty, when it could
+                            not be established without constructing the strategy.
+                          items:
+                            type: string
+              example:
+                strategies:
+                  - strategyId: 6bsh31ikwkuivhtgcoa6s4
+                    compiledAt: '2026-08-19T10:15:00Z'
+                    requiredSources: [Ticker]
+                  - strategyId: 2ul144qe9tlwzu5anhwvc6
+                    compiledAt: '2026-08-12T09:02:11Z'
+      security:
+        - bearerAuth: []
+      tags:
+        - Strategy
+
   '/strategy':
     post:
       operationId: compileStrategy
@@ -599,7 +651,7 @@ paths:
       operationId: deleteStrategy
       summary: Release a registered strategy
       description: |
-        Removes a strategy from `GET /strategy/{strategyId}` and any future listing. This is not
+        Removes a strategy from `GET /strategy/{strategyId}` and `GET /strategies`. This is not
         undone by re-submitting the same source to `POST /strategy` — that registers a new
         strategy, with a new id.
 
@@ -635,6 +687,55 @@ paths:
                 deleted: true
         '404':
           description: No such registered strategy for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Strategy
+
+  '/strategy/{strategyId}/code':
+    get:
+      operationId: getStrategyCode
+      summary: Get a registered strategy's source, if you still have one to read
+      description: |
+        The exact source you last submitted for this id — the same text `POST /strategy` derives
+        `strategyId` from, whitespace and comments included.
+
+        **"If available", not "always".** A strategy you resolve only through a shared/marketplace
+        listing you copied by reference carries no source of its own, and reads as a `404` here the
+        same as a `strategyId` you never registered — that is the honest answer either way, since
+        from this endpoint's point of view nothing is there to return.
+      parameters:
+        - name: strategyId
+          in: path
+          required: true
+          description: The id returned by `POST /strategy`
+          schema:
+            $ref: '#/components/schemas/strategyId'
+      responses:
+        '200':
+          description: The registered source
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [strategyId, code]
+                properties:
+                  strategyId:
+                    $ref: '#/components/schemas/strategyId'
+                  code:
+                    type: string
+                    description: Raw strategy Java source code, exactly as registered.
+              example:
+                strategyId: 6bsh31ikwkuivhtgcoa6s4
+                code: |
+                  package strategy;
+                  public class EmaCrossStrategy extends AbstractTickerStrategy { ... }
+        '404':
+          description: No such registered strategy for this user, or nothing to read for this id
           content:
             application/json:
               schema:

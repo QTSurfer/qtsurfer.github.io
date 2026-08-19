@@ -104,6 +104,21 @@ curl -X POST https://api.qtsurfer.net/v1/strategy \
 # → {"strategyId": "2ul144qe9tlwzu5anhwvc6"}
 ```
 
+### List your strategies
+```bash
+curl https://api.qtsurfer.net/v1/strategies \
+  -H "Authorization: Bearer $TOKEN"
+# → {"strategies": [{"strategyId": "2ul144qe9tlwzu5anhwvc6",
+#                     "compiledAt": "2026-08-19T10:15:00Z", "requiredSources": ["Ticker"]}]}
+```
+
+### Get a strategy's source
+```bash
+curl https://api.qtsurfer.net/v1/strategy/2ul144qe9tlwzu5anhwvc6/code \
+  -H "Authorization: Bearer $TOKEN"
+# → {"strategyId": "2ul144qe9tlwzu5anhwvc6", "code": "package strategy;\npublic class..."}
+```
+
 ### Delete a strategy
 
 Frees up the slot on a plan capped at a strategy count. Backtests already run against it are
