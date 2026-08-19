@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.107.0
+  version: 0.108.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -585,6 +585,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StrategyState'
+        '404':
+          description: No such registered strategy for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Strategy
+    delete:
+      operationId: deleteStrategy
+      summary: Release a registered strategy
+      description: |
+        Removes a strategy from `GET /strategy/{strategyId}` and any future listing. This is not
+        undone by re-submitting the same source to `POST /strategy` — that registers a new
+        strategy, with a new id.
+
+        **Backtests you already ran against this strategy are unaffected.** Deleting it stops it
+        from counting against your account and stops you from validating or re-running it under
+        this id — it does not erase what already happened.
+
+        Only removes a strategy you registered yourself. If you copied someone else's strategy
+        (a shared/marketplace listing), deleting your copy never affects theirs, or anyone else's.
+      parameters:
+        - name: strategyId
+          in: path
+          required: true
+          description: The id returned by `POST /strategy`
+          schema:
+            $ref: '#/components/schemas/strategyId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [strategyId, deleted]
+                properties:
+                  strategyId:
+                    $ref: '#/components/schemas/strategyId'
+                  deleted:
+                    type: boolean
+                    enum: [true]
+              example:
+                strategyId: 6bsh31ikwkuivhtgcoa6s4
+                deleted: true
         '404':
           description: No such registered strategy for this user
           content:
