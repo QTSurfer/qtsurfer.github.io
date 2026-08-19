@@ -104,6 +104,17 @@ curl -X POST https://api.qtsurfer.net/v1/strategy \
 # → {"strategyId": "2ul144qe9tlwzu5anhwvc6"}
 ```
 
+### Delete a strategy
+
+Frees up the slot on a plan capped at a strategy count. Backtests already run against it are
+unaffected — this only stops it from being validated, executed, or listed going forward.
+
+```bash
+curl -X DELETE https://api.qtsurfer.net/v1/strategy/2ul144qe9tlwzu5anhwvc6 \
+  -H "Authorization: Bearer $TOKEN"
+# → {"strategyId": "2ul144qe9tlwzu5anhwvc6", "deleted": true}
+```
+
 ### Prepare market data
 ```bash
 curl -X POST https://api.qtsurfer.net/v1/backtest/binance/ticker/prepare \
