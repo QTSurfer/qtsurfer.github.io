@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.109.1
+  version: 0.109.2
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -461,22 +461,7 @@ paths:
                   strategies:
                     type: array
                     items:
-                      type: object
-                      required: [strategyId]
-                      properties:
-                        strategyId:
-                          $ref: '#/components/schemas/strategyId'
-                        compiledAt:
-                          type: string
-                          format: date-time
-                          description: When the live compilation was produced.
-                        requiredSources:
-                          type: array
-                          description: |
-                            The market data this strategy needs. Absent, not empty, when it could
-                            not be established without constructing the strategy.
-                          items:
-                            type: string
+                      $ref: '#/components/schemas/StrategySummary'
               example:
                 strategies:
                   - strategyId: 6bsh31ikwkuivhtgcoa6s4
@@ -2577,6 +2562,28 @@ components:
             real run (`execute`) is a clean bill of health, while an empty list from
             `compile-dry-run` is only a lower bound over a bounded synthetic series.
           example: compile-dry-run
+    StrategySummary:
+      type: object
+      description: |
+        One entry from `GET /strategies` — the same provenance a full `StrategyState` carries
+        (`compiledAt`, `requiredSources`), without its validation state, so listing stays cheap
+        regardless of how many strategies you have registered. Check a specific strategy's
+        validation with `GET /strategy/{strategyId}`.
+      required: [strategyId]
+      properties:
+        strategyId:
+          $ref: '#/components/schemas/strategyId'
+        compiledAt:
+          type: string
+          format: date-time
+          description: When the live compilation was produced.
+        requiredSources:
+          type: array
+          description: |
+            The market data this strategy needs. Absent, not empty, when it could
+            not be established without constructing the strategy.
+          items:
+            type: string
     StrategyState:
       type: object
       description: |
