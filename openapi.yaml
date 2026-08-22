@@ -1630,7 +1630,7 @@ components:
             resampling and stored alongside the native blob in cache. Coarser-than-
             source values must be exact multiples of the source cadence — invalid
             labels return `400`.
-          enum: [1s, 5s, 1m, 5m, 15m, 1h, 4h, 1d]
+          enum: [1s, 5s, 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 1w, 1q]
           default: "1s"
       example:
         instrument: BTC/USDT
