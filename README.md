@@ -268,6 +268,16 @@ curl https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads/$UPLOAD_ID \
 #               "gaps":0,"largestGapSteps":0}}
 ```
 
+Once ready, `GET /datasets/$DATASET_ID` (and the list) echo that version's range and cadence
+directly on the dataset, so you don't need a second call just to see what it covers:
+```bash
+curl https://api.qtsurfer.net/v1/datasets/$DATASET_ID \
+  -H "Authorization: Bearer $TOKEN"
+# → {"datasetId":"ds_3f9a1c2e7b0d4a5f","name":"My BTC ticks","type":"ticker",
+#    "instrument":"BTC/USDT","currentVersionId":"dsv_8e2b4f19c6a03d7e",
+#    "from":"2026-03-01T00:00:00Z","to":"2026-03-08T00:00:00Z","cadence":"1s", ...}
+```
+
 Then prepare and execute against `exchangeId: user`, sending `datasetId` instead of `instrument`:
 ```bash
 curl -X POST https://api.qtsurfer.net/v1/backtest/user/ticker/prepare \

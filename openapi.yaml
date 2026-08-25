@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.110.0
+  version: 0.110.1
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1528,6 +1528,9 @@ paths:
                     createdAt: "2026-08-20T09:00:00Z"
                     currentVersionId: "dsv_8e2b4f19c6a03d7e"
                     updatedAt: "2026-08-20T09:04:12Z"
+                    from: "2026-03-01T00:00:00Z"
+                    to: "2026-03-08T00:00:00Z"
+                    cadence: "1m"
       security:
         - bearerAuth: []
       tags:
@@ -1560,6 +1563,9 @@ paths:
                 createdAt: "2026-08-20T09:00:00Z"
                 currentVersionId: "dsv_8e2b4f19c6a03d7e"
                 updatedAt: "2026-08-20T09:04:12Z"
+                from: "2026-03-01T00:00:00Z"
+                to: "2026-03-08T00:00:00Z"
+                cadence: "1m"
                 _links:
                   self:
                     href: "/v1/datasets/ds_3f9a1c2e7b0d4a5f"
@@ -3058,6 +3064,10 @@ components:
       description: |
         A dataset's own metadata — not its data. `currentVersionId` is what a prepare against
         `exchangeId: user` reads by default; see `DatasetVersion` for what a version carries.
+
+        `from`/`to`/`cadence` mirror that current version's own discovered range and cadence, so
+        you don't need a second call to `GET /datasets/{datasetId}/uploads/{uploadId}` just to see
+        what a dataset covers. Absent until a version exists.
       required: [datasetId, name, type, instrument, createdAt]
       properties:
         datasetId:
@@ -3091,6 +3101,26 @@ components:
           format: date-time
           description: When `currentVersionId` last changed. Absent until it has a value.
           example: "2026-08-20T09:04:12Z"
+        from:
+          type: string
+          format: date-time
+          description: |
+            Start of `currentVersionId`'s own data range, as discovered at ingest time. Absent
+            until a version exists.
+          example: "2026-03-01T00:00:00Z"
+        to:
+          type: string
+          format: date-time
+          description: |
+            End of `currentVersionId`'s own data range, as discovered at ingest time. Absent until
+            a version exists.
+          example: "2026-03-08T00:00:00Z"
+        cadence:
+          type: string
+          description: |
+            `currentVersionId`'s own discovered bar cadence (e.g. `1s`, `1m`, `1h`). Absent until a
+            version exists.
+          example: "1m"
     DatasetWithLinks:
       description: A `Dataset` plus a self link. Returned by `GET /datasets/{datasetId}`.
       allOf:
