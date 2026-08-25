@@ -3168,7 +3168,7 @@ components:
       type: object
       description: |
         One successfully ingested upload. Cadence and timestamp unit are discovered from the file,
-        not declared by the caller (D-11).
+        not declared by the caller.
       required: [datasetId]
       properties:
         datasetId:
