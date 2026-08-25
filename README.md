@@ -17,7 +17,7 @@ Strategy (Java) ──► Compile ──► Prepare Data ──┬─► Execute
 
 1. **Write** a trading strategy in Java using the strategy SDK (indicators, signals, execution)
 2. **Compile** it via `POST /strategy` — no build tools needed on the client
-3. **Prepare** historical market data via `POST /backtest/{exchange}/{type}/prepare` — returns a `jobId`
+3. **Prepare** historical market data via `POST /backtest/{exchange}/{type}/prepare` — returns a `jobId`. `{exchange}` can be a managed exchange (e.g. `binance`) or the reserved value `user` to prepare from your own uploaded [dataset](#bring-your-own-data-datasets) instead
 4. **Execute** either one backtest via `POST /backtest/{exchange}/{type}/execute` or a parameter sweep via `POST /backtest/{exchange}/{type}/executeSweep/{prepareJobId}`
 5. **Inspect** the result or ranked sweep trials; individual backtest signals are stored as Parquet files and loaded in-browser via DuckDB-WASM
 
@@ -229,6 +229,57 @@ The leaderboard becomes one row per fold — that fold's winner, scored **out of
 ### Parameter sensitivity
 
 `GET .../executeSweep/{prepareJobId}/{sweepId}/sensitivity` aggregates the sweep's stored rows into per-parameter marginals (best/mean/worst at each value, collapsing every other axis) and pairwise heatmaps — which axes actually moved the objective, computed from rows already in, no re-run.
+
+### Bring your own data (datasets)
+
+Backtest against a CSV you upload instead of a managed exchange. Create a dataset, PUT the file to
+the returned presigned URL, finalize it to trigger ingest, then prepare/execute exactly as above
+but with `user` in place of the exchange id.
+
+```bash
+curl -X POST https://api.qtsurfer.net/v1/datasets \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"My BTC ticks","instrument":"BTC/USDT"}'
+# → 201 {"datasetId":"ds_3f9a1c2e7b0d4a5f","name":"My BTC ticks","type":"ticker",
+#        "instrument":"BTC/USDT","uploadId":"up_1a2b3c4d5e6f7a8b",
+#        "upload":{"url":"https://storage.qtsurfer.com/...","expiresInMinutes":15}}
+```
+
+The CSV needs a header row with `timestamp` (ISO-8601 or epoch seconds/millis/micros) and `close`
+columns at minimum; `open`, `high`, `low`, `volume`, `quoteVolume`, `bid`, `bidSize`, `ask`,
+`askSize` are optional. Cadence and timestamp unit are discovered from the data, not declared.
+
+```bash
+curl -X PUT "$UPLOAD_URL" --data-binary @my-btc-ticks.csv
+
+curl -X POST https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads/$UPLOAD_ID/finalize \
+  -H "Authorization: Bearer $TOKEN"
+# → 202 {"jobId": "dataset-upload:..."}
+```
+
+Poll until ingest finishes:
+```bash
+curl https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads/$UPLOAD_ID \
+  -H "Authorization: Bearer $TOKEN"
+# → {"uploadId":"up_1a2b3c4d5e6f7a8b","status":"ready",
+#    "version":{"datasetId":"ds_3f9a1c2e7b0d4a5f","id":"dsv_8e2b4f19c6a03d7e",
+#               "bytes":4831022,"rows":86400,"cadence":"1s","timestampUnit":"iso",
+#               "gaps":0,"largestGapSteps":0}}
+```
+
+Then prepare and execute against `exchangeId: user`, sending `datasetId` instead of `instrument`:
+```bash
+curl -X POST https://api.qtsurfer.net/v1/backtest/user/ticker/prepare \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"datasetId":"ds_3f9a1c2e7b0d4a5f","from":"2026-03-14","to":"2026-03-15"}'
+# → 202 {"jobId":"5ikYAMIO...","datasetId":"ds_3f9a1c2e7b0d4a5f",
+#        "datasetVersionId":"dsv_8e2b4f19c6a03d7e"}
+```
+
+`execute` is unchanged — same request body as against a managed exchange, since the instrument and
+range are recovered from `prepareJobId` either way.
 
 ## Key Technologies
 

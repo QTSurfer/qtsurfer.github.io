@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.109.2
+  version: 0.110.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -740,10 +740,17 @@ paths:
 
         The same params always return the same `jobId` (idempotent). Repeated calls with identical
         params do not enqueue duplicate work — they reuse the existing job.
+
+        **`exchangeId: user` is reserved for your own uploaded data.** Instead of a managed
+        exchange, it prepares from a dataset you created via `POST /datasets` (see the **Dataset**
+        endpoints) — send `datasetId` in place of `instrument`. See `PrepareRequest` below for the
+        two request shapes.
       parameters:
         - name: exchangeId
           in: path
-          description: ID of the exchange to prepare the backtesting for
+          description: |
+            ID of the exchange to prepare the backtesting for (e.g. `binance`), or the reserved
+            value `user` to prepare from a dataset you uploaded instead of a managed exchange.
           required: true
           schema:
             type: string
@@ -771,13 +778,18 @@ paths:
         '400':
           description: |
             Invalid request or parameters. Also returned when `from` is older than the configured
-            lookback window or `to` is in the future.
+            lookback window or `to` is in the future. For `exchangeId: user`, also returned when
+            the dataset's current upload has not finished ingesting, or `cadence` asks for a finer
+            granularity than the dataset's own discovered cadence, or the requested range exceeds
+            your tier's range limit.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
         '404':
-          description: Exchange or data source type not found
+          description: |
+            Exchange or data source type not found. For `exchangeId: user`, also returned when
+            `datasetId` (or a pinned `datasetVersionId`) doesn't exist or isn't yours.
           content:
             application/json:
               schema:
@@ -785,7 +797,8 @@ paths:
         '429':
           description: |
             Rate limited. Returned when the global queue exceeds capacity or the user has too many
-            active backtests.
+            active backtests. Does not apply to `exchangeId: user` — a dataset prepare reads an
+            already-ingested file rather than enqueueing worker capacity.
           content:
             application/json:
               schema:
@@ -804,10 +817,15 @@ paths:
       description: |
         Retrieves the current state of the prepare job identified by `jobId`.
         Poll until `status` is `Completed`, `Failed`, or `Aborted`.
+
+        For a dataset prepare (`exchangeId: user`), coverage is reported against the dataset's own
+        cadence grid instead of hours — see `cadence`/`gaps`/`largestGapSteps` on `PrepareJobState`.
       parameters:
         - name: exchangeId
           in: path
-          description: ID of the exchange for the backtesting process
+          description: |
+            ID of the exchange for the backtesting process, or the reserved value `user` for a
+            dataset-backed prepare.
           required: true
           schema:
             type: string
@@ -1170,10 +1188,15 @@ paths:
 
         The same params (same `prepareJobId`, `strategyId`, `storeSignals`) always return the same
         `jobId` (idempotent).
+
+        Works unchanged for a dataset-backed prepare (`exchangeId: user`) — the request body is
+        identical either way, since the instrument and range are recovered from `prepareJobId`.
       parameters:
         - name: exchangeId
           in: path
-          description: ID of the exchange for the backtesting process
+          description: |
+            ID of the exchange for the backtesting process, or the reserved value `user` if
+            `prepareJobId` came from a dataset-backed prepare.
           required: true
           schema:
             type: string
@@ -1402,6 +1425,306 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting
+  '/datasets':
+    post:
+      operationId: createDataset
+      summary: Create a dataset and get a URL to upload it to
+      description: |
+        Creates a dataset AND its first upload session in one call — a presigned URL your client
+        PUTs the file to directly, no API credentials involved in that PUT. Call
+        `POST /datasets/{datasetId}/uploads/{uploadId}/finalize` once the upload completes to kick
+        off ingest.
+
+        v1 is ticker data only — `type` is not a request field, it is always `"ticker"` in the
+        response. `instrument` must be a plain spot pair (`BASE/QUOTE`, exactly one `/`); derivative
+        forms (e.g. `BTC/USDT:USDT`) are rejected.
+
+        **Upload format.** A CSV with a header row. Required columns: `timestamp` (ISO-8601, or
+        numeric epoch seconds/millis/micros — detected from the first row, then enforced for every
+        later row), `close`. Optional columns: `open`, `high`, `low`, `volume`, `quoteVolume`,
+        `bid`, `bidSize`, `ask`, `askSize`. Cadence and timestamp unit are discovered from the data,
+        not declared.
+      requestBody:
+        description: The dataset to create
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, instrument]
+              properties:
+                name:
+                  type: string
+                  description: A name unique among your datasets. `409` if already taken.
+                  example: "My BTC ticks"
+                instrument:
+                  $ref: '#/components/schemas/Instrument'
+            example:
+              name: "My BTC ticks"
+              instrument: "BTC/USDT"
+      responses:
+        '201':
+          description: Dataset created, with an upload session ready for its first version
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetCreated'
+              example:
+                datasetId: "ds_3f9a1c2e7b0d4a5f"
+                name: "My BTC ticks"
+                type: "ticker"
+                instrument: "BTC/USDT"
+                uploadId: "up_1a2b3c4d5e6f7a8b"
+                upload:
+                  url: "https://storage.qtsurfer.com/00000000-.../uploads/up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
+                  expiresInMinutes: 15
+        '400':
+          description: Invalid request, or `instrument` is not a plain spot pair
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '409':
+          description: You already have a dataset with this `name`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '429':
+          description: Your tier's dataset count limit is reached. Delete one, or upgrade.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Dataset
+    get:
+      operationId: listDatasets
+      summary: List your datasets
+      description: |
+        Every dataset you have created and not deleted, most recently created first. Never a `404`
+        — an empty array if you have none, same convention as `GET /strategies`.
+      responses:
+        '200':
+          description: Your datasets
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [datasets]
+                properties:
+                  datasets:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Dataset'
+              example:
+                datasets:
+                  - datasetId: "ds_3f9a1c2e7b0d4a5f"
+                    name: "My BTC ticks"
+                    type: "ticker"
+                    instrument: "BTC/USDT"
+                    createdAt: "2026-08-20T09:00:00Z"
+                    currentVersionId: "dsv_8e2b4f19c6a03d7e"
+                    updatedAt: "2026-08-20T09:04:12Z"
+      security:
+        - bearerAuth: []
+      tags:
+        - Dataset
+  '/datasets/{datasetId}':
+    get:
+      operationId: getDataset
+      summary: Get a dataset by id
+      description: Detail for one dataset, plus a self link.
+      parameters:
+        - name: datasetId
+          in: path
+          required: true
+          description: The id returned by `POST /datasets`
+          schema:
+            type: string
+            example: "ds_3f9a1c2e7b0d4a5f"
+      responses:
+        '200':
+          description: Dataset detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetWithLinks'
+              example:
+                datasetId: "ds_3f9a1c2e7b0d4a5f"
+                name: "My BTC ticks"
+                type: "ticker"
+                instrument: "BTC/USDT"
+                createdAt: "2026-08-20T09:00:00Z"
+                currentVersionId: "dsv_8e2b4f19c6a03d7e"
+                updatedAt: "2026-08-20T09:04:12Z"
+                _links:
+                  self:
+                    href: "/v1/datasets/ds_3f9a1c2e7b0d4a5f"
+        '404':
+          description: No such dataset for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Dataset
+    delete:
+      operationId: deleteDataset
+      summary: Delete a dataset
+      description: |
+        Soft-delete — the dataset stops appearing in `GET /datasets`/`GET /datasets/{datasetId}` and
+        can no longer be prepared from, but its object data is reclaimed later rather than purged
+        inline, so a backtest already running against one of its versions is not disrupted.
+      parameters:
+        - name: datasetId
+          in: path
+          required: true
+          description: The id returned by `POST /datasets`
+          schema:
+            type: string
+            example: "ds_3f9a1c2e7b0d4a5f"
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [datasetId, deleted]
+                properties:
+                  datasetId:
+                    type: string
+                  deleted:
+                    type: boolean
+                    enum: [true]
+              example:
+                datasetId: "ds_3f9a1c2e7b0d4a5f"
+                deleted: true
+        '404':
+          description: No such dataset for this user, or already deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Dataset
+  '/datasets/{datasetId}/uploads/{uploadId}/finalize':
+    post:
+      operationId: finalizeDatasetUpload
+      summary: Finalize an uploaded file and start ingest
+      description: |
+        Call once the file has been PUT to the `upload.url` from `POST /datasets`. Enqueues ingest
+        and returns immediately; poll
+        `GET /datasets/{datasetId}/uploads/{uploadId}` for the result.
+
+        Idempotent — a repeat finalize of the same upload returns the same `jobId` rather than
+        enqueueing a second ingest.
+      parameters:
+        - name: datasetId
+          in: path
+          required: true
+          description: The id returned by `POST /datasets`
+          schema:
+            type: string
+            example: "ds_3f9a1c2e7b0d4a5f"
+        - name: uploadId
+          in: path
+          required: true
+          description: The `uploadId` returned by `POST /datasets`
+          schema:
+            type: string
+            example: "up_1a2b3c4d5e6f7a8b"
+      responses:
+        '202':
+          description: Ingest queued
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [jobId]
+                properties:
+                  jobId:
+                    type: string
+              example:
+                jobId: "dataset-upload:00000000-.../ds_3f9a1c2e7b0d4a5f:up_1a2b3c4d5e6f7a8b"
+        '404':
+          description: |
+            No such dataset for this user, or nothing was PUT to `upload.url` yet — a finalize with
+            nothing to finalize.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '413':
+          description: The uploaded file exceeds your tier's size limit for a dataset.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Dataset
+  '/datasets/{datasetId}/uploads/{uploadId}':
+    get:
+      operationId: getDatasetUpload
+      summary: Get the state of an upload/ingest
+      description: |
+        Poll after `POST .../finalize` until `status` is `ready` or `failed`. Also reports
+        `uploading` (finalize not called yet, but the file was PUT) before you finalize at all.
+      parameters:
+        - name: datasetId
+          in: path
+          required: true
+          description: The id returned by `POST /datasets`
+          schema:
+            type: string
+            example: "ds_3f9a1c2e7b0d4a5f"
+        - name: uploadId
+          in: path
+          required: true
+          description: The `uploadId` returned by `POST /datasets`
+          schema:
+            type: string
+            example: "up_1a2b3c4d5e6f7a8b"
+      responses:
+        '200':
+          description: Current upload/ingest state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetUploadState'
+              example:
+                uploadId: "up_1a2b3c4d5e6f7a8b"
+                status: "ready"
+                version:
+                  datasetId: "ds_3f9a1c2e7b0d4a5f"
+                  id: "dsv_8e2b4f19c6a03d7e"
+                  bytes: 4831022
+                  rows: 86400
+                  cadence: "1s"
+                  timestampUnit: "iso"
+                  gaps: 0
+                  largestGapSteps: 0
+        '404':
+          description: |
+            No such dataset for this user, or genuinely nothing is known about this `uploadId` — no
+            version, no in-flight job, and nothing was ever PUT to its upload URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Dataset
 components:
   schemas:
     ResponseError:
@@ -1602,10 +1925,31 @@ components:
       example: ticker
     PrepareRequest:
       type: object
-      required: [instrument, from, to]
+      description: |
+        Two shapes, chosen by the `exchangeId` path segment. Against a managed exchange,
+        `instrument` is required and `datasetId`/`datasetVersionId` are ignored. Against the
+        reserved `exchangeId: user`, send `datasetId` instead of `instrument` — `instrument` is
+        ignored there, since it comes from the dataset itself.
+      required: [from, to]
       properties:
         instrument:
-          $ref: '#/components/schemas/Instrument'
+          allOf:
+            - $ref: '#/components/schemas/Instrument'
+          description: |
+            Required unless `exchangeId` is the reserved value `user`, in which case send
+            `datasetId` instead.
+        datasetId:
+          type: string
+          description: |
+            Only for `exchangeId: user`: the id of a dataset created via `POST /datasets`, in place
+            of `instrument`. Ignored against a managed exchange.
+          example: "ds_3f9a1c2e7b0d4a5f"
+        datasetVersionId:
+          type: string
+          description: |
+            Only for `exchangeId: user`, and optional even then: pins a specific past version of
+            the dataset instead of its current one. Defaults to the dataset's current version.
+          example: "dsv_8e2b4f19c6a03d7e"
         from:
           type: string
           description: |
@@ -1688,12 +2032,19 @@ components:
             example: "2025-01-04T14:00:20Z"
     PrepareJobState:
       description: |
-        State of a single-instrument prepare job — the `JobState` shape plus a per-hour
-        data-coverage summary. A single-instrument prepare is always terminal
-        (`status: Completed`): the client decides what to do from `coverageRatio` (e.g.
-        execute if it is at or above a chosen threshold) rather than polling for missing
-        hours that may never arrive — a missing hour for one instrument usually means low
-        activity, not missing data.
+        State of a single-instrument prepare job — the `JobState` shape plus a coverage summary.
+        A single-instrument prepare is always terminal (`status: Completed`): the client decides
+        what to do from `coverageRatio` (e.g. execute if it is at or above a chosen threshold)
+        rather than polling for missing hours that may never arrive — a missing hour for one
+        instrument usually means low activity, not missing data.
+
+        **Two coverage shapes, by exchange vs. dataset.** Against a managed exchange, coverage is
+        walked hour by hour: `totalHours`/`hoursWithData`/`hoursWithoutData`. Against a
+        dataset-backed prepare (`exchangeId: user`), coverage is reported on the dataset's own
+        cadence grid instead — hour-walking a daily dataset would report `1/24` and read as
+        broken — via `cadence`/`gaps`/`largestGapSteps`; `totalHours`/`hoursWithData`/
+        `hoursWithoutData` are absent in that case. `dataFrom`/`dataTo`/`coverageRatio` are present
+        either way, computed accordingly.
       allOf:
         - $ref: '#/components/schemas/JobState'
         - type: object
@@ -1714,20 +2065,47 @@ components:
               minimum: 0
               maximum: 1
               description: |
-                `hoursWithData / totalHours` in `[0,1]` (`1.0` when `totalHours` is 0) — the
-                fraction of hours in the requested range that have served data.
+                Against a managed exchange: `hoursWithData / totalHours` in `[0,1]` (`1.0` when
+                `totalHours` is 0), the fraction of hours in the requested range that have served
+                data. Against a dataset (`exchangeId: user`): `rows / expectedStepsAtCadence`
+                over the dataset version's own range — echoing what ingest computed once, not
+                recomputed against a narrower prepare request.
               example: 0.994
             totalHours:
               type: integer
-              description: Number of whole hours in the requested prepare range.
+              description: |
+                Number of whole hours in the requested prepare range. Managed exchanges only —
+                absent for a dataset-backed prepare.
               example: 168
             hoursWithData:
               type: integer
-              description: Number of hours in the range that have data.
+              description: |
+                Number of hours in the range that have data. Managed exchanges only — absent for
+                a dataset-backed prepare.
               example: 167
+            cadence:
+              type: string
+              description: |
+                The dataset version's own discovered cadence (e.g. `1m`, `1h`). Only present for a
+                dataset-backed prepare (`exchangeId: user`).
+              example: "1m"
+            gaps:
+              type: integer
+              description: |
+                Number of gaps in the dataset version at its own cadence, as discovered at ingest
+                time. Only present for a dataset-backed prepare.
+              example: 0
+            largestGapSteps:
+              type: integer
+              description: |
+                The largest gap in the dataset version, in units of its own cadence step. Only
+                present for a dataset-backed prepare.
+              example: 0
             hoursWithoutData:
               type: array
-              description: One entry per hour in the range that has no data, with a rationale.
+              description: |
+                One entry per hour in the range that has no data, with a rationale. Managed
+                exchanges only — absent for a dataset-backed prepare.
               items:
                 type: object
                 properties:
@@ -2675,6 +3053,156 @@ components:
         _links:
           code:
             href: /v1/strategy/6bsh31ikwkuivhtgcoa6s4/code
+    Dataset:
+      type: object
+      description: |
+        A dataset's own metadata — not its data. `currentVersionId` is what a prepare against
+        `exchangeId: user` reads by default; see `DatasetVersion` for what a version carries.
+      required: [datasetId, name, type, instrument, createdAt]
+      properties:
+        datasetId:
+          type: string
+          description: Opaque id, returned by `POST /datasets`.
+          example: "ds_3f9a1c2e7b0d4a5f"
+        name:
+          type: string
+          description: Unique among your datasets.
+          example: "My BTC ticks"
+        type:
+          type: string
+          enum: [ticker]
+          description: Always `ticker` in v1.
+          example: "ticker"
+        instrument:
+          $ref: '#/components/schemas/Instrument'
+        createdAt:
+          type: string
+          format: date-time
+          description: When the dataset was created.
+          example: "2026-08-20T09:00:00Z"
+        currentVersionId:
+          type: string
+          description: |
+            The id of the most recently finalized, successfully ingested version. Absent until at
+            least one upload has finished ingesting.
+          example: "dsv_8e2b4f19c6a03d7e"
+        updatedAt:
+          type: string
+          format: date-time
+          description: When `currentVersionId` last changed. Absent until it has a value.
+          example: "2026-08-20T09:04:12Z"
+    DatasetWithLinks:
+      description: A `Dataset` plus a self link. Returned by `GET /datasets/{datasetId}`.
+      allOf:
+        - $ref: '#/components/schemas/Dataset'
+        - type: object
+          properties:
+            _links:
+              type: object
+              properties:
+                self:
+                  type: object
+                  properties:
+                    href:
+                      type: string
+                      example: "/v1/datasets/ds_3f9a1c2e7b0d4a5f"
+    DatasetCreated:
+      description: |
+        A `Dataset` plus the first upload session — the presigned URL to PUT the file to.
+      allOf:
+        - $ref: '#/components/schemas/Dataset'
+        - type: object
+          required: [uploadId, upload]
+          properties:
+            uploadId:
+              type: string
+              description: |
+                Identifies this upload session. Pass to
+                `POST /datasets/{datasetId}/uploads/{uploadId}/finalize` once the PUT completes.
+              example: "up_1a2b3c4d5e6f7a8b"
+            upload:
+              type: object
+              required: [url, expiresInMinutes]
+              properties:
+                url:
+                  type: string
+                  description: |
+                    Presigned URL. `PUT` the raw CSV file here directly — no `Authorization`
+                    header, no other API credentials.
+                  example: "https://storage.qtsurfer.com/00000000-.../uploads/up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
+                expiresInMinutes:
+                  type: integer
+                  description: How long `url` stays valid.
+                  example: 15
+    DatasetVersion:
+      type: object
+      description: |
+        One successfully ingested upload. Cadence and timestamp unit are discovered from the file,
+        not declared by the caller (D-11).
+      required: [datasetId]
+      properties:
+        datasetId:
+          type: string
+          example: "ds_3f9a1c2e7b0d4a5f"
+        id:
+          type: string
+          description: The version id. Pass as `datasetVersionId` on `POST .../prepare` to pin it.
+          example: "dsv_8e2b4f19c6a03d7e"
+        bytes:
+          type: integer
+          description: Size of the uploaded file.
+          example: 4831022
+        rows:
+          type: integer
+          description: Number of data rows.
+          example: 86400
+        cadence:
+          type: string
+          description: The discovered bar cadence (e.g. `1s`, `1m`, `1h`).
+          example: "1s"
+        timestampUnit:
+          type: string
+          enum: [iso, s, ms, us]
+          description: |
+            The unit the `timestamp` column was uploaded in — ISO-8601, or the epoch band its
+            numeric values fell in (seconds, millis, or micros).
+          example: "iso"
+        gaps:
+          type: integer
+          description: Number of gaps at the discovered cadence.
+          example: 0
+        largestGapSteps:
+          type: integer
+          description: The largest gap, in units of the discovered cadence step.
+          example: 0
+    DatasetUploadState:
+      type: object
+      description: |
+        Progress of one upload, from staged through ingest. Postgres-backed once a version exists,
+        so `ready`/`failed` are permanent answers; `uploading`/`ingesting` reflect in-flight state
+        that can itself age out — see the `404` case on `GET .../uploads/{uploadId}`.
+      required: [uploadId, status]
+      properties:
+        uploadId:
+          type: string
+          example: "up_1a2b3c4d5e6f7a8b"
+        status:
+          type: string
+          enum: [uploading, ingesting, ready, failed]
+          description: |
+            * `uploading` — the file was PUT to the presigned URL, but `finalize` has not been
+              called yet.
+            * `ingesting` — `finalize` was called; the worker is parsing and validating the file.
+            * `ready` — ingested successfully. `version` carries the result.
+            * `failed` — ingest rejected the file (e.g. bad CSV contract, mixed timestamp units).
+          example: "ready"
+        jobId:
+          type: string
+          description: The ingest job id, while `status` is `ingesting`.
+        version:
+          allOf:
+            - $ref: '#/components/schemas/DatasetVersion'
+          description: Present when `status` is `ready` or `failed`.
     AuthTokenResponse:
       type: object
       required: [access_token, token_type, expires_in, tier]
@@ -2767,6 +3295,20 @@ tags:
       - Ensure strategies meet the required syntax and operational constraints.
       - Validate strategies to identify potential issues or errors before execution.
       - Integrate strategies with specific exchanges and market instruments for tailored use.
+  - name: Dataset
+    description: |-
+      The **dataset** endpoints let you upload your own historical ticker data and backtest against
+      it the same way you would against a managed exchange — via the reserved `exchangeId: user`
+      value on the existing `prepare`/`execute` endpoints. This is for data QTSurfer doesn't
+      capture itself: your own exports, a venue not yet integrated, or a private feed.
+
+      **Key functionalities**:
+      - Create a dataset and get a presigned URL to upload a CSV directly to object storage.
+      - Finalize an upload to trigger validated ingest (CSV contract check, cadence and timestamp
+        unit discovery, gap detection) and poll its result.
+      - List and inspect your datasets, including their current ingested version.
+      - Prepare and execute backtests against a dataset exactly like against a managed exchange.
+      - Delete a dataset you no longer need.
 externalDocs:
   description: Find out more about QTSurfer API
   url: 'https://qtsurfer.com/developers'
