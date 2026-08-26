@@ -24,6 +24,7 @@ openapi.yaml ──► GitHub Actions ──► Redocly CLI ──► index.html
 | `openapi.yaml` | OpenAPI 3.1.0 spec — **edit this** |
 | `index.html` | Generated Redoc HTML — **never edit manually** |
 | `README.md` | Repo README with strategy example and API quickstart |
+| `docs/*.md` | Per-endpoint-group reference (full params, examples, response fields) that the README links out to instead of inlining — e.g. `docs/backtest_execute.md`, `docs/backtest_sweep.md` |
 | `.github/workflows/redoc_index.yml` | CI: regenerates `index.html` on push |
 
 ## Common Tasks

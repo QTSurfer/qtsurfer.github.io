@@ -350,11 +350,13 @@ Errors: `404` sweep not found.
 ## Visualizing the winner: equity curve
 
 The sweep endpoints never return a time series — a `SweepRunRow` is one aggregate outcome per
-trial, not its trade-by-trade history. To see *how* the winning configuration got there, take
-its `params` from the leaderboard and run one normal `POST /backtest/{exchangeId}/{type}/execute`
-against the same `prepareJobId`; that response's `signalsUrl` points at a Parquet file with every
-emitted signal, which is what a client loads to plot cumulative PnL over time:
+trial, not its trade-by-trade history. `POST .../execute` has no per-call parameter-override
+field (just `prepareJobId`, `strategyId`, `storeSignals`), so reproducing one trial's curve means
+compiling the strategy with its property *defaults* set to the winning `params` — read off the
+leaderboard row — and executing that against the same `prepareJobId`. That response's
+`results.equityCurve` is then ready to plot directly:
 
-![Illustrative equity curve for the sweep's winning configuration, cumulative PnL rising from 0% to +18.3% over 30 days with a drawdown to -4% around day 10](img/sweep-equity-curve.svg)
+![Illustrative equity curve for the sweep's winning configuration, cumulative PnL rising from 0% to +18.3% over 30 days with a drawdown to -4% around day 10](img/equity-curve.svg)
 
-See [`POST .../execute` in the main README](../README.md#execute-backtest) for the request/response shape.
+See [`docs/backtest_execute.md`](backtest_execute.md#visualizing-the-equity-curve) for the full
+`execute`/poll request-response shape and the `equityCurve` field reference.

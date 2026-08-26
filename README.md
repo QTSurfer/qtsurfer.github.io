@@ -137,43 +137,33 @@ curl -X DELETE https://api.qtsurfer.net/v1/strategy/2ul144qe9tlwzu5anhwvc6 \
 # → {"strategyId": "2ul144qe9tlwzu5anhwvc6", "deleted": true}
 ```
 
-### Prepare market data
+### Backtests: prepare, execute, poll
+
+Prepare a dataset, run a strategy against it once, and poll the result — full parameter
+reference, response field tables, and an equity-curve walkthrough in
+**[docs/backtest_execute.md](docs/backtest_execute.md)**.
+
 ```bash
 curl -X POST https://api.qtsurfer.net/v1/backtest/binance/ticker/prepare \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"instrument":"BTC/USDT","from":"2026-03-14","to":"2026-03-15"}'
 # → 202 {"jobId": "5ikYAMIO..."}
-```
 
-Poll until completion:
-```bash
-curl https://api.qtsurfer.net/v1/backtest/binance/ticker/prepare/$PREPARE_JOB_ID \
-  -H "Authorization: Bearer $TOKEN"
-# → {"status": "Completed", ...}
-```
-
-### Execute backtest
-```bash
 curl -X POST https://api.qtsurfer.net/v1/backtest/binance/ticker/execute \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"prepareJobId":"5ikYAMIO...","strategyId":"2ul144qe9tlwzu5anhwvc6"}'
 # → 202 {"jobId": "4GmNN0i9..."}
-```
 
-### Poll results
-```bash
 curl https://api.qtsurfer.net/v1/backtest/binance/ticker/execute/$EXECUTE_JOB_ID \
   -H "Authorization: Bearer $TOKEN"
 # → {"state": {"status": "Completed", "completed": 85058},
 #    "results": {"pnlTotal": 42.75, "totalTrades": 156, "winRate": 58.33,
 #                "sharpeRatio": 1.245, "sortinoRatio": 1.872, "cagr": 0.1534,
-#                "maxDrawdown": 12.50, "maxDrawdownPercent": 8.75,
-#                "iops": 101346.81, "signalsUrl": "https://storage.qtsurfer.com/..."}}
+#                "maxDrawdown": 12.50, "maxDrawdownPercent": 8.75, "iops": 101346.81,
+#                "equityCurve": [{"timestamp": 1700000000000, "equity": 100.0}, ...]}}
 ```
-
-The response includes yield metrics (PnL, win rate, Sharpe, Sortino, CAGR, max drawdown) and a `signalsUrl` pointing to a Parquet file with all emitted signals, ready for visualization.
 
 ### Parameter sweeps
 
