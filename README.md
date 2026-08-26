@@ -99,10 +99,10 @@ stays a map, not a mirror, so a growing endpoint only ever needs its own doc tou
 
 | Area | Covers |
 |---|---|
-| **[docs/strategy.md](docs/strategy.md)** | Compile, validate, list, inspect, delete a strategy; read back its source |
-| **[docs/backtest_execute.md](docs/backtest_execute.md)** | Prepare a dataset, run a strategy once, poll the result, plot the equity curve |
-| **[docs/backtest_sweep.md](docs/backtest_sweep.md)** | Run across a parameter grid, walk-forward validation, sensitivity marginals/heatmaps |
-| **[docs/datasets.md](docs/datasets.md)** | Bring your own CSV instead of a managed exchange |
+| **[Strategies](docs/strategy.md)** | Compile, validate, list, inspect, delete a strategy; read back its source |
+| **[Backtests](docs/backtest_execute.md)** | Prepare a dataset, run a strategy once, poll the result, plot the equity curve |
+| **[Parameter sweeps](docs/backtest_sweep.md)** | Run across a parameter grid, walk-forward validation, sensitivity marginals/heatmaps |
+| **[Datasets](docs/datasets.md)** | Bring your own data instead of a managed exchange |
 
 ## Key Technologies
 
