@@ -34,8 +34,8 @@ Two shapes, chosen by the `exchangeId` path segment:
 | `datasetVersionId` | string | **only** for `exchangeId: user`, optional — pins a past version instead of the dataset's current one |
 | `cadence` | enum | `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w`, `1q` — default `1s`. Coarser-than-source values must be exact multiples of the source cadence |
 
-`exchangeId: user` is reserved for your own uploaded data — see [Bring your own data
-(datasets)](../README.md#bring-your-own-data-datasets) in the main README.
+`exchangeId: user` is reserved for your own uploaded data — see
+[`docs/datasets.md`](datasets.md).
 
 ### Example
 
