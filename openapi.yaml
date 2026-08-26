@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.110.1
+  version: 0.110.2
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -500,6 +500,10 @@ paths:
         - the id says nothing about *behaviour*. Two sources that compute the same thing by
           different means are two strategies, because deciding otherwise would mean deciding program
           equivalence.
+
+        The response also lists `declaredProperties` — the sweep/execute param keys this strategy
+        is known to accept, so a caller can catch a typo'd key before submitting a sweep instead of
+        only learning it from a rejected one. See `DeclaredProperty`: best-effort, not exhaustive.
       requestBody:
         description: The raw strategy source code
         required: true
@@ -519,8 +523,26 @@ paths:
                 properties:
                   strategyId:
                     $ref: '#/components/schemas/strategyId'
+                  declaredProperties:
+                    type: array
+                    description: |
+                      What could be established about this strategy's sweep-key vocabulary without
+                      constructing it. See `DeclaredProperty` — best-effort, not exhaustive.
+                    items:
+                      $ref: '#/components/schemas/DeclaredProperty'
               example:
                 strategyId: 6bsh31ikwkuivhtgcoa6s4
+                declaredProperties:
+                  - name: rsi.period
+                    description: RSI period
+                    defaultValue: '14'
+                    reflected: true
+                    min: 2
+                    max: 50
+                    step: 1
+                  - name: enabled
+                    description: Enabled
+                    reflected: true
         '400':
           description: |
             The source is not valid Java; the message carries the compiler diagnostics. Nothing is
@@ -2919,6 +2941,54 @@ components:
         `POST /strategy` for exactly which rewrites preserve it and which do not.
       type: string
       example: 6bsh31ikwkuivhtgcoa6s4
+    DeclaredProperty:
+      type: object
+      description: |
+        One property name `POST /strategy` could establish without constructing the strategy —
+        either declared with `@StrategyProperty` on the compiled source, or one of the small set of
+        base properties every strategy carries (`amnt`, `enabled`, `multiEntry`, ...).
+
+        **Best-effort, not exhaustive.** A property registered through an attached risk/backtest
+        config needs a live instance to discover and is not listed here. Use this to catch a typo'd
+        sweep key before submitting, not as the definitive list of what a sweep will accept — a
+        name absent from this list may still be valid.
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: The key a sweep or execute param map uses for this property.
+          example: rsi.period
+        description:
+          type: string
+          description: Human-readable label, as declared.
+          example: RSI period
+        defaultValue:
+          type: string
+          description: |
+            The declared default, as a string, if one was given. Absent, not null, when none was
+            declared.
+          example: '14'
+        reflected:
+          type: boolean
+          description: |
+            Whether a value for this key is injected into the strategy's field (`true`) or only
+            available through the property map (`false`).
+          example: true
+        min:
+          type: number
+          format: double
+          description: Suggested sweep/range minimum, if declared. Advisory only, never validated.
+          example: 2
+        max:
+          type: number
+          format: double
+          description: Suggested sweep/range maximum, if declared. Advisory only, never validated.
+          example: 50
+        step:
+          type: number
+          format: double
+          description: Suggested sweep/range step, if declared. Advisory only, never validated.
+          example: 1
     Notice:
       type: object
       description: |
