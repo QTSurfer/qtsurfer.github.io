@@ -132,6 +132,14 @@ unadjusted ordering.
 | `truncated` | `true` only when the `ranked` view exceeds its display limit |
 | `leaderboard` | array of [`SweepRunRow`](#leaderboard-rows--sweeprunrow) |
 | `walkForward` | present only for a walk-forward sweep — see [below](#walk-forward-validation) |
+| `state` | the same [`JobState`](backtest_execute.md#response--preparejobstate) shape a single execute's result carries — not a lookalike, the same type. See below for how it relates to `status` above |
+
+`state.status` is a **different vocabulary** from the sweep's own `status` field above (`New` /
+`Started` / `Completed` / `Aborted` / `Failed`, mapped from it — `PARTIAL` and `CANCELLED` both
+become `Aborted`, since a sweep's `PARTIAL` is already terminal, unlike the non-terminal `Partial`
+a single job can be in). `state.completed` is real ticks processed on a plain sweep; on a
+walk-forward sweep it is currently always `0`. `state.size` is always `0` on every execute and
+sweep path today — nothing populates it yet.
 
 #### `progress` — `SweepProgress`
 
@@ -188,7 +196,12 @@ curl "https://api.qtsurfer.net/v1/backtest/binance/ticker/executeSweep/$PREPARE_
       "maxDdPct": 6.4, "trades": 118, "winRate": 57.6,
       "belowTradeFloor": false, "aborted": false, "runtimeMs": 842
     }
-  ]
+  ],
+  "state": {
+    "contextId": "swp_95e47a7f0966ce11",
+    "status": "Started", "size": 0, "completed": 31,
+    "startTime": "2026-03-18T13:21:28.958Z", "endTime": null
+  }
 }
 ```
 

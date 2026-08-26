@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.110.2
+  version: 0.110.3
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2609,12 +2609,16 @@ components:
         - leaderboardSize
         - truncated
         - leaderboard
+        - state
       properties:
         sweepId:
           type: string
         status:
           type: string
           enum: [RUNNING, COMPLETED, PARTIAL, CANCELLED]
+          description: >-
+            The sweep's own status vocabulary — not the same set `state.status` below uses. See
+            `state` for why.
         objective:
           type: string
           enum: [sharpe, sortino, pnl, maxdd]
@@ -2669,6 +2673,27 @@ components:
             $ref: '#/components/schemas/SweepRunRow'
         walkForward:
           $ref: '#/components/schemas/WalkForwardResult'
+        state:
+          allOf:
+            - $ref: '#/components/schemas/JobState'
+          description: >-
+            The same `JobState` shape a single-execute `BacktestJobResult` carries — not a
+            sweep-specific lookalike, the actual type, so field names and timestamp formatting
+            match exactly.
+
+            `state.status` uses `JobState`'s own vocabulary (`New`/`Started`/`Completed`/
+            `Aborted`/`Failed`), mapped from the sweep's `status` field above rather than copying
+            it: `PARTIAL` and `CANCELLED` both map to `Aborted`, because a sweep's `PARTIAL` is
+            already terminal (some shards finished, some failed, nothing more is coming) unlike a
+            single job's non-terminal `Partial`, which has no equivalent here at all.
+
+            `state.completed` is real ticks processed on a plain sweep. On a `walkForward` sweep it
+            is currently always `0` — the walk-forward fold runner was not wired to count ticks
+            when this shipped, unlike the plain shard path.
+
+            `state.size` is always `0` on every path (single execute, plain sweep, walk-forward
+            alike) — nothing populates it anywhere yet. That is a known gap across the whole API,
+            not a sweep-specific omission.
     WalkForwardResult:
       type: object
       description: >-
