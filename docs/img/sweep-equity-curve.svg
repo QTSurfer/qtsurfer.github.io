@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 320" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <rect x="0.5" y="0.5" width="719" height="319" rx="8" fill="#fcfcfb" stroke="rgba(11,11,11,0.10)"/>
+
+  <text x="24" y="30" font-size="16" font-weight="600" fill="#0b0b0b">Equity curve — winning configuration (single execute run)</text>
+  <text x="24" y="50" font-size="12" fill="#52514e">Illustrative — cumulative PnL % from re-running execute on the sweep's top parameters, plotted from signalsUrl</text>
+
+  <!-- gridlines -->
+  <line x1="60" y1="76" x2="660" y2="76" stroke="#e1e0d9" stroke-width="1"/>
+  <line x1="60" y1="140" x2="660" y2="140" stroke="#e1e0d9" stroke-width="1"/>
+  <line x1="60" y1="205" x2="660" y2="205" stroke="#e1e0d9" stroke-width="1"/>
+
+  <!-- y axis labels -->
+  <text x="52" y="80" font-size="11" fill="#898781" text-anchor="end">20%</text>
+  <text x="52" y="144" font-size="11" fill="#898781" text-anchor="end">10%</text>
+  <text x="52" y="209" font-size="11" fill="#898781" text-anchor="end">0%</text>
+
+  <!-- area fill -->
+  <path d="M60,256 L60,205 L100,197 L140,187 L180,195 L220,211 L260,230 L300,221 L340,201 L380,185 L420,169 L460,153 L500,137 L540,121 L580,108 L620,95 L660,87 L660,256 Z"
+        fill="#2a78d6" fill-opacity="0.10" stroke="none"/>
+
+  <!-- line -->
+  <polyline points="60,205 100,197 140,187 180,195 220,211 260,230 300,221 340,201 380,185 420,169 460,153 500,137 540,121 580,108 620,95 660,87"
+            fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- baseline / x axis -->
+  <line x1="60" y1="256" x2="660" y2="256" stroke="#c3c2b7" stroke-width="1"/>
+
+  <!-- end marker -->
+  <circle cx="660" cy="87" r="6" fill="#fcfcfb"/>
+  <circle cx="660" cy="87" r="4" fill="#2a78d6"/>
+  <text x="666" y="83" font-size="12" font-weight="600" fill="#0b0b0b">+18.3%</text>
+
+  <!-- x axis labels -->
+  <text x="60" y="272" font-size="11" fill="#898781" text-anchor="start">Day 0</text>
+  <text x="260" y="272" font-size="11" fill="#898781" text-anchor="middle">Day 10</text>
+  <text x="460" y="272" font-size="11" fill="#898781" text-anchor="middle">Day 20</text>
+  <text x="660" y="272" font-size="11" fill="#898781" text-anchor="end">Day 30</text>
+  <text x="360" y="292" font-size="12" font-weight="600" fill="#52514e" text-anchor="middle">trading days (prepared session)</text>
+</svg>
