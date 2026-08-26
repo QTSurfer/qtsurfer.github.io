@@ -101,8 +101,15 @@ curl -X POST https://api.qtsurfer.net/v1/strategy \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: text/plain" \
   --data-binary @MyStrategy.java
-# → {"strategyId": "2ul144qe9tlwzu5anhwvc6"}
+# → {"strategyId": "2ul144qe9tlwzu5anhwvc6",
+#    "declaredProperties": [{"name": "rsi.period", "description": "RSI period",
+#                             "defaultValue": "14", "reflected": true,
+#                             "min": 2, "max": 50, "step": 1}, ...]}
 ```
+`declaredProperties` lists the sweep/execute param keys this strategy is known to accept — enough
+to catch a typo'd key before submitting a sweep instead of only learning it from a rejected one.
+Best-effort, not exhaustive: a property registered imperatively (e.g. through an attached
+`RiskConfig`) isn't discoverable without running the strategy, so it won't appear here.
 
 ### List your strategies
 ```bash
