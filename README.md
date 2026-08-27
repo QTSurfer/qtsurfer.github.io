@@ -95,9 +95,31 @@ has not been switched on. The examples in `docs/` use the live host for that rea
 
 ## API Quick Start
 
-All endpoints require JWT authentication (`Authorization: Bearer <token>`). Each area below has
-its own doc with full parameter tables, request/response examples, and error cases — this README
-stays a map, not a mirror, so a growing endpoint only ever needs its own doc touched.
+All endpoints require JWT authentication (`Authorization: Bearer <token>`). The JWT is short-lived
+and obtained by exchanging your API key — issued via the web app — at `POST /auth/token`:
+
+```bash
+curl -X POST https://api.qtsurfer.net/v1/auth/token \
+  -H "X-API-Key: <your-api-key>"
+```
+
+```json
+{
+  "access_token": "eyJhbGciOiJIUzI1NiJ9...",
+  "token_type": "Bearer",
+  "expires_in": 3600,
+  "scopes": ["STRATEGIES:READ", "STRATEGIES:WRITE", "..."],
+  "tier": "free"
+}
+```
+
+Send `access_token` as `Authorization: Bearer <token>` on every other call; refresh before it
+expires (or on a `401`) by calling `/auth/token` again. `X-API-Key` is accepted only on this one
+endpoint — everywhere else expects the bearer token, not the raw API key.
+
+Each area below has its own doc with full parameter tables, request/response examples, and error
+cases — this README stays a map, not a mirror, so a growing endpoint only ever needs its own doc
+touched.
 
 | Area | Covers |
 |---|---|
