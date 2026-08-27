@@ -1208,7 +1208,7 @@ paths:
 
         Query params reshape the response the same way a plain backtest's `equityCurve` options do.
         A param genuinely absent from the query string falls back to the `equityCurve` transform
-        preference the sweep was submitted with (GOAL_SPEC equity-curve-transform D-1) — a param
+        preference the sweep was submitted with — a param
         present but malformed does not fall back, it degrades the same way it always has. Above a
         server-side size threshold, the shape is forced regardless of either — `meta.outMode` in
         the response, not the query string or the submitted default, is the source of truth for
@@ -2394,7 +2394,7 @@ components:
     EquityCurveOptions:
       type: object
       description: >-
-        Requested equity-curve transform (GOAL_SPEC equity-curve-transform D-1), applied
+        Requested equity-curve transform, applied
         server-side in a fixed pipeline order: `resample` (point count) then `differential`
         (encoding) then `outMode` (JSON shape) — each stage assumes the previous one already ran.
         A server-side size guard can still force a smaller/deflated shape above its thresholds
@@ -2441,7 +2441,7 @@ components:
               description: Top percentage of trials to retain when mode is topPct.
       description: >-
         Selection (`mode`/`n`/`maxPct`) plus the transform preference
-        (`resample`/`differential`/`outMode`, GOAL_SPEC equity-curve-transform D-1) applied by
+        (`resample`/`differential`/`outMode`) applied by
         `GET .../equityCurve` whenever ITS OWN query params are absent, for a curve this sweep
         retained. The transform half never affects retention or `sweepId` — a caller can always
         override it per-request at read time regardless of what was submitted here.
@@ -2675,8 +2675,8 @@ components:
           allOf:
             - $ref: '#/components/schemas/EquityCurveResult'
           description: >-
-            Present only when this trial's curve was selected (GOAL_SPEC
-            `sweep-topn-equity-curves` D-8: `equityCurve.mode` was `topN`/`topPct` on the request,
+            Present only when this trial's curve was selected (`equityCurve.mode` was `topN`/`topPct`
+            on the request,
             and this row ranked among the winners) — absent, not null, otherwise; a run that was
             never spilled and one that was spilled but not selected look identical here. Always a
             pointer today (`url` present, no inline points): a sweep's curves live in a spill
