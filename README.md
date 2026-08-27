@@ -8,6 +8,8 @@ Write trading strategies in Java, submit them to be compiled, run backtests agai
 
 **[qtsurfer.github.io](https://qtsurfer.github.io)** — Interactive OpenAPI documentation
 
+**[Engine Javadoc](https://qtsurfer.github.io/qtsurfer-engine-java-docs/)** — strategy SDK classes (indicators, signals, execution) referenced below
+
 ## How It Works
 
 ```
