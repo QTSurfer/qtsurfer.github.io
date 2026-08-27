@@ -1196,6 +1196,100 @@ paths:
         - bearerAuth: []
       tags:
         - Backtesting
+  '/backtest/{exchangeId}/{type}/executeSweep/{requestId}/{sweepId}/runs/{runIx}/equityCurve':
+    get:
+      operationId: getSweepRunEquityCurve
+      summary: Get one sweep trial's equity curve
+      description: |
+        The resource a leaderboard row's `equityCurve.url` points at — only reachable when that
+        trial's curve was actually selected (`equityCurve.mode: topN` or `topPct` on the sweep
+        submission, and this trial ranked among the winners). Returns the exact same
+        `{points|timestamps+equities, meta}` shape a plain backtest's inline `equityCurve` carries.
+
+        Query params reshape the response the same way a plain backtest's `equityCurve` options do.
+        A param genuinely absent from the query string falls back to the `equityCurve` transform
+        preference the sweep was submitted with (GOAL_SPEC equity-curve-transform D-1) — a param
+        present but malformed does not fall back, it degrades the same way it always has. Above a
+        server-side size threshold, the shape is forced regardless of either — `meta.outMode` in
+        the response, not the query string or the submitted default, is the source of truth for
+        what shape actually came back.
+      parameters:
+        - name: exchangeId
+          in: path
+          required: true
+          schema:
+            type: string
+            example: binance
+        - name: type
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/DataSourceType'
+        - name: requestId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: sweepId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: runIx
+          in: path
+          required: true
+          description: The trial's `runIx`, as it appears on its leaderboard row.
+          schema:
+            type: integer
+            minimum: 0
+        - name: outMode
+          in: query
+          required: false
+          description: >-
+            Requested JSON shape. Omit to use the sweep's submitted default; may be overridden
+            either way by the server's size guard.
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/EquityCurveOutMode'
+            default: ARRAY
+        - name: resample
+          in: query
+          required: false
+          description: >-
+            Downsample to at most this many points (extrema-preserving — the global max/min and
+            the exact first/last point are always kept). Omit to use the sweep's submitted
+            default (itself omittable, for no downsampling).
+          schema:
+            type: integer
+            minimum: 2
+        - name: differential
+          in: query
+          required: false
+          description: >-
+            Delta-encode both fields from the second point onward. Omit to use the sweep's
+            submitted default.
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: The trial's equity curve, shaped per the resolved options.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EquityCurveResult'
+        '404':
+          description: >-
+            Sweep or `runIx` not found, or that trial's curve was never selected — indistinguishable
+            from a caller's perspective.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Backtesting
   '/backtest/{exchangeId}/{type}/execute':
     post:
       operationId: executeBacktest
@@ -1208,8 +1302,9 @@ paths:
         Returns immediately with a `jobId`; poll `GET /backtest/{exchangeId}/{type}/execute/{jobId}`
         for the result.
 
-        The same params (same `prepareJobId`, `strategyId`, `storeSignals`) always return the same
-        `jobId` (idempotent).
+        The same params (same `prepareJobId`, `strategyId`, `storeSignals`, `equityCurve`) always
+        return the same `jobId` (idempotent) — a request that omits `equityCurve` dedupes exactly
+        as it did before that field existed.
 
         Works unchanged for a dataset-backed prepare (`exchangeId: user`) — the request body is
         identical either way, since the instrument and range are recovered from `prepareJobId`.
@@ -1250,6 +1345,8 @@ paths:
                     When true, the worker uploads emitted signals to object storage and the
                     response includes `signalsUrl` / `signalsId` fields. Defaults to false.
                   default: false
+                equityCurve:
+                  $ref: '#/components/schemas/EquityCurveOptions'
             example:
               prepareJobId: "13RBLGQlPnfDjO6wyKSX8i"
               strategyId: "6bsh31ikwkuivhtgcoa6s4"
@@ -1403,12 +1500,19 @@ paths:
                   maxDrawdown: 12.50
                   maxDrawdownPercent: 8.75
                   equityCurve:
-                    - timestamp: 1700000000000
-                      equity: 100.0
-                    - timestamp: 1700000060000
-                      equity: 110.5
-                    - timestamp: 1700000120000
-                      equity: 90.25
+                    points:
+                      - timestamp: 1700000000000
+                        equity: 100.0
+                      - timestamp: 1700000060000
+                        equity: 110.5
+                      - timestamp: 1700000120000
+                        equity: 90.25
+                    meta:
+                      inputPointCount: 3
+                      outputPointCount: 3
+                      resampled: false
+                      differential: false
+                      outMode: ARRAY
                   signalCount: 100000
                   signalsId: "00000000-0000-0000-0000-000000000000/exec/binance/3vsndwikcuaatjmb83fjtl"
                   signalsUrl: "https://storage.qtsurfer.com/00000000-0000-0000-0000-000000000000/exec/binance/3vsndwikcuaatjmb83fjtl.parquet"
@@ -2285,6 +2389,62 @@ components:
           description: Trials below this trade count are flagged but remain in the results.
         walkForward:
           $ref: '#/components/schemas/WalkForwardRequest'
+        equityCurve:
+          $ref: '#/components/schemas/EquityCurveRequest'
+    EquityCurveOptions:
+      type: object
+      description: >-
+        Requested equity-curve transform (GOAL_SPEC equity-curve-transform D-1), applied
+        server-side in a fixed pipeline order: `resample` (point count) then `differential`
+        (encoding) then `outMode` (JSON shape) — each stage assumes the previous one already ran.
+        A server-side size guard can still force a smaller/deflated shape above its thresholds
+        regardless of what is requested here — see `EquityCurveMeta` for what actually happened.
+      properties:
+        resample:
+          type: integer
+          minimum: 2
+          description: >-
+            Downsample to at most this many points (extrema-preserving — the global max/min and
+            the exact first/last point are always kept). Omit for no downsampling.
+        differential:
+          type: boolean
+          default: false
+          description: Delta-encode both fields from the second (post-resample) point onward.
+        outMode:
+          allOf:
+            - $ref: '#/components/schemas/EquityCurveOutMode'
+          default: ARRAY
+          description: Requested JSON shape.
+    EquityCurveRequest:
+      allOf:
+        - $ref: '#/components/schemas/EquityCurveOptions'
+        - type: object
+          properties:
+            mode:
+              type: string
+              enum: [auto, topN, topPct, none]
+              default: auto
+              description: >-
+                Which trials keep their per-point equity curve. `auto` retains curves only
+                while the accumulated size stays within server limits; `topN`/`topPct`
+                retain curves for the best-ranked trials explicitly; `none` retains no
+                curves.
+            n:
+              type: integer
+              minimum: 1
+              description: Trial count to retain when mode is topN.
+            maxPct:
+              type: number
+              format: double
+              exclusiveMinimum: 0
+              maximum: 100
+              description: Top percentage of trials to retain when mode is topPct.
+      description: >-
+        Selection (`mode`/`n`/`maxPct`) plus the transform preference
+        (`resample`/`differential`/`outMode`, GOAL_SPEC equity-curve-transform D-1) applied by
+        `GET .../equityCurve` whenever ITS OWN query params are absent, for a curve this sweep
+        retained. The transform half never affects retention or `sweepId` — a caller can always
+        override it per-request at read time regardless of what was submitted here.
     WalkForwardRequest:
       type: object
       description: >-
@@ -2511,6 +2671,18 @@ components:
         runtimeMs:
           type: integer
           format: int64
+        equityCurve:
+          allOf:
+            - $ref: '#/components/schemas/EquityCurveResult'
+          description: >-
+            Present only when this trial's curve was selected (GOAL_SPEC
+            `sweep-topn-equity-curves` D-8: `equityCurve.mode` was `topN`/`topPct` on the request,
+            and this row ranked among the winners) — absent, not null, otherwise; a run that was
+            never spilled and one that was spilled but not selected look identical here. Always a
+            pointer today (`url` present, no inline points): a sweep's curves live in a spill
+            store, not the response, until fetched separately. `GET` the `url` to fetch the curve
+            itself; its own `meta` there is the real, possibly size-guarded outcome, while this
+            outer `meta` is a raw, untransformed preview from selection time and can differ.
     SweepSensitivity:
       type: object
       description: >-
@@ -2896,21 +3068,29 @@ components:
           description: Maximum percentage drawdown from peak equity
           example: 8.75
         equityCurve:
-          type: array
+          allOf:
+            - $ref: '#/components/schemas/EquityCurveResult'
           description: >-
-            Equity curve over the backtest. Element 0 is an anchor at the backtest `from`
-            with `initialCapital`; the remaining points are one sample per emitted yield,
-            in order. Use it to plot the strategy's running equity without re-deriving
-            it from the yield history.
-          items:
-            $ref: '#/components/schemas/EquityPoint'
+            Equity curve over the backtest. `points[0]` (or `timestamps[0]`/`equities[0]` in
+            `SHORT` mode) is an anchor at the backtest `from` with `initialCapital`; the remaining
+            points are one sample per emitted yield, in order. Use it to plot the strategy's
+            running equity without re-deriving it from the yield history. Always inline for a
+            plain backtest today — never a pointer (`url`); that shape exists only for a sweep
+            row's top-N winners.
           example:
-            - timestamp: 1700000000000
-              equity: 100.0
-            - timestamp: 1700000060000
-              equity: 110.5
-            - timestamp: 1700000120000
-              equity: 90.25
+            points:
+              - timestamp: 1700000000000
+                equity: 100.0
+              - timestamp: 1700000060000
+                equity: 110.5
+              - timestamp: 1700000120000
+                equity: 90.25
+            meta:
+              inputPointCount: 3
+              outputPointCount: 3
+              resampled: false
+              differential: false
+              outMode: ARRAY
         signalCount:
           type: integer
           description: Number of signals emitted during strategy execution
@@ -2959,6 +3139,95 @@ components:
           format: double
           description: Running equity at this point (`initialCapital + cumulativePnl`).
           example: 110.5
+    EquityCurveOutMode:
+      type: string
+      enum: [ARRAY, SHORT]
+      description: >-
+        JSON shape for an equity curve's points. `ARRAY` is `[{timestamp, equity}, ...]`; `SHORT`
+        is `{timestamps: [...], equities: [...]}` (parallel arrays, no repeated key text). The one
+        schema shared by every place `outMode` appears, request or response, so the two cannot
+        drift to different value sets.
+    EquityCurveMeta:
+      type: object
+      description: >-
+        What the transform pipeline actually did, computed from the observed outcome — never a
+        copy of what was requested. Lets a caller detect a forced or no-op transform (e.g. a
+        `resample` ceiling already above the curve's size is a legal no-op, reported honestly as
+        `resampled: false`).
+      required:
+        - inputPointCount
+        - outputPointCount
+        - resampled
+        - differential
+        - outMode
+      properties:
+        inputPointCount:
+          type: integer
+          description: Size of the curve the transform pipeline received.
+          example: 100000
+        outputPointCount:
+          type: integer
+          description: Size after the full pipeline (resample, then differential, then outMode).
+          example: 100
+        resampled:
+          type: boolean
+          description: True only if the resample stage actually changed the point count.
+        differential:
+          type: boolean
+          description: >-
+            True only if delta-encoding actually ran. Requesting it on a curve of 0 or 1 points
+            has nothing to encode, so it does not run even if asked.
+        outMode:
+          allOf:
+            - $ref: '#/components/schemas/EquityCurveOutMode'
+          description: >-
+            The actual JSON shape served. Present even when the points themselves are not (a
+            pointer curve, `EquityCurveResult.url`) — a caller resolving that URL separately still
+            needs to know how to parse what it gets back before fetching it. May override an
+            explicit request above a server-side size threshold; this field, not the request, is
+            the source of truth for what shape actually came back.
+          example: ARRAY
+    EquityCurveResult:
+      type: object
+      description: >-
+        An equity curve, shaped per `meta.outMode`: `points` when `ARRAY`, `timestamps` +
+        `equities` (parallel arrays) when `SHORT`. Used identically wherever a curve is returned —
+        a plain backtest's inline `equityCurve` and a sweep row's `equityCurve` are the same type.
+        `url` is present *instead of* any points when the curve is served by pointer rather than
+        inline (a sweep row's top-N winners only): `GET` it separately to fetch this exact same
+        shape with the points populated.
+      required:
+        - meta
+      properties:
+        meta:
+          $ref: '#/components/schemas/EquityCurveMeta'
+        points:
+          type: array
+          description: Present when `meta.outMode` is `ARRAY` and the curve is inline (not a pointer).
+          items:
+            $ref: '#/components/schemas/EquityPoint'
+        timestamps:
+          type: array
+          description: Present when `meta.outMode` is `SHORT` and the curve is inline (not a pointer).
+          items:
+            type: integer
+            format: int64
+        equities:
+          type: array
+          description: >-
+            Present when `meta.outMode` is `SHORT` and the curve is inline (not a pointer),
+            parallel to `timestamps` (same index, same point).
+          items:
+            type: number
+            format: double
+        url:
+          type: string
+          description: >-
+            Present only for a sweep row's pointer curve. `GET` this to fetch the curve itself, in
+            this exact `{points|timestamps+equities, meta}` shape — `meta` there is the real,
+            possibly size-guarded outcome; this outer `meta` is a raw, untransformed preview from
+            the moment the sweep selected this trial's curve, and the two can legitimately differ.
+          example: "/v1/backtest/binance/ticker/executeSweep/req-1/swp_test/runs/3/equityCurve"
     strategyId:
       description: |
         Unique identifier for a compiled strategy, derived from the source itself: the same code

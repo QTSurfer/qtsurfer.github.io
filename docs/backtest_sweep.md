@@ -4,7 +4,7 @@ Run a strategy across a parameter grid instead of one fixed set of values, poll 
 leaderboard, optionally validate the winner out of sample with walk-forward folds, and inspect
 which parameters actually moved the objective.
 
-All four endpoints share `{exchangeId}/{type}/executeSweep/{requestId}` (`requestId` is the
+All five endpoints share `{exchangeId}/{type}/executeSweep/{requestId}` (`requestId` is the
 `jobId` from `POST /backtest/{exchangeId}/{type}/prepare` — a sweep reuses the same prepared
 dataset, never a fresh one):
 
@@ -14,6 +14,7 @@ dataset, never a fresh one):
 | `GET` | `.../executeSweep/{requestId}/{sweepId}` | Poll progress and the leaderboard |
 | `DELETE` | `.../executeSweep/{requestId}/{sweepId}` | Cancel a running sweep |
 | `GET` | `.../executeSweep/{requestId}/{sweepId}/sensitivity` | Marginals and heatmaps |
+| `GET` | `.../executeSweep/{requestId}/{sweepId}/runs/{runIx}/equityCurve` | A selected trial's equity curve — see [below](#visualizing-a-winner-equity-curve) |
 
 ## Submitting a sweep
 
@@ -27,6 +28,7 @@ dataset, never a fresh one):
 | `sweep` | [`SweepSpecRequest`](#sweep--sweepspecrequest) | — | required — the grid itself |
 | `baseConfig` | [`SweepBaseConfig`](#baseconfig--sweepbaseconfig) | — | backtest config shared by every trial |
 | `walkForward` | [`WalkForwardRequest`](#walk-forward-validation) | — | opt in to out-of-sample validation instead of a flat sweep |
+| `equityCurve` | [`EquityCurveRequest`](#equitycurve--equitycurverequest) | `{mode: "auto"}` | opt in to getting selected trials' equity curves back — see [Visualizing a winner: equity curve](#visualizing-a-winner-equity-curve) |
 | `storeSignals` | boolean | `false` | store signals for every trial; keep `false` for normal sweeps |
 | `shards` | integer ≥ 0 | `0` | requested horizontal shard count; `0` selects automatically |
 | `minTradeFloor` | integer ≥ 0 | `30` | trials below this trade count are flagged (`belowTradeFloor`) but stay in the results |
@@ -65,6 +67,31 @@ Applied identically to every trial in the sweep.
 | `buyFeeRate` / `sellFeeRate` | number ≥ 0 | — | override `feeRate` per side |
 | `feeLeg` | `RECEIVED` \| `QUOTE` \| `BASE` | `RECEIVED` | |
 | `percentAmountToLock` | number, 0 < n ≤ 100 | — | |
+
+#### `equityCurve` — `EquityCurveRequest`
+
+Opts selected trials into keeping their equity curve, fetchable afterward — see
+[Visualizing a winner: equity curve](#visualizing-a-winner-equity-curve) for the full flow.
+
+| Field | Type | Default | Notes |
+|---|---|---|---|
+| `mode` | `auto` \| `topN` \| `topPct` \| `none` | `auto` | which trials keep a curve |
+| `n` | integer ≥ 1 | — | required when `mode` is `topN`: retain the top `n` trials by the sweep's objective |
+| `maxPct` | number, 0 < maxPct ≤ 100 | — | required when `mode` is `topPct`: retain the top `maxPct`% of trials (rounded up, minimum 1) |
+| `resample`, `differential`, `outMode` | see [`EquityCurveOptions`](../openapi.yaml) | — | the transform **default** applied by `GET .../equityCurve` whenever a caller's own query params are absent — not a retention choice. See [Query params — reshape the response](#query-params--reshape-the-response) |
+
+**`mode: "auto"` currently retains nothing** — it is reserved for a future size-based default (curves
+kept automatically while the total stays small) that is not built yet, so it behaves identically to
+`none` today. Ask for `topN` or `topPct` explicitly to get curves back.
+
+`resample`/`differential`/`outMode` shape *presentation*, not retention: they never affect which
+trials keep a curve, and — unlike a plain
+[`POST .../execute`](backtest_execute.md#requesting-a-transform-on-submit)'s own `equityCurve`,
+which IS part of that endpoint's idempotency key — they are excluded from what identifies this
+sweep. Two otherwise identical submits that differ only in this half of `equityCurve` dedupe to
+the same `sweepId`; the second submit's transform preference is not applied, since a caller can
+always ask for a different shape per-request at read time regardless of what any submit asked for
+as a default.
 
 ### Example
 
@@ -167,6 +194,7 @@ retrying, or not yet started.
 | `deflatedSharpe` | probability this run's Sharpe reflects real edge rather than the best draw among however many vectors were tried. `> ~0.95` survives the multiple-testing correction; `≤ 0.5` is indistinguishable from the best of a pile of coin flips |
 | `params`, `sharpe`, `sortino`, `pnl`, `pnlPct`, `cagr`, `maxDdPct`, `trades`, `winRate` | the trial's own results |
 | `belowTradeFloor`, `aborted`, `runtimeMs` | |
+| `equityCurve` | present only when this trial's curve was selected — see [Visualizing a winner: equity curve](#visualizing-a-winner-equity-curve) |
 
 ### Example
 
@@ -360,16 +388,179 @@ Requests cancellation between parameter vectors — already-completed rows remai
 
 Errors: `404` sweep not found.
 
-## Visualizing the winner: equity curve
+## Visualizing a winner: equity curve
 
-The sweep endpoints never return a time series — a `SweepRunRow` is one aggregate outcome per
-trial, not its trade-by-trade history. `POST .../execute` has no per-call parameter-override
-field (just `prepareJobId`, `strategyId`, `storeSignals`), so reproducing one trial's curve means
-compiling the strategy with its property *defaults* set to the winning `params` — read off the
-leaderboard row — and executing that against the same `prepareJobId`. That response's
-`results.equityCurve` is then ready to plot directly:
+A `SweepRunRow` is one aggregate outcome per trial, not its trade-by-trade history — by default the
+sweep endpoints never return a time series. Ask for one explicitly with `equityCurve` on the submit
+request.
+
+### The native path: submit with equityCurve
+
+```bash
+curl -X POST "https://api.qtsurfer.net/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategyId": "2ul144qe9tlwzu5anhwvc6",
+    "sweep": {"sampler":"grid","objective":"sharpe",
+              "params":{"rsiPeriod":{"from":7,"to":28,"step":1}}},
+    "equityCurve": {"mode": "topN", "n": 5}
+  }'
+```
+
+The top-5 trials by the sweep's objective — ranked with the same rule the leaderboard itself uses —
+each get an `equityCurve` field on their leaderboard row once the sweep finalizes:
+
+```json
+{
+  "runIx": 12,
+  "sharpe": 1.84,
+  "equityCurve": {
+    "meta": {
+      "inputPointCount": 118, "outputPointCount": 118,
+      "resampled": false, "differential": false, "outMode": "ARRAY"
+    },
+    "url": "/v1/backtest/binance/ticker/executeSweep/5ikYAMIO.../swp_95e47a7f0966ce11/runs/12/equityCurve"
+  }
+}
+```
+
+**`equityCurve` is absent, not `null`, on every row that was not selected** — a run that never had
+a curve retained and one that was retained but ranked outside the top-N look identical here.
+
+That outer `meta` is a raw preview from the moment the sweep selected this trial, not the final
+answer — `GET` the `url` to fetch the curve itself, ready to plot directly:
+
+```bash
+curl "https://api.qtsurfer.net$URL" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "points": [
+    {"timestamp": 1700000000000, "equity": 100.0},
+    {"timestamp": 1700000060000, "equity": 110.5},
+    {"timestamp": 1700000120000, "equity": 90.25}
+  ],
+  "meta": {
+    "inputPointCount": 118, "outputPointCount": 118,
+    "resampled": false, "differential": false, "outMode": "ARRAY"
+  }
+}
+```
+
+This *is* the response's real, size-guarded `meta` — it can legitimately differ from the row's own
+preview above once the curve is large enough that the server reshapes it on the way out (see
+`?outMode=`/`?resample=`/`?differential=` below).
 
 ![Illustrative equity curve for the sweep's winning configuration, cumulative PnL rising from 0% to +18.3% over 30 days with a drawdown to -4% around day 10](img/equity-curve.svg)
 
-See [`docs/backtest_execute.md`](backtest_execute.md#visualizing-the-equity-curve) for the full
-`execute`/poll request-response shape and the `equityCurve` field reference.
+#### Query params — reshape the response
+
+| Query param | Type | Default | Notes |
+|---|---|---|---|
+| `outMode` | `ARRAY` \| `SHORT` | `ARRAY` | `SHORT` returns `{timestamps: [...], equities: [...]}` (parallel arrays) instead of `points` |
+| `resample` | integer ≥ 2 | — | downsample to at most this many points (extrema-preserving — the global max/min and every point's exact first/last are always kept) |
+| `differential` | boolean | `false` | delta-encode both fields from the second point onward; the first point stays absolute |
+
+Each param, if genuinely omitted from the query string, falls back to whatever the sweep's own
+`equityCurve.resample`/`differential`/`outMode` asked for at submit time (the "Default" column
+above is the library default when that was omitted too) — see the request field table
+[above](#equitycurve--equitycurverequest). A param that IS present but malformed does not fall
+back; it degrades the same way it always has. Set a default once at submit time and every `GET`
+against this sweep inherits it, without repeating the query string on each call:
+
+```bash
+curl -X POST "https://api.qtsurfer.net/v1/backtest/binance/ticker/executeSweep/$PREPARE_JOB_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "strategyId": "2ul144qe9tlwzu5anhwvc6",
+    "sweep": {"sampler":"grid","objective":"sharpe",
+              "params":{"rsiPeriod":{"from":7,"to":28,"step":1}}},
+    "equityCurve": {"mode": "topN", "n": 5, "outMode": "SHORT", "differential": true}
+  }'
+```
+
+```bash
+# No ?outMode= or ?differential= here — both fall back to what the submit above asked for.
+curl "https://api.qtsurfer.net$URL" -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "timestamps": [1700000000000, 60000, 60000],
+  "equities": [100.0, 10.5, -20.25],
+  "meta": {
+    "inputPointCount": 118, "outputPointCount": 118,
+    "resampled": false, "differential": true, "outMode": "SHORT"
+  }
+}
+```
+
+**The server can override any of these above a size threshold, regardless of what was requested** —
+a very large curve is always forced to `SHORT` + `differential` (and, past a second, larger
+threshold, additionally resampled), whatever the query string asked for. `meta.outMode` in the
+response — not the request — is the source of truth for what shape actually came back.
+
+#### Example: `outMode=SHORT`
+
+```bash
+curl "https://api.qtsurfer.net$URL?outMode=SHORT" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Same values as the `ARRAY` example above, reshaped into parallel arrays — `timestamps[i]` and
+`equities[i]` are the same point `points[i]` was:
+
+```json
+{
+  "timestamps": [1700000000000, 1700000060000, 1700000120000],
+  "equities": [100.0, 110.5, 90.25],
+  "meta": {
+    "inputPointCount": 118, "outputPointCount": 118,
+    "resampled": false, "differential": false, "outMode": "SHORT"
+  }
+}
+```
+
+#### Example: `outMode=SHORT&differential=true`
+
+```bash
+curl "https://api.qtsurfer.net$URL?outMode=SHORT&differential=true" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+Point 0 stays absolute (the anchor); every point after that becomes the delta since the *previous*
+point, not an accumulated total — so `equities[1]` here is `110.5 - 100.0`, and `equities[2]` is
+`90.25 - 110.5`, not `90.25 - 100.0`. Reconstructing the original curve is a running sum from the
+anchor:
+
+```json
+{
+  "timestamps": [1700000000000, 60000, 60000],
+  "equities": [100.0, 10.5, -20.25],
+  "meta": {
+    "inputPointCount": 118, "outputPointCount": 118,
+    "resampled": false, "differential": true, "outMode": "SHORT"
+  }
+}
+```
+
+`differential` works the same way with `outMode=ARRAY` (the default) — each `points[i]` after the
+first carries a delta `timestamp`/`equity` instead of an absolute one, same rule, same values.
+
+Errors: `404` unknown sweep, unknown `runIx`, or that trial's curve was never selected.
+
+### The manual path: no `equityCurve` on the submit request
+
+Without `equityCurve`, `equityCurve.mode` defaults to `auto`, which retains nothing today (see the
+request field table above). Reproduce one trial's curve manually instead: `POST .../execute` has no
+per-call parameter-override field (just `prepareJobId`, `strategyId`, `storeSignals`), so compile
+the strategy with its property *defaults* set to the winning `params` — read off the leaderboard
+row — and execute that against the same `prepareJobId`. That response's `results.equityCurve` is
+then ready to plot directly — see
+[`docs/backtest_execute.md`](backtest_execute.md#visualizing-the-equity-curve) for the full
+`execute`/poll request-response shape and the `equityCurve` field reference (the same
+`{points|timestamps+equities, meta}` shape used above).
