@@ -34,7 +34,10 @@ curl -X POST https://api.qtsurfer.net/v1/datasets \
   -d '{"name":"My BTC ticks","instrument":"BTC/USDT"}'
 ```
 
-`DatasetCreated` (`201`) — a [`Dataset`](#dataset-shape) plus the upload session:
+`DatasetCreated` (`201`) — the metadata available immediately after creation plus the upload
+session. It is not yet the full [`Dataset`](#dataset-shape): lifecycle fields such as `createdAt`,
+`currentVersionId`, range, and cadence are obtained from `GET /datasets/{datasetId}` after the
+relevant lifecycle stages.
 
 ```json
 {
