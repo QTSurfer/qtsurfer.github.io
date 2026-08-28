@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.110.3
+  version: 0.111.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1561,6 +1561,10 @@ paths:
         `POST /datasets/{datasetId}/uploads/{uploadId}/finalize` once the upload completes to kick
         off ingest.
 
+        Losing this response loses nothing: calling this dataset's
+        `POST /datasets/{datasetId}/uploads` returns the very same upload session again rather than
+        opening a new one, as long as nothing has been finalized against it yet.
+
         v1 is ticker data only — `type` is not a request field, it is always `"ticker"` in the
         response. `instrument` must be a plain spot pair (`BASE/QUOTE`, exactly one `/`); derivative
         forms (e.g. `BTC/USDT:USDT`) are rejected.
@@ -1747,17 +1751,63 @@ paths:
         - bearerAuth: []
       tags:
         - Dataset
+  '/datasets/{datasetId}/uploads':
+    post:
+      operationId: openDatasetUpload
+      summary: Open a new upload session for an existing dataset
+      description: |
+        Get a fresh presigned URL to upload a new version into a dataset you already have — a
+        corrected file, or the next chunk of history. Behaves the same way `POST /datasets` does
+        for a brand-new dataset's own upload: at most one upload session is open per dataset at a
+        time, so calling this again before finalizing just hands back that same session rather
+        than opening a second one — safe to call repeatedly if a response gets lost.
+
+        Once a session has been finalized (successfully or not), the next call here opens a
+        genuinely new one for that dataset's next version.
+      parameters:
+        - name: datasetId
+          in: path
+          required: true
+          description: The id returned by `POST /datasets`
+          schema:
+            type: string
+            example: "ds_3f9a1c2e7b0d4a5f"
+      responses:
+        '201':
+          description: An upload session — new, or the one already open for this dataset
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetUploadSession'
+              example:
+                uploadId: "up_1a2b3c4d5e6f7a8b"
+                upload:
+                  url: "https://storage.qtsurfer.com/00000000-.../uploads/up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
+                  expiresInMinutes: 15
+        '404':
+          description: No such dataset for this user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Dataset
   '/datasets/{datasetId}/uploads/{uploadId}/finalize':
     post:
       operationId: finalizeDatasetUpload
       summary: Finalize an uploaded file and start ingest
       description: |
-        Call once the file has been PUT to the `upload.url` from `POST /datasets`. Enqueues ingest
-        and returns immediately; poll
+        Call once the file has been PUT to the `upload.url` from `POST /datasets` (or from
+        `POST /datasets/{datasetId}/uploads`). Enqueues ingest and returns immediately; poll
         `GET /datasets/{datasetId}/uploads/{uploadId}` for the result.
 
-        Idempotent — a repeat finalize of the same upload returns the same `jobId` rather than
-        enqueueing a second ingest.
+        Idempotent while the upload is still open — a repeat finalize before it has produced a
+        version returns the same `jobId` rather than enqueueing a second ingest. Once it HAS
+        produced a version, `uploadId` is spent: finalizing it again is a `409`, even with
+        different bytes freshly PUT to the same URL — open a new upload session instead
+        (`POST /datasets/{datasetId}/uploads`) rather than reusing a spent one.
       parameters:
         - name: datasetId
           in: path
@@ -1788,8 +1838,17 @@ paths:
                 jobId: "dataset-upload:00000000-.../ds_3f9a1c2e7b0d4a5f:up_1a2b3c4d5e6f7a8b"
         '404':
           description: |
-            No such dataset for this user, or nothing was PUT to `upload.url` yet — a finalize with
-            nothing to finalize.
+            No such dataset for this user; `uploadId` was not issued for this dataset (never
+            minted, or minted for a different one); or nothing was PUT to `upload.url` yet — a
+            finalize with nothing to finalize.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '409':
+          description: |
+            `uploadId` already produced a version. The error message names it. Open a new upload
+            session (`POST /datasets/{datasetId}/uploads`) for anything new.
           content:
             application/json:
               schema:
@@ -3500,34 +3559,40 @@ components:
                     href:
                       type: string
                       example: "/v1/datasets/ds_3f9a1c2e7b0d4a5f"
-    DatasetCreated:
+    DatasetUploadSession:
       description: |
-        A `Dataset` plus the first upload session — the presigned URL to PUT the file to.
-      allOf:
-        - $ref: '#/components/schemas/Dataset'
-        - type: object
-          required: [uploadId, upload]
+        An upload session — an id plus the presigned URL to PUT the raw file to. Returned both by
+        `POST /datasets` (as part of the new dataset) and by `POST /datasets/{datasetId}/uploads`
+        (on its own, for an existing one).
+      type: object
+      required: [uploadId, upload]
+      properties:
+        uploadId:
+          type: string
+          description: |
+            Identifies this upload session. Pass to
+            `POST /datasets/{datasetId}/uploads/{uploadId}/finalize` once the PUT completes.
+          example: "up_1a2b3c4d5e6f7a8b"
+        upload:
+          type: object
+          required: [url, expiresInMinutes]
           properties:
-            uploadId:
+            url:
               type: string
               description: |
-                Identifies this upload session. Pass to
-                `POST /datasets/{datasetId}/uploads/{uploadId}/finalize` once the PUT completes.
-              example: "up_1a2b3c4d5e6f7a8b"
-            upload:
-              type: object
-              required: [url, expiresInMinutes]
-              properties:
-                url:
-                  type: string
-                  description: |
-                    Presigned URL. `PUT` the raw CSV file here directly — no `Authorization`
-                    header, no other API credentials.
-                  example: "https://storage.qtsurfer.com/00000000-.../uploads/up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
-                expiresInMinutes:
-                  type: integer
-                  description: How long `url` stays valid.
-                  example: 15
+                Presigned URL. `PUT` the raw CSV file here directly — no `Authorization` header,
+                no other API credentials.
+              example: "https://storage.qtsurfer.com/00000000-.../uploads/up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
+            expiresInMinutes:
+              type: integer
+              description: How long `url` stays valid.
+              example: 15
+    DatasetCreated:
+      description: |
+        A `Dataset` plus its first upload session — the presigned URL to PUT the file to.
+      allOf:
+        - $ref: '#/components/schemas/Dataset'
+        - $ref: '#/components/schemas/DatasetUploadSession'
     DatasetVersion:
       type: object
       description: |
