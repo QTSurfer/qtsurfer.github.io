@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.111.1
+  version: 0.111.2
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3592,9 +3592,29 @@ components:
           $ref: '#/components/schemas/DatasetUploadTarget'
     DatasetCreated:
       description: |
-        A `Dataset` plus its first upload session — the presigned URL to PUT the file to.
+        The metadata available immediately after creating a dataset, plus its first upload
+        session — the presigned URL to PUT the file to. Version-derived fields such as
+        `createdAt`, `currentVersionId`, range, and cadence are available from `GET /datasets/{datasetId}`
+        after the relevant lifecycle stages, not in this creation response.
       allOf:
-        - $ref: '#/components/schemas/Dataset'
+        - type: object
+          required: [datasetId, name, type, instrument]
+          properties:
+            datasetId:
+              type: string
+              description: Opaque id of the newly created dataset.
+              example: "ds_3f9a1c2e7b0d4a5f"
+            name:
+              type: string
+              description: Unique name of the newly created dataset.
+              example: "My BTC ticks"
+            type:
+              type: string
+              enum: [ticker]
+              description: Always `ticker` in v1.
+              example: "ticker"
+            instrument:
+              $ref: '#/components/schemas/Instrument'
         - $ref: '#/components/schemas/DatasetUploadSession'
     DatasetVersion:
       type: object
