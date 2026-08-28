@@ -126,6 +126,7 @@ touched.
 | **[Strategies](docs/strategy.md)** | Compile, validate, list, inspect, delete a strategy; read back its source |
 | **[Backtests](docs/backtest_execute.md)** | Prepare a dataset, run a strategy once, poll the result, plot the equity curve |
 | **[Parameter sweeps](docs/backtest_sweep.md)** | Run across a parameter grid, walk-forward validation, sensitivity marginals/heatmaps |
+| **[Equity curves](docs/equity_curves.md)** | Plot, compact, resample, delta-encode, retain and fetch backtest or sweep curves |
 | **[Datasets](docs/datasets.md)** | Bring your own data instead of a managed exchange |
 
 ## Key Technologies
