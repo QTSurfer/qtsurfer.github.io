@@ -3,6 +3,10 @@
 Compile a Java strategy, check it can actually run, list/inspect/delete what you've registered,
 and read back its source.
 
+This page documents the strategy REST resources. For the Java source itself — base classes,
+execution and information signals, advanced order parameters, and chart metadata — see [Coding
+Java strategies](strategy_coding.md).
+
 | Method | Path | Purpose |
 |---|---|---|
 | `POST` | `/strategy` | Compile and register |

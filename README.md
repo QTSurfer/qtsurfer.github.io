@@ -10,6 +10,8 @@ Write trading strategies in Java, submit them to be compiled, run backtests agai
 
 **[Engine Javadoc](https://qtsurfer.github.io/qtsurfer-engine-java-docs/)** — strategy SDK classes (indicators, signals, execution) referenced below
 
+**[Java strategy coding guide](docs/strategy_coding.md)** — signal emission, order parameters, chart metadata, and links to the maintained authoring skill
+
 ## How It Works
 
 ```
@@ -24,6 +26,16 @@ Strategy (Java) ──► Compile ──► Prepare Data ──┬─► Execute
 5. **Inspect** the result or ranked sweep trials; individual backtest signals are stored as Parquet files and loaded in-browser via DuckDB-WASM
 
 ## Strategy Example
+
+The example emits two different kinds of signal: `emitBuy`/`emitSell` drive execution, while the
+`InfoStrategySignal` records indicator values and chart-marker metadata. See [Coding Java
+strategies](docs/strategy_coding.md) for the signal helpers and their advanced order parameters.
+For agent-assisted authoring, install the maintained
+[`qtsurfer-java-strategy`](https://github.com/QTSurfer/strategy-skills) skill:
+
+```bash
+npx skills add QTSurfer/strategy-skills --skill qtsurfer-java-strategy
+```
 
 ```java
 import com.wualabs.qtsurfer.engine.strategy.AbstractTickerStrategy;
@@ -65,10 +77,12 @@ public class EmaCrossStrategy extends AbstractTickerStrategy {
 
             if (isBullish && !wasBullish) {
                 store.set("bullish");
+                emitBuy(price);
                 signal.set("_m", "position", "belowBar", "shape", "arrowUp",
                     "color", "#26a69a", "text", "BUY");
             } else if (!isBullish && wasBullish) {
                 store.unset("bullish");
+                emitSell(price);
                 signal.set("_m", "position", "aboveBar", "shape", "arrowDown",
                     "color", "#ef5350", "text", "SELL");
             }
@@ -123,6 +137,7 @@ touched.
 
 | Area | Covers |
 |---|---|
+| **[Strategy coding](docs/strategy_coding.md)** | Write Java strategies; emit execution and information signals; configure orders and chart markers |
 | **[Strategies](docs/strategy.md)** | Compile, validate, list, inspect, delete a strategy; read back its source |
 | **[Backtests](docs/backtest_execute.md)** | Prepare a dataset, run a strategy once, poll the result, plot the equity curve |
 | **[Parameter sweeps](docs/backtest_sweep.md)** | Run across a parameter grid, walk-forward validation, sensitivity marginals/heatmaps |
@@ -149,6 +164,7 @@ touched.
 
 | Repository | Description |
 |------------|-------------|
+| [strategy-skills](https://github.com/QTSurfer/strategy-skills) | Maintained agent skill for writing, reviewing, and debugging QTSurfer Java strategies |
 | [svelte-timeseries](https://github.com/QTSurfer/svelte-timeseries) | OSS Svelte component for time-series visualization |
 
 ## License
