@@ -10,6 +10,7 @@ exactly as normal but with the reserved `exchangeId: user`.
 | `GET` | `/datasets` | List your datasets |
 | `GET` | `/datasets/{datasetId}` | Get one |
 | `DELETE` | `/datasets/{datasetId}` | Delete |
+| `POST` | `/datasets/{datasetId}/uploads` | Open a new upload session for an existing dataset |
 | `POST` | `/datasets/{datasetId}/uploads/{uploadId}/finalize` | Trigger ingest |
 | `GET` | `/datasets/{datasetId}/uploads/{uploadId}` | Poll upload/ingest state |
 
@@ -50,8 +51,40 @@ curl -X POST https://api.qtsurfer.net/v1/datasets \
 `uploadId` is what you pass to [finalize](#finalizing-an-upload-triggering-ingest); `upload.url`
 is the presigned target — `PUT` the raw CSV there directly, no `Authorization` header.
 
+Lost this response? Nothing lost — call [`POST .../uploads`](#opening-a-new-upload-session) on
+this dataset's id and you get the very same upload session back, as long as you haven't finalized
+it yet.
+
 Errors: `400` invalid request, or `instrument` isn't a plain spot pair · `409` dataset name
 already taken · `429` your tier's dataset count limit is reached — delete one, or upgrade.
+
+## Opening a new upload session
+
+`POST /datasets/{datasetId}/uploads` — get a fresh upload session for a dataset you already have:
+a corrected file, or the next chunk of history. Same idempotency contract as `POST /datasets`'s
+own upload half: at most one session is open per dataset at a time, so calling this again before
+finalizing just hands back that same session — safe to retry if a response gets lost. Once a
+session has been finalized (successfully or not), the next call here opens a genuinely new one.
+
+```bash
+curl -X POST https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+`201` — the same `{uploadId, upload}` shape `POST /datasets` returns, without the dataset
+metadata around it:
+
+```json
+{
+  "uploadId": "up_1a2b3c4d5e6f7a8b",
+  "upload": {
+    "url": "https://storage.qtsurfer.com/.../uploads/up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-...",
+    "expiresInMinutes": 15
+  }
+}
+```
+
+Errors: `404` no such dataset for this user.
 
 ## Uploading the file
 
@@ -68,8 +101,11 @@ curl -X PUT "$UPLOAD_URL" --data-binary @my-btc-ticks.csv
 
 `POST /datasets/{datasetId}/uploads/{uploadId}/finalize` — call once the `PUT` above completes.
 Enqueues ingest and returns immediately; poll [`GET .../uploads/{uploadId}`](#polling-ingest)
-below. **Idempotent** — a repeat finalize of the same upload returns the same `jobId` rather than
-enqueueing a second ingest.
+below. **Idempotent while the upload is still open** — a repeat finalize before it has produced a
+version returns the same `jobId` rather than enqueueing a second ingest. Once it HAS produced a
+version, `uploadId` is spent: finalizing it again is a `409`, even with different bytes freshly
+`PUT` to the same URL — [open a new upload session](#opening-a-new-upload-session) instead of
+reusing a spent one.
 
 ```bash
 curl -X POST https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads/$UPLOAD_ID/finalize \
@@ -77,9 +113,10 @@ curl -X POST https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads/$UPLOAD_ID
 # → 202 {"jobId": "dataset-upload:.../ds_3f9a1c2e7b0d4a5f:up_1a2b3c4d5e6f7a8b"}
 ```
 
-Errors: `404` no such dataset for this user, or nothing was `PUT` to `upload.url` yet — a
-finalize with nothing to finalize · `413` the uploaded file exceeds your tier's size limit for a
-dataset.
+Errors: `404` no such dataset for this user; `uploadId` wasn't issued for this dataset (never
+minted, or minted for a different one); or nothing was `PUT` to `upload.url` yet — a finalize with
+nothing to finalize · `409` `uploadId` already produced a version (the error message names it) ·
+`413` the uploaded file exceeds your tier's size limit for a dataset.
 
 ## Polling ingest
 
