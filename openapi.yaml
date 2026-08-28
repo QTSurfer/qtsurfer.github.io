@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.111.0
+  version: 0.111.1
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3559,6 +3559,21 @@ components:
                     href:
                       type: string
                       example: "/v1/datasets/ds_3f9a1c2e7b0d4a5f"
+    DatasetUploadTarget:
+      description: A presigned destination for uploading a raw dataset file directly to storage.
+      type: object
+      required: [url, expiresInMinutes]
+      properties:
+        url:
+          type: string
+          description: |
+            Presigned URL. `PUT` the raw CSV file here directly — no `Authorization` header,
+            no other API credentials.
+          example: "https://storage.qtsurfer.com/uploads/00000000-.../up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
+        expiresInMinutes:
+          type: integer
+          description: How long `url` stays valid.
+          example: 15
     DatasetUploadSession:
       description: |
         An upload session — an id plus the presigned URL to PUT the raw file to. Returned both by
@@ -3574,19 +3589,7 @@ components:
             `POST /datasets/{datasetId}/uploads/{uploadId}/finalize` once the PUT completes.
           example: "up_1a2b3c4d5e6f7a8b"
         upload:
-          type: object
-          required: [url, expiresInMinutes]
-          properties:
-            url:
-              type: string
-              description: |
-                Presigned URL. `PUT` the raw CSV file here directly — no `Authorization` header,
-                no other API credentials.
-              example: "https://storage.qtsurfer.com/00000000-.../uploads/up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
-            expiresInMinutes:
-              type: integer
-              description: How long `url` stays valid.
-              example: 15
+          $ref: '#/components/schemas/DatasetUploadTarget'
     DatasetCreated:
       description: |
         A `Dataset` plus its first upload session — the presigned URL to PUT the file to.
