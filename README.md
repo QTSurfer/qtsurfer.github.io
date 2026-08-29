@@ -38,8 +38,7 @@ npx skills add QTSurfer/strategy-skills --skill qtsurfer-java-strategy
 ```
 
 ```java
-import com.wualabs.qtsurfer.engine.strategy.AbstractTickerStrategy;
-import com.wualabs.qtsurfer.engine.strategy.AbstractWindowListener;
+import com.wualabs.qtsurfer.engine.strategy.*;
 import com.wualabs.qtsurfer.engine.strategy.event.signal.InfoStrategySignal;
 import com.wualabs.qtsurfer.engine.indicators.helpers.WindowTimeRTIndicator.WindowTime;
 import com.wualabs.qtsurfer.engine.indicators.helpers.group.InstrumentGroupRTIndicator;
@@ -68,23 +67,20 @@ public class EmaCrossStrategy extends AbstractTickerStrategy {
             double slow  = indicators.getValue("slow");
 
             InfoStrategySignal signal = createInfoSignal();
-            signal.set("price", price);
-            signal.set("fast", fast);
-            signal.set("slow", slow);
 
             boolean wasBullish = store.is("bullish");
             boolean isBullish = fast > slow;
 
             if (isBullish && !wasBullish) {
                 store.set("bullish");
-                emitBuy(price);
                 signal.set("_m", "position", "belowBar", "shape", "arrowUp",
                     "color", "#26a69a", "text", "BUY");
+                emitBuy(price);
             } else if (!isBullish && wasBullish) {
                 store.unset("bullish");
-                emitSell(price);
                 signal.set("_m", "position", "aboveBar", "shape", "arrowDown",
                     "color", "#ef5350", "text", "SELL");
+                emitSell(price);
             }
 
             emitSignal(signal);
