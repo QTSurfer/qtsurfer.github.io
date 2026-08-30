@@ -134,6 +134,7 @@ touched.
 | Area | Covers |
 |---|---|
 | **[Strategy coding](docs/strategy_coding.md)** | Write Java strategies; emit execution and information signals; configure orders and chart markers |
+| **[Market data](docs/market_data.md)** | Discover exchanges and instruments; download hourly ticker or kline segments |
 | **[Strategies](docs/strategy.md)** | Compile, validate, list, inspect, delete a strategy; read back its source |
 | **[Backtests](docs/backtest_execute.md)** | Prepare a dataset, run a strategy once, poll the result, plot the equity curve |
 | **[Parameter sweeps](docs/backtest_sweep.md)** | Run across a parameter grid, walk-forward validation, sensitivity marginals/heatmaps |
