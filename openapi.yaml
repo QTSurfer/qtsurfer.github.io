@@ -1496,7 +1496,7 @@ paths:
                   winRate: 0.5833
                   sharpeRatio: 1.245
                   sortinoRatio: 1.872
-                  cagr: 15.34
+                  cagr: 0.1534
                   maxDrawdown: 12.50
                   maxDrawdownPercent: 8.75
                   equityCurve:
@@ -2715,7 +2715,7 @@ components:
         cagr:
           type: number
           format: double
-          description: Same units as `cagr` on the single-run result — percent (0-100 scale).
+          description: Same units as `cagr` on the single-run result — a ratio, not a percent.
         maxDdPct:
           type: number
           format: double
@@ -3120,12 +3120,8 @@ components:
         cagr:
           type: number
           format: double
-          description: >-
-            Compound Annual Growth Rate, as a percent (0-100 scale, e.g. `15.34` means 15.34%).
-            Below a ~1-year window this returns the plain, non-annualized equity return instead
-            of extrapolating (same value and scale as `pnlTotalPercent`) — annualizing a short
-            window would otherwise blow up the exponent.
-          example: 15.34
+          description: Compound Annual Growth Rate (eg. 0.15 for 15%)
+          example: 0.1534
         maxDrawdown:
           type: number
           format: double
