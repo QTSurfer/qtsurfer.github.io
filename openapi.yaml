@@ -1493,10 +1493,10 @@ paths:
                   pnlTotal: 42.75
                   pnlTotalPercent: 2.25
                   totalTrades: 156
-                  winRate: 58.33
+                  winRate: 0.5833
                   sharpeRatio: 1.245
                   sortinoRatio: 1.872
-                  cagr: 0.1534
+                  cagr: 15.34
                   maxDrawdown: 12.50
                   maxDrawdownPercent: 8.75
                   equityCurve:
@@ -2711,18 +2711,22 @@ components:
         pnlPct:
           type: number
           format: double
+          description: Same units as `pnlTotalPercent` on the single-run result — percent (0-100 scale).
         cagr:
           type: number
           format: double
+          description: Same units as `cagr` on the single-run result — percent (0-100 scale).
         maxDdPct:
           type: number
           format: double
+          description: Same units as `maxDrawdownPercent` on the single-run result — percent (0-100 scale).
         trades:
           type: integer
           format: int64
         winRate:
           type: number
           format: double
+          description: Same units as `winRate` on the single-run result — a fraction, 0.0-1.0 (a rate, not a percent).
         belowTradeFloor:
           type: boolean
         aborted:
@@ -3099,8 +3103,10 @@ components:
         winRate:
           type: number
           format: double
-          description: Percentage of profitable trades (0-100)
-          example: 58.33
+          description: >-
+            Fraction of profitable trades, 0.0-1.0 (a rate, not a percent — multiply by 100 to
+            display as one). Zero when `totalTrades` is 0.
+          example: 0.5833
         sharpeRatio:
           type: number
           format: double
@@ -3114,8 +3120,12 @@ components:
         cagr:
           type: number
           format: double
-          description: Compound Annual Growth Rate
-          example: 0.1534
+          description: >-
+            Compound Annual Growth Rate, as a percent (0-100 scale, e.g. `15.34` means 15.34%).
+            Below a ~1-year window this returns the plain, non-annualized equity return instead
+            of extrapolating (same value and scale as `pnlTotalPercent`) — annualizing a short
+            window would otherwise blow up the exponent.
+          example: 15.34
         maxDrawdown:
           type: number
           format: double
