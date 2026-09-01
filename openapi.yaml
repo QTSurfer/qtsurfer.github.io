@@ -1313,8 +1313,10 @@ paths:
         or `params` dedupes exactly as it did before those fields existed. Two different `params`
         vectors over one prepare are two different jobs, and `9` and `9.0` are the same one.
 
-        The re-run is an independent execution, not a replay of the sweep trial: the two paths do
-        not share a simulator, so a metric may differ from the leaderboard row that sent you here.
+        The re-run is an independent execution rather than a replay of the sweep trial — the two
+        paths do not share a simulator — but they are pinned to agree: one vector run both ways
+        matches on every leaderboard metric, asserted as a regression test. Treat a difference as a
+        bug worth reporting, not as expected behaviour.
 
         Works unchanged for a dataset-backed prepare (`exchangeId: user`) — the request body is
         identical either way, since the instrument and range are recovered from `prepareJobId`.
