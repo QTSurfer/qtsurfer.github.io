@@ -1024,6 +1024,7 @@ paths:
         - name: requestId
           in: path
           required: true
+          description: The `jobId` returned by `POST /backtest/{exchangeId}/{type}/prepare`.
           schema:
             type: string
         - name: sweepId
@@ -1092,6 +1093,7 @@ paths:
         - name: requestId
           in: path
           required: true
+          description: The `jobId` returned by `POST /backtest/{exchangeId}/{type}/prepare`.
           schema:
             type: string
         - name: sweepId
@@ -1165,6 +1167,7 @@ paths:
         - name: requestId
           in: path
           required: true
+          description: The `jobId` returned by `POST /backtest/{exchangeId}/{type}/prepare`.
           schema:
             type: string
         - name: sweepId
@@ -1228,6 +1231,7 @@ paths:
         - name: requestId
           in: path
           required: true
+          description: The `jobId` returned by `POST /backtest/{exchangeId}/{type}/prepare`.
           schema:
             type: string
         - name: sweepId
@@ -2227,8 +2231,13 @@ components:
       properties:
           contextId:
             type: string
-            description: Opaque context identifier for the job
-            example: "ctx_2o8heaioicr0edvx5ybcap"
+            description: >-
+              Identifier for the job's execution context. Its current shape is a colon-delimited
+              string encoding the data source type, an internal user id, the exchange, the job
+              id, and the instrument — but that structure is not a committed contract and may
+              change without notice. Treat it as an opaque token: store and pass it back, don't
+              parse it.
+            example: "jctx:ticker:76b90203-03c2-46f6-b366-9944f167e818:binance:5ikyamio8b3v9wcnfxztzg:btc/usdt:0vicnz3thzhrqvfczks1pu"
           status:
             type: string
             description: |
@@ -3058,7 +3067,10 @@ components:
       properties:
         jobId:
           type: string
-          description: Unique job identifier; use this to poll for completion.
+          description: >-
+            Unique job identifier; use this to poll for completion. For a sweep, pass this same
+            value as the `requestId` path parameter to `executeSweep` — same identifier, different
+            name at that call site.
           example: 13RBLGQlPnfDjO6wyKSX8i
       example:
         jobId: "13RBLGQlPnfDjO6wyKSX8i"
