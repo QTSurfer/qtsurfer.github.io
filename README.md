@@ -157,6 +157,24 @@ touched.
 | `kline` | Candlestick OHLCV |
 | `frate` | Funding rates (futures) |
 
+## SDKs & Client Libraries
+
+High-level, opinionated SDKs (where the developer experience lives) and their low-level
+auto-generated API clients, per language. Install the SDK; it depends on the matching client
+underneath.
+
+| Language | SDK (high-level) | API client (low-level, generated) |
+|----------|------------------|-----------------------------------|
+| Java | [sdk-java](https://github.com/QTSurfer/sdk-java) | [api-client-java](https://github.com/QTSurfer/api-client-java) |
+| TypeScript | [sdk-ts](https://github.com/QTSurfer/sdk-ts) | [api-client-ts](https://github.com/QTSurfer/api-client-ts) |
+| Python | [sdk-python](https://github.com/QTSurfer/sdk-python) | [api-client-python](https://github.com/QTSurfer/api-client-python) |
+
+Also part of the ecosystem:
+
+- [lastra-ts](https://github.com/QTSurfer/lastra-ts) / [lastra-py](https://github.com/QTSurfer/lastra-py) — low-level readers for the Lastra columnar format in the browser / Python
+- [mcp-java](https://github.com/QTSurfer/mcp-java) — Model Context Protocol server exposing the API as AI-agent tools (`qtsurfer-mcp`)
+- [strategy-skills](https://github.com/QTSurfer/strategy-skills) — maintained agent skill for writing Java strategies
+
 ## Related Projects
 
 | Repository | Description |
