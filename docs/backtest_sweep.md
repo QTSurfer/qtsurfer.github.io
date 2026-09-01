@@ -201,7 +201,7 @@ curl "https://api.qtsurfer.net/v1/backtest/binance/ticker/executeSweep/$PREPARE_
       "params": {"rsiPeriod": 16, "useTrendFilter": true},
       "sharpe": 1.84, "plateauScore": 1.61, "neighbourCount": 6,
       "sortino": 2.10, "pnl": 812.40, "pnlPct": 8.12, "cagr": 0.31,
-      "maxDdPct": 6.4, "trades": 118, "winRate": 57.6,
+      "maxDdPct": 6.4, "trades": 118, "winRate": 0.576,
       "belowTradeFloor": false, "aborted": false, "runtimeMs": 842
     }
   ],
