@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.113.0
+  version: 0.114.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1622,6 +1622,11 @@ paths:
         later row), `close`. Optional columns: `open`, `high`, `low`, `volume`, `quoteVolume`,
         `bid`, `bidSize`, `ask`, `askSize`. Cadence and timestamp unit are discovered from the data,
         not declared.
+
+        The bytes PUT to `upload.url` may be that CSV directly, gzipped (`.gz`), or zipped (`.zip`,
+        exactly one file inside — a dataset is one file regardless of how it travels). Detected from
+        the content itself: there is no filename or `Content-Type` anywhere in this flow for a
+        client to declare it with, so nothing needs to be sent besides the bytes.
       requestBody:
         description: The dataset to create
         required: true
@@ -3656,8 +3661,9 @@ components:
         url:
           type: string
           description: |
-            Presigned URL. `PUT` the raw CSV file here directly — no `Authorization` header,
-            no other API credentials.
+            Presigned URL. `PUT` the file here directly — the CSV itself, or a `.gz`/`.zip` of it
+            (see `createDataset`'s own description) — no `Authorization` header, no other API
+            credentials.
           example: "https://storage.qtsurfer.com/uploads/00000000-.../up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
         expiresInMinutes:
           type: integer
@@ -3721,7 +3727,9 @@ components:
           example: "dsv_8e2b4f19c6a03d7e"
         bytes:
           type: integer
-          description: Size of the uploaded file.
+          description: >-
+            Size of the CSV itself — decompressed, if the upload was a `.gz`/`.zip` — not the size
+            of the bytes PUT to storage.
           example: 4831022
         rows:
           type: integer
@@ -3765,7 +3773,8 @@ components:
               called yet.
             * `ingesting` — `finalize` was called; the worker is parsing and validating the file.
             * `ready` — ingested successfully. `version` carries the result.
-            * `failed` — ingest rejected the file (e.g. bad CSV contract, mixed timestamp units).
+            * `failed` — ingest rejected the file (e.g. bad CSV contract, mixed timestamp units, a
+              `.zip` with no file inside or more than one).
           example: "ready"
         jobId:
           type: string
