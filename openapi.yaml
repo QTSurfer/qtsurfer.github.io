@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.112.0
+  version: 0.113.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2791,14 +2791,26 @@ components:
           allOf:
             - $ref: '#/components/schemas/EquityCurveResult'
           description: >-
-            Present only when this trial's curve was selected (`equityCurve.mode` was `topN`/`topPct`
-            on the request,
-            and this row ranked among the winners) — absent, not null, otherwise; a run that was
-            never spilled and one that was spilled but not selected look identical here. Always a
-            pointer today (`url` present, no inline points): a sweep's curves live in a spill
-            store, not the response, until fetched separately. `GET` the `url` to fetch the curve
-            itself; its own `meta` there is the real, possibly size-guarded outcome, while this
-            outer `meta` is a raw, untransformed preview from selection time and can differ.
+            Present whenever this trial actually has a curve — which is any completed run of a sweep
+            that requested curves at all (`equityCurve.mode` `topN`/`topPct`), not only the ranked
+            winners. Absent, not null, when there is genuinely nothing: the run aborted, it made no
+            trades, or the sweep never retained curves (`mode` `auto`/`none`).
+
+            Selection decides how the curve travels, not whether it exists. A row may carry `url`
+            alone, or `url` together with the points inline.
+
+            **Read `points`/`equities` to tell whether the curve is inline — never the presence of
+            this object, and never the absence of `url`.** Both mislead, and in opposite directions:
+            this object is present on rows that carry only a pointer, and `url` stays present
+            alongside an inline curve so a caller can still re-request a different transform. An
+            inline curve is emitted on the materialisation view (`?order=natural`), where each row
+            is read once; the ranked view keeps the pointer, being polled.
+
+            When only a pointer is present, `GET` the `url` for the curve. Its own `meta` there is
+            the real, possibly size-guarded outcome. This outer `meta` may be a declaration rather
+            than a measurement — for a row whose curve was not promoted, the point count is derived
+            from the trade count (one equity point per closed trade) instead of being read from the
+            store, to keep a polled response from doing per-row work.
     SweepSensitivity:
       type: object
       description: >-
