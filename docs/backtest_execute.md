@@ -107,9 +107,18 @@ curl https://api.qtsurfer.net/v1/backtest/binance/ticker/prepare/$PREPARE_JOB_ID
 
 Runs the strategy identified by `strategyId` over the data from `prepareJobId`; instrument and
 date range are recovered from the prepare job, not sent again. Works unchanged for a
-dataset-backed prepare. Same `(prepareJobId, strategyId, storeSignals, equityCurve)` → same
-`jobId` (idempotent) — a request that omits `equityCurve` dedupes exactly as it did before that
-field existed.
+dataset-backed prepare. Same `(prepareJobId, strategyId, storeSignals, equityCurve, params)` → same
+`jobId` (idempotent) — a request that omits `equityCurve` or `params` dedupes exactly as it did
+before those fields existed. Two different `params` vectors over one prepare are two different
+jobs, and `9` and `9.0` are the same one.
+
+Optionally takes `params`: strategy properties for this one run, applied without recompiling.
+This is how a sweep leaderboard winner gets re-run for its `equityCurve` — a sweep row carries
+the ranking metrics but never a curve, whatever its size (see
+[`docs/backtest_sweep.md`](backtest_sweep.md)). Compile the strategy once, call this endpoint N
+times with different `params`, and each response is an ordinary backtest result with the curve
+included. The re-run is an independent execution, not a replay of the sweep trial — the two
+paths don't share a simulator, so a metric may differ from the leaderboard row that sent you here.
 
 ### Request body
 
@@ -119,6 +128,7 @@ field existed.
 | `strategyId` | string | required |
 | `storeSignals` | boolean | default `false`. When `true`, the worker uploads emitted signals to object storage and the result gains `signalsUrl`/`signalsId` |
 | `equityCurve` | [`EquityCurveOptions`](equity_curves.md#plain-backtests-choose-the-transform-on-submit) | optional — reshape the curve baked into `results.equityCurve` |
+| `params` | object | optional, at most 64 entries. Flat map of strategy property name → scalar (number, string or boolean). Keys are the `name` declared on `@StrategyProperty` (not necessarily the Java field it annotates) — `GET`/`POST /strategy` returns `declaredProperties` for the valid names. An unknown key fails the job rather than silently running at defaults. Omit a key to leave it at its default; `null` is not a value. Arrays are rejected — a list is a sweep axis, this endpoint runs exactly one vector. `strategyId`, `storeSignals`, `equityCurve`, `backtestEnabled`, `backtestFakeExecution` are reserved (they configure the job, not the strategy) |
 
 ### Example
 
@@ -128,6 +138,16 @@ curl -X POST https://api.qtsurfer.net/v1/backtest/binance/ticker/execute \
   -H "Content-Type: application/json" \
   -d '{"prepareJobId":"5ikYAMIO...","strategyId":"2ul144qe9tlwzu5anhwvc6"}'
 # → 202 {"jobId": "4GmNN0i9..."}
+```
+
+Re-running a sweep leaderboard row for its curve, with `params`:
+
+```bash
+curl -X POST https://api.qtsurfer.net/v1/backtest/binance/ticker/execute \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"prepareJobId":"5ikYAMIO...","strategyId":"2ul144qe9tlwzu5anhwvc6","params":{"ema.fast.period":9,"ema.slow.period":21}}'
+# → 202 {"jobId": "9k2LpQi7..."}
 ```
 
 Errors: `400` invalid request · `404` prepare job not found or expired · `429` rate limited.
@@ -150,6 +170,7 @@ plus `state.status`, not off "not 202 anymore".
 | `hostName`, `iops`, `strategyId`, `instrument` | always present. `strategyId` here is the **execution context id** (`strategy:<user>:<strategyId>`) — take the segment after the last `:` to get back the id you compiled with |
 | `pnlTotal`, `pnlTotalPercent`, `totalTrades`, `winRate`, `sharpeRatio`, `sortinoRatio`, `cagr`, `maxDrawdown`, `maxDrawdownPercent` | yield metrics — present once the strategy emitted at least one trade |
 | `equityCurve` | [`EquityCurveResult`](equity_curves.md) — present under the same condition as the yield metrics |
+| `params` | the strategy properties this run was given, echoed back as sent. Absent when the request carried none — its presence is what distinguishes a parameterised run from one at the declared defaults |
 | `notices` | diagnostics the engine raised, each `{level, code, message, provenance: execute}`. **Absent means nothing was raised** — the one surface where silence is a real answer. Raised on failed/aborted runs too, and those are the most worth reading: a run with no trades often says why here |
 | `noticesTruncated` | how many notices were dropped past the cap of 50; absent when none were |
 | `signalCount`, `signalsId`, `signalsUrl`, `signalsUpload`, `signalsUploadedAt`, `signalsUploadReason` | only when the request set `storeSignals: true`. `signalsUpload` is `Done` \| `Failed` \| `Skipped`; `signalsUrl` is a Parquet file with **every** emitted signal (indicator values, markers) — the full detail behind the summary `equityCurve` |
