@@ -12,9 +12,9 @@ signal package][signal-javadoc]. For agent-assisted authoring, install the maint
 npx skills add QTSurfer/strategy-skills --skill qtsurfer-java-strategy
 ```
 
-The skill also covers choosing a strategy base class, configuring indicators, managing
-per-instrument state, and the Java subset accepted by the strategy compiler. Once the source is
-ready, [compile and validate it through the API](strategy.md).
+The skill also covers choosing a strategy base class, configuring indicators, and managing
+per-instrument state. Once the source is ready, [compile and validate it through the
+API](strategy.md).
 
 ## Execution signals and information signals
 
