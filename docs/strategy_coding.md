@@ -130,8 +130,7 @@ emitSignal(buy);
 
 The same fields apply symmetrically to a short entry. A stop condition is evaluated repeatedly by
 the engine and can suppress the stop until a wider strategy condition permits it. It is live
-strategy logic, not serializable signal data. Because compiled strategies use a restricted Java
-subset, use an anonymous `BooleanSupplier` rather than a lambda when one is needed.
+strategy logic, not serializable signal data.
 
 ## Information and chart metadata
 
