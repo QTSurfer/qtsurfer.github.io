@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.114.0
+  version: 0.115.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1617,16 +1617,22 @@ paths:
         response. `instrument` must be a plain spot pair (`BASE/QUOTE`, exactly one `/`); derivative
         forms (e.g. `BTC/USDT:USDT`) are rejected.
 
-        **Upload format.** A CSV with a header row. Required columns: `timestamp` (ISO-8601, or
-        numeric epoch seconds/millis/micros — detected from the first row, then enforced for every
-        later row), `close`. Optional columns: `open`, `high`, `low`, `volume`, `quoteVolume`,
-        `bid`, `bidSize`, `ask`, `askSize`. Cadence and timestamp unit are discovered from the data,
-        not declared.
+        **Upload format.** A CSV with a header row, or a parquet file with the same columns by
+        name. Required: `timestamp` (ISO-8601, or numeric epoch seconds/millis/micros — detected
+        from the first row, then enforced for every later row), `close`. Optional: `open`, `high`,
+        `low`, `volume`, `quoteVolume`, `bid`, `bidSize`, `ask`, `askSize`. Cadence and timestamp
+        unit are discovered from the data, not declared.
 
-        The bytes PUT to `upload.url` may be that CSV directly, gzipped (`.gz`), or zipped (`.zip`,
-        exactly one file inside — a dataset is one file regardless of how it travels). Detected from
-        the content itself: there is no filename or `Content-Type` anywhere in this flow for a
-        client to declare it with, so nothing needs to be sent besides the bytes.
+        A CSV upload is converted to our native columnar format (`lastra`) for storage. A parquet
+        upload is stored as-is today. Either way, always check `dataFormat` on
+        `GET /datasets/{datasetId}` and `GET /datasets/{datasetId}/uploads/{uploadId}` for which
+        one `dataUrl` actually is, rather than assuming from how you uploaded it.
+
+        The bytes PUT to `upload.url` may be that file directly, gzipped (`.gz`), or zipped
+        (`.zip`, exactly one file inside — a dataset is one file regardless of how it travels).
+        Format is detected from the decompressed content itself: there is no filename or
+        `Content-Type` anywhere in this flow for a client to declare it with, so nothing needs to
+        be sent besides the bytes.
       requestBody:
         description: The dataset to create
         required: true
@@ -1749,6 +1755,8 @@ paths:
                 from: "2026-03-01T00:00:00Z"
                 to: "2026-03-08T00:00:00Z"
                 cadence: "1m"
+                dataUrl: "https://storage.qtsurfer.com/00000000-.../ds_3f9a1c2e7b0d4a5f/dsv_8e2b4f19c6a03d7e/ticker_BTC_USDT_1700000000000_1700086400000_1m.lastra?X-Amz-..."
+                dataFormat: "lastra"
                 _links:
                   self:
                     href: "/v1/datasets/ds_3f9a1c2e7b0d4a5f"
@@ -1957,6 +1965,8 @@ paths:
                   timestampUnit: "iso"
                   gaps: 0
                   largestGapSteps: 0
+                  dataUrl: "https://storage.qtsurfer.com/00000000-.../ds_3f9a1c2e7b0d4a5f/dsv_8e2b4f19c6a03d7e/ticker_BTC_USDT_1700000000000_1700086400000_1m.lastra?X-Amz-..."
+                  dataFormat: "lastra"
         '404':
           description: |
             No such dataset for this user, or genuinely nothing is known about this `uploadId` — no
@@ -3644,6 +3654,24 @@ components:
         - $ref: '#/components/schemas/Dataset'
         - type: object
           properties:
+            dataUrl:
+              type: string
+              description: |
+                Presigned GET URL to the current version's stored file — see `dataFormat` for
+                which format it's actually in. Present only once the current version's status is
+                `ready`. Long-lived (day-scale, not permanent): a DuckDB-WASM/`lastra-ts`-style
+                reader issues HTTP range requests against it lazily over an extended viewing
+                session, not in one shot like a browser upload.
+              example: "https://storage.qtsurfer.com/00000000-.../ds_3f9a1c2e7b0d4a5f/dsv_8e2b4f19c6a03d7e/ticker_BTC_USDT_1700000000000_1700086400000_1m.lastra?X-Amz-..."
+            dataFormat:
+              type: string
+              enum: [lastra, parquet]
+              description: |
+                Which format `dataUrl` is actually in — check this rather than assuming it
+                matches how you uploaded it. `lastra` — our native columnar format — for a CSV (or
+                gzip/zip of one) upload, always converted on ingest. `parquet` for a parquet
+                upload, stored as-is today.
+              example: "lastra"
             _links:
               type: object
               properties:
@@ -3728,8 +3756,9 @@ components:
         bytes:
           type: integer
           description: >-
-            Size of the CSV itself — decompressed, if the upload was a `.gz`/`.zip` — not the size
-            of the bytes PUT to storage.
+            Size of the stored file `dataUrl` points at — a converted `lastra` for a CSV/gzip/zip
+            upload, or the parquet file itself, unconverted, for a parquet upload. Not the size of
+            the bytes originally PUT to storage; see `dataFormat`.
           example: 4831022
         rows:
           type: integer
@@ -3754,6 +3783,23 @@ components:
           type: integer
           description: The largest gap, in units of the discovered cadence step.
           example: 0
+        dataUrl:
+          type: string
+          description: |
+            Presigned GET URL to the stored file — see `dataFormat` for which format it's in.
+            Present once the version is `ready`. Long-lived (day-scale, not permanent): a
+            DuckDB-WASM/`lastra-ts`-style reader issues HTTP range requests against it lazily over
+            an extended viewing session, not in one shot like a browser upload.
+          example: "https://storage.qtsurfer.com/00000000-.../ds_3f9a1c2e7b0d4a5f/dsv_8e2b4f19c6a03d7e/ticker_BTC_USDT_1700000000000_1700086400000_1m.lastra?X-Amz-..."
+        dataFormat:
+          type: string
+          enum: [lastra, parquet]
+          description: |
+            Which format `dataUrl` is actually in — check this rather than assuming it matches
+            how you uploaded it. `lastra` — our native columnar format — for a CSV (or gzip/zip
+            of one) upload, always converted on ingest. `parquet` for a parquet upload, stored
+            as-is today.
+          example: "lastra"
     DatasetUploadState:
       type: object
       description: |
