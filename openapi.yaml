@@ -1524,7 +1524,7 @@ paths:
                   contextId: "ctx_2mnyblatqqw34kix2echpb"
                   status: "Completed"
                   statusDetail: null
-                  size: 0
+                  size: 73160
                   completed: 73158
                   startTime: "2026-03-18T13:21:28.958Z"
                   endTime: "2026-03-18T13:21:29.605Z"
@@ -3006,9 +3006,17 @@ components:
             is currently always `0` — the walk-forward fold runner was not wired to count ticks
             when this shipped, unlike the plain shard path.
 
-            `state.size` is always `0` on every path (single execute, plain sweep, walk-forward
-            alike) — nothing populates it anywhere yet. That is a known gap across the whole API,
-            not a sweep-specific omission.
+            `state.size` is an upfront estimate — range x the prepare's target cadence, set
+            before any data is even loaded, not a query against loaded data — on a single execute
+            and a plain sweep alike. A plain sweep's value is the sum of every
+            shard's own `size` (each shard's per-run estimate x its own vector slice), the same
+            additive shape `state.completed` already used above. `0` means the prepare context
+            behind the job predates this field (a job whose prepare ran before the estimate
+            existed) — never a guessed cadence standing in for a real one.
+
+            On a `walkForward` sweep, `state.size` is still always `0`: fold runs were out of scope
+            for the estimate the same way they are for `state.completed` above — a fold's `size`
+            is simply never set, so the sum stays honest at `0` rather than needing a special case.
     WalkForwardResult:
       type: object
       description: >-
