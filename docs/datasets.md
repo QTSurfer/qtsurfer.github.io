@@ -140,7 +140,7 @@ nothing to finalize · `409` `uploadId` already produced a version (the error me
 
 `GET /datasets/{datasetId}/uploads/{uploadId}` — poll after finalize until `status` is `ready` or
 `failed`. Also reports `uploading` (finalize not called yet, but the file was `PUT`) before you
-finalize at all. **Postgres-backed once a version exists**, so `ready`/`failed` are permanent
+finalize at all. **Durably recorded once a version exists**, so `ready`/`failed` are permanent
 answers; `uploading`/`ingesting` reflect in-flight state that can itself age out (see the `404`
 case below).
 
