@@ -2765,7 +2765,7 @@ components:
             establish any dispersion to deflate against, on runs with fewer than 3 period returns,
             and on a degenerate (near-constant) return series — all cases where the underlying
             statistic isn't meaningfully computable, rather than genuinely zero. A present value is
-            always the real computed probability, however small.
+            the computed probability, however small.
         params:
           type: object
           additionalProperties: true

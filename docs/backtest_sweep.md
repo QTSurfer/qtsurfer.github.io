@@ -179,7 +179,7 @@ retrying, or not yet started.
 | `runIx` | deterministic zero-based expansion index, stable across shards and ranking |
 | `rank` | present only in the `ranked` view |
 | `plateauScore`, `neighbourCount` | plateau score is the objective of the worst neighbour; `neighbourCount: 0` means the point had no neighbours to compare against — the score is unevidenced, not confirmed. Always read together |
-| `deflatedSharpe` | probability this run's Sharpe reflects real edge rather than the best draw among however many vectors were tried. `> ~0.95` survives the multiple-testing correction; `≤ 0.5` is indistinguishable from the best of a pile of coin flips |
+| `deflatedSharpe` | probability this run's Sharpe reflects real edge rather than the best draw among however many vectors were tried. `> ~0.95` survives the multiple-testing correction; `≤ 0.5` is indistinguishable from the best of a pile of coin flips. **Absent, not zero**, where the statistic isn't meaningfully computable: an aborted run, a sweep with too few trials to establish any dispersion, fewer than 3 period returns, or a degenerate (near-constant) return series |
 | `params`, `sharpe`, `sortino`, `pnl`, `pnlPct`, `cagr`, `maxDdPct`, `trades`, `winRate` | the trial's own results |
 | `belowTradeFloor`, `aborted`, `runtimeMs` | |
 | `equityCurve` | present only when this trial's curve was selected — see [Equity curves](equity_curves.md#sweeps-select-retain-and-fetch-curves) |
