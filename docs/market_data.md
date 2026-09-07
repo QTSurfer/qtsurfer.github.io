@@ -55,5 +55,5 @@ the response to disk or a compatible reader instead of buffering an hour in memo
 ## Related guides
 
 - [Backtests](backtest_execute.md) use managed exchange data after preparing a requested window.
-- [Datasets](datasets.md) covers caller-uploaded CSV data when managed exchange coverage is not the
-  desired source.
+- [Datasets](datasets.md) covers caller-uploaded data — CSV or parquet — when managed exchange
+  coverage is not the desired source.
