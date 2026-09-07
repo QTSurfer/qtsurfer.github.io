@@ -3811,7 +3811,7 @@ components:
     DatasetUploadState:
       type: object
       description: |
-        Progress of one upload, from staged through ingest. Postgres-backed once a version exists,
+        Progress of one upload, from staged through ingest. Durably recorded once a version exists,
         so `ready`/`failed` are permanent answers; `uploading`/`ingesting` reflect in-flight state
         that can itself age out — see the `404` case on `GET .../uploads/{uploadId}`.
       required: [uploadId, status]
