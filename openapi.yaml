@@ -2761,8 +2761,11 @@ components:
             Probability that this run's Sharpe reflects real edge rather than the best draw from
             however many parameter vectors were tried. Above ~0.95 the result survives the
             multiple-testing correction; near 0.5 or below it is indistinguishable from the best of
-            a pile of coin flips. Absent on aborted runs, and on sweeps with too few trials to
-            establish any dispersion to deflate against.
+            a pile of coin flips. Absent on aborted runs, on sweeps with too few trials to
+            establish any dispersion to deflate against, on runs with fewer than 3 period returns,
+            and on a degenerate (near-constant) return series — all cases where the underlying
+            statistic isn't meaningfully computable, rather than genuinely zero. A present value is
+            always the real computed probability, however small.
         params:
           type: object
           additionalProperties: true
