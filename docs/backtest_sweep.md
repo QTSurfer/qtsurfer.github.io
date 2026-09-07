@@ -145,8 +145,16 @@ unadjusted ordering.
 `Started` / `Completed` / `Aborted` / `Failed`, mapped from it — `PARTIAL` and `CANCELLED` both
 become `Aborted`, since a sweep's `PARTIAL` is already terminal, unlike the non-terminal `Partial`
 a single job can be in). `state.completed` is real ticks processed on a plain sweep; on a
-walk-forward sweep it is currently always `0`. `state.size` is always `0` on every execute and
-sweep path today — nothing populates it yet.
+walk-forward sweep it is currently always `0`.
+
+`state.size` is an upfront estimate — the requested range against the prepare's target cadence,
+set before any data is loaded rather than measured from it — on a single execute and a plain sweep
+alike, so `completed / size` is a usable progress ratio from the moment the job starts. A plain
+sweep's value is the sum of every shard's own estimate (each shard's per-run size times its own
+vector slice), the same additive shape `state.completed` already uses. `0` means the prepare
+context behind the job predates this field, never a guessed value standing in for a real one. On a
+`walkForward` sweep `state.size` is still always `0`, the same scope exclusion `state.completed`
+already has there — don't build a fold progress bar on it.
 
 #### `progress` — `SweepProgress`
 
