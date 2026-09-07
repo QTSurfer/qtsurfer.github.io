@@ -3697,7 +3697,7 @@ components:
         url:
           type: string
           description: |
-            Presigned URL. `PUT` the file here directly — the CSV itself, or a `.gz`/`.zip` of it
+            Presigned URL. `PUT` the file here directly — the CSV or parquet itself, or a `.gz`/`.zip` of it
             (see `createDataset`'s own description) — no `Authorization` header, no other API
             credentials.
           example: "https://storage.qtsurfer.com/uploads/00000000-.../up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
@@ -3937,8 +3937,8 @@ tags:
       capture itself: your own exports, a venue not yet integrated, or a private feed.
 
       **Key functionalities**:
-      - Create a dataset and get a presigned URL to upload a CSV directly to object storage.
-      - Finalize an upload to trigger validated ingest (CSV contract check, cadence and timestamp
+      - Create a dataset and get a presigned URL to upload a CSV or parquet file directly to object storage.
+      - Finalize an upload to trigger validated ingest (column contract check, cadence and timestamp
         unit discovery, gap detection) and poll its result.
       - List and inspect your datasets, including their current ingested version.
       - Prepare and execute backtests against a dataset exactly like against a managed exchange.
