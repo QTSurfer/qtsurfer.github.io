@@ -113,12 +113,13 @@ before those fields existed. Two different `params` vectors over one prepare are
 jobs, and `9` and `9.0` are the same one.
 
 Optionally takes `params`: strategy properties for this one run, applied without recompiling.
-This is how a sweep leaderboard winner gets re-run for its `equityCurve` — a sweep row carries
-the ranking metrics but never a curve, whatever its size (see
+Use this to re-run a sweep row as an ordinary backtest result with a chosen parameter vector — for
+example, when you need the plain-backtest result alongside a sweep curve (see
 [`docs/backtest_sweep.md`](backtest_sweep.md)). Compile the strategy once, call this endpoint N
-times with different `params`, and each response is an ordinary backtest result with the curve
-included. The re-run is an independent execution, not a replay of the sweep trial — the two
-paths don't share a simulator, so a metric may differ from the leaderboard row that sent you here.
+times with different `params`, and each response includes the curve under the same conditions as
+any other plain backtest. This is an independent execution rather than a replay of the sweep trial,
+but the two paths are pinned to agree on every leaderboard metric for the same vector. Treat a
+difference as a bug worth reporting, not as expected behaviour.
 
 ### Request body
 

@@ -182,7 +182,7 @@ retrying, or not yet started.
 | `deflatedSharpe` | probability this run's Sharpe reflects real edge rather than the best draw among however many vectors were tried. `> ~0.95` survives the multiple-testing correction; `≤ 0.5` is indistinguishable from the best of a pile of coin flips. **Absent, not zero**, where the statistic isn't meaningfully computable: an aborted run, a sweep with too few trials to establish any dispersion, fewer than 3 period returns, or a degenerate (near-constant) return series |
 | `params`, `sharpe`, `sortino`, `pnl`, `pnlPct`, `cagr`, `maxDdPct`, `trades`, `winRate` | the trial's own results |
 | `belowTradeFloor`, `aborted`, `runtimeMs` | |
-| `equityCurve` | present only when this trial's curve was selected — see [Equity curves](equity_curves.md#sweeps-select-retain-and-fetch-curves) |
+| `equityCurve` | present when this completed trial has a retained curve. It may contain a URL alone or a URL plus inline points; inspect `points`/`equities`, not object or URL presence, to tell. See [Equity curves](equity_curves.md#sweeps-select-retain-and-fetch-curves) |
 
 ### Example
 

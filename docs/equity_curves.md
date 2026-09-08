@@ -6,8 +6,9 @@ delivery rules:
 
 - A plain backtest returns the curve inline in `results.equityCurve` and fixes its transform when
   the execution is submitted.
-- A sweep leaderboard row may carry a pointer in `equityCurve.url`; fetch it separately and choose
-  the transform at read time.
+- A sweep row with a retained curve carries `equityCurve.url`. In the materialisation view
+  (`?order=natural`) it can also include the curve inline; fetch its URL to choose a different
+  transform at read time.
 
 The first point is an anchor at the backtest `from` timestamp with the initial capital. Every later
 point is one sample per emitted yield. `equity` is account value (`initialCapital + cumulativePnl`),
@@ -161,7 +162,13 @@ Retention (`mode`, `n`, `maxPct`) contributes to sweep identity. Transform defau
 otherwise identical submissions that differ only in `resample`, `differential`, or `outMode`
 deduplicate to the same `sweepId`.
 
-Selected leaderboard rows contain a pointer, not inline points:
+With `topN` or `topPct`, every completed run that produced trades retains a curve. `equityCurve` is
+absent, not `null`, only when a run aborted, it produced no trades, or the sweep requested no
+retention (`mode: auto` or `none`). Selection changes delivery rather than whether a curve exists:
+the ranked view carries a pointer, while the materialisation view (`?order=natural`) can carry the
+same pointer together with inline points.
+
+For example, a ranked row can contain a pointer:
 
 ```json
 {
@@ -179,9 +186,13 @@ Selected leaderboard rows contain a pointer, not inline points:
 }
 ```
 
-`equityCurve` is absent, not `null`, on unselected rows. The row's metadata is a preview captured
-when selection occurred; fetch `url` for the actual, possibly size-guarded curve and authoritative
-metadata.
+Do not use the presence of `equityCurve`, or the absence of `url`, to determine whether a curve is
+inline. Both are misleading: a pointer-only row has `equityCurve`, and an inline curve keeps `url`
+so it can be fetched again with a different transform. Read `points` or `equities` instead.
+
+When a row carries only a pointer, fetch `url` for the actual, possibly size-guarded curve and
+authoritative metadata. The row metadata may be a declaration rather than a measurement: on a
+non-promoted curve its point count is derived from the trade count rather than read from storage.
 
 ## Sweep curve query parameters
 
@@ -197,11 +208,11 @@ curl "https://api.qtsurfer.net$EQUITY_CURVE_URL?outMode=SHORT&resample=500&diffe
 The server may still force a smaller representation above its size thresholds. Parse the response
 according to `meta`, not according to the submitted defaults or query string.
 
-The endpoint returns `404` when the sweep or `runIx` is unknown, or when that trial's curve was not
-retained. Those cases are intentionally indistinguishable to the caller.
+The endpoint returns `404` when the sweep or `runIx` is unknown, or when that trial has no retained
+curve. Those cases are intentionally indistinguishable to the caller.
 
 Without a retained sweep curve, reproduce the chosen trial with [`params` on a plain
 `execute`](backtest_execute.md#executing-a-backtest) — pass the row's winning parameter values and
 the same `prepareJobId`, no recompile needed. This is an independent execution, not a replay of the
-sweep trial: the two paths don't share a simulator, so a metric may differ from the leaderboard row
-that sent you here.
+sweep trial, but the two paths are pinned to agree on every leaderboard metric for the same vector.
+Treat a difference as a bug worth reporting.
