@@ -95,19 +95,17 @@ Errors: `404` no such dataset for this user.
 Either way, `timestamp` (ISO-8601, or numeric epoch seconds / millis / micros — detected from the
 first row, then enforced for every later row) and `close` are required. Optional: `open`, `high`,
 `low`, `volume`, `quoteVolume`, `bid`, `bidSize`, `ask`, `askSize`. **Cadence and timestamp unit
-are discovered from the data, not declared.** Either file may also be gzipped (`.gz`) or zipped
-(`.zip`, exactly one file inside) — format is detected from the bytes themselves, nothing to
-declare.
+are discovered from the data, not declared.**
 
 A CSV upload is converted to our native columnar format (`lastra`) for storage. A parquet upload
 is stored as-is today. Either way, check `dataFormat` on the [ready
 version](#datasetversion--one-successfully-ingested-upload) for which one you actually get back —
 don't assume it from how you uploaded it.
 
-The bytes `PUT` to `upload.url` may be that CSV directly, gzipped (`.gz`), or zipped (`.zip`,
-exactly one file inside — a dataset is one file regardless of how it travels). Detected from
-the content itself: there is no filename or `Content-Type` anywhere in this flow for a client
-to declare it with, so nothing needs to be sent besides the bytes.
+The bytes `PUT` to `upload.url` may be that file directly, gzipped (`.gz`), or zipped (`.zip`,
+exactly one file inside — a dataset is one file regardless of how it travels). Format is detected
+from the content itself: there is no filename or `Content-Type` anywhere in this flow for a
+client to declare it with, so nothing needs to be sent besides the bytes.
 
 ```bash
 curl -X PUT "$UPLOAD_URL" --data-binary @my-btc-ticks.csv
@@ -157,7 +155,7 @@ case below).
 | Field | Notes |
 |---|---|
 | `id` | the version id — pass as `datasetVersionId` on prepare to pin it |
-| `bytes` | size of the CSV itself -- decompressed, if the upload was a `.gz`/`.zip` -- not the size of the bytes `PUT` to storage |
+| `bytes` | size of the **stored** file (`dataUrl`) — a converted `lastra` for a CSV upload (decompressed first, if it arrived as `.gz`/`.zip`), or the parquet file itself for a parquet upload. Not the size of the bytes originally `PUT` |
 | `rows` | number of data rows |
 | `cadence` | discovered bar cadence (`1s`, `1m`, `1h`, ...) |
 | `timestampUnit` | `iso` \| `s` \| `ms` \| `us` — the unit the `timestamp` column arrived in |
