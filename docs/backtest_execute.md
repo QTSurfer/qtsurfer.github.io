@@ -32,7 +32,7 @@ Two shapes, chosen by the `exchangeId` path segment:
 | `instrument` | string | required **unless** `exchangeId` is the reserved value `user` |
 | `datasetId` | string | **only** for `exchangeId: user` — a dataset from `POST /datasets`, in place of `instrument` |
 | `datasetVersionId` | string | **only** for `exchangeId: user`, optional — pins a past version instead of the dataset's current one |
-| `cadence` | enum | `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w`, `1q` — default `1s`. Coarser-than-source values must be exact multiples of the source cadence |
+| `cadence` | string | optional. Managed exchange: one of `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w`, `1q` — default `1s`. `exchangeId: user`: default is the dataset version's own discovered cadence, served as-is; any cadence equal to or coarser than it and an exact multiple of it is accepted, even outside that list (e.g. `15s`), and an `rt` dataset resamples to any fixed cadence. Finer than the source, or not an exact multiple of it, is `400` |
 
 `exchangeId: user` is reserved for your own uploaded data — see
 [`docs/datasets.md`](datasets.md).
@@ -59,7 +59,8 @@ an already-ingested file rather than claiming worker capacity.
 `GET .../prepare/{jobId}`
 
 A single-instrument prepare is always terminal (`status: Completed`) — decide from
-`coverageRatio` (e.g. execute once it clears a chosen threshold) rather than polling for missing
+`coverageRatio` (e.g. execute once it clears a chosen threshold; against an `rt` dataset, which
+has no ratio, from `dataFrom`/`dataTo`) rather than polling for missing
 hours that may never arrive. A missing hour usually means low activity, not missing data.
 
 ### Response — `PrepareJobState`
@@ -70,10 +71,10 @@ The `JobState` shape (`contextId`, `status`, `statusDetail`, `size`, `completed`
 | Field | Notes |
 |---|---|
 | `dataFrom`, `dataTo` | available data range. Present either way |
-| `coverageRatio` | `0`–`1`. Managed exchange: `hoursWithData / totalHours`. Dataset (`exchangeId: user`): `rows / expectedStepsAtCadence` over the dataset version's own range, echoing what ingest computed once |
+| `coverageRatio` | `0`–`1`. Managed exchange: `hoursWithData / totalHours`. Dataset (`exchangeId: user`): `rows / expectedStepsAtCadence` over the dataset version's own range, echoing what ingest computed once. **Absent for an `rt` dataset** — no fixed step, so no expected row count |
 | `totalHours`, `hoursWithData` | managed exchange only — absent for a dataset-backed prepare |
 | `hoursWithoutData` | managed exchange only — one entry per empty hour: `{hour, expected, rationale}`. `rationale` is `pending_conversion` (re-poll may fill it), `low_activity`, or `unknown` |
-| `cadence`, `gaps`, `largestGapSteps` | dataset-backed only — the dataset version's own discovered cadence, and its gap count/size at that cadence |
+| `cadence`, `gaps`, `largestGapSteps` | dataset-backed only — the dataset version's own discovered cadence (a fixed grid or `rt`, see [`docs/datasets.md`](datasets.md)), and its gap count/size at that cadence. `gaps`/`largestGapSteps` are `0` for `rt` |
 
 ### Example
 

@@ -160,9 +160,9 @@ case below).
 | `id` | the version id — pass as `datasetVersionId` on prepare to pin it |
 | `bytes` | size of the **stored** file (`dataUrl`) — a converted `lastra` for a CSV upload (decompressed first, if it arrived as `.gz`/`.zip`), or the parquet file itself for a parquet upload. Not the size of the bytes originally `PUT` |
 | `rows` | number of data rows |
-| `cadence` | discovered bar cadence (`1s`, `1m`, `1h`, ...) |
+| `cadence` | discovered from the data's own timestamps: a fixed grid (`1s`, `5s`, `15s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`) when at least half the intervals between rows fall on that step (small clock jitter tolerated), or `rt` — native data at the rate it was captured, each row at its own timestamp with no fixed step (per-trade on-chain swaps, block-spaced or sub-second ticks, irregular intervals). An `rt` dataset can be resampled to any fixed cadence at prepare time |
 | `timestampUnit` | `iso` \| `s` \| `ms` \| `us` — the unit the `timestamp` column arrived in |
-| `gaps`, `largestGapSteps` | gap count at the discovered cadence, and the largest one's size in cadence steps |
+| `gaps`, `largestGapSteps` | gap count at the discovered cadence, and the largest one's size in cadence steps. Always `0` for `rt` |
 | `dataUrl` | presigned GET URL to the stored file — see `dataFormat`. Present once `ready` |
 | `dataFormat` | `lastra` (converted, from a CSV/gzip/zip upload) \| `parquet` (unconverted, from a parquet upload) |
 
@@ -200,7 +200,7 @@ value today; other source types join this same endpoint later. A `dex` import ha
 chosen by the top-level `cadence`:
 
 * Omitted/blank (default) — on-chain swap history, replayed directly from the pool/pair's own
-  chain, native per-trade cadence.
+  chain, each swap at its own timestamp (native per-trade cadence).
 * `1s` \| `1m` \| `5m` — pre-aggregated candles at that width instead of raw trades. The resulting
   dataset's `type` is `klines`, not `ticker`.
 
@@ -218,7 +218,8 @@ chosen by the top-level `cadence`:
 | `dex.factory` | string | optional — omit to auto-discover on-chain from `contract`; supply only if you already know it or the pool/pair belongs to a non-canonical factory. Either way the pool/pair is validated against whichever factory is used before anything is fetched. Ignored if `cadence` requested candles |
 
 **On-chain cadence is native, not resampled.** A plain `dex` import (no `cadence`) keeps the
-source's own per-trade event cadence — tagged `RT` on the resulting version — rather than bucketing
+source's own per-trade event cadence — each swap at the timestamp it happened, so the resulting
+version's `cadence` is `rt` unless the swaps happen to sit on a fixed grid — rather than bucketing
 into candles; resample to a coarser cadence afterward as a separate step if you need one from
 on-chain data. Asking for `cadence: "1s"`/`"1m"`/`"5m"` instead gets you pre-aggregated candles at
 that width directly. Not every network supports every cadence yet — an unsupported combination
@@ -302,7 +303,7 @@ curl https://api.qtsurfer.net/v1/datasets/$DATASET_ID/imports/$IMPORT_ID \
   "status": "ready",
   "version": {
     "datasetId": "ds_3f9a1c2e7b0d4a5f", "id": "dsv_8e2b4f19c6a03d7e",
-    "bytes": 4831022, "rows": 604800, "cadence": "RT",
+    "bytes": 4831022, "rows": 604800, "cadence": "rt",
     "timestampUnit": "us", "gaps": 0, "largestGapSteps": 0,
     "dataUrl": "https://storage.qtsurfer.com/.../dsv_8e2b4f19c6a03d7e/ticker_WETH_USDC_....lastra?X-Amz-...",
     "dataFormat": "lastra"
@@ -324,7 +325,7 @@ a dataset covers.
 | `datasetId`, `name`, `type` (`"ticker"` \| `"klines"`), `instrument`, `createdAt` | always present. `type` is `"klines"` only for a `dex` import that requested a candle `cadence`; `"ticker"` for everything else (uploads, and native-cadence `dex` imports) |
 | `currentVersionId` | the most recently finalized, successfully ingested version. **Absent until at least one upload has finished ingesting** |
 | `updatedAt` | when `currentVersionId` last changed; absent until it has a value |
-| `from`, `to`, `cadence` | the current version's own range/cadence, as discovered at ingest. **Absent until a version exists** |
+| `from`, `to`, `cadence` | the current version's own range/cadence (a fixed grid or `rt`, see [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload)), as discovered at ingest. **Absent until a version exists** |
 
 `GET /datasets/{datasetId}` alone adds `dataUrl`/`dataFormat` (same meaning as on
 [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload)) once the current version is

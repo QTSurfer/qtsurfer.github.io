@@ -802,8 +802,8 @@ paths:
             Invalid request or parameters. Also returned when `from` is older than the configured
             lookback window or `to` is in the future. For `exchangeId: user`, also returned when
             the dataset's current upload has not finished ingesting, or `cadence` asks for a finer
-            granularity than the dataset's own discovered cadence, or the requested range exceeds
-            your tier's range limit.
+            granularity than the dataset's own discovered cadence (or one that isn't an exact
+            multiple of it), or the requested range exceeds your tier's range limit.
           content:
             application/json:
               schema:
@@ -1993,8 +1993,9 @@ paths:
         A `dex` import has two data shapes, chosen by the top-level `cadence`:
 
         * Omitted/blank (default) — on-chain swap history, replayed directly from the pool/pair's
-          own chain. Cadence is native, not resampled: it keeps the source's own per-trade event
-          cadence (tagged `RT` on the resulting version) rather than bucketing into candles.
+          own chain. Cadence is native, not resampled: each swap keeps the timestamp it happened
+          at rather than being bucketed into candles, so the resulting version's `cadence` is `rt`
+          unless the swaps happen to sit on a fixed grid (see `DatasetVersion.cadence`).
         * One of `1s` / `1m` / `5m` — pre-aggregated candles at that width instead of raw trades.
           The resulting dataset's `type` is `klines`, not `ticker`. Not every network supports every
           cadence yet — an unsupported combination fails asynchronously, same as an unresolvable
@@ -2114,7 +2115,7 @@ paths:
                   id: "dsv_8e2b4f19c6a03d7e"
                   bytes: 4831022
                   rows: 604800
-                  cadence: "RT"
+                  cadence: "rt"
                   timestampUnit: "us"
                   gaps: 0
                   largestGapSteps: 0
@@ -2381,13 +2382,19 @@ components:
         cadence:
           type: string
           description: |
-            Output bar cadence for the prepared range. Defaults to the publisher's
-            native cadence (`1s`); coarser cadences are produced on demand via
-            resampling and stored alongside the native blob in cache. Coarser-than-
-            source values must be exact multiples of the source cadence — invalid
-            labels return `400`.
-          enum: [1s, 5s, 1m, 3m, 5m, 15m, 30m, 1h, 2h, 4h, 8h, 12h, 1d, 1w, 1q]
-          default: "1s"
+            Output bar cadence for the prepared range. Coarser cadences are produced on demand by
+            resampling the source and stored alongside the native blob in cache. A target finer
+            than the source, or not an exact multiple of it, returns `400`. What's accepted, and
+            what omitting it means, depends on the source:
+
+            * Managed exchange — one of `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`,
+              `4h`, `8h`, `12h`, `1d`, `1w`, `1q`; any other label returns `400`. Omitted = `1s`,
+              the publisher's native cadence.
+            * Dataset (`exchangeId: user`) — omitted = the dataset version's own discovered
+              `cadence` (see `DatasetVersion.cadence`), served as-is. Any cadence equal to or
+              coarser than it and an exact multiple of it is accepted, including ones outside the
+              managed-exchange list (e.g. `15s`); an `rt` dataset can be resampled to any fixed
+              cadence.
       example:
         instrument: BTC/USDT
         from: "2024-12-13T00:00:00Z"
@@ -2417,7 +2424,8 @@ components:
               Current status of the job. Treat `Completed | Aborted | Failed` as
               terminal; `New | Started` mean keep polling. A single-instrument prepare
               is always terminal (`Completed`) — decide from
-              `PrepareJobState.coverageRatio`, not by polling.
+              `PrepareJobState.coverageRatio` (or `dataFrom`/`dataTo` against an `rt` dataset,
+              which has no ratio), not by polling.
             enum:
               - New
               - Started
@@ -2460,8 +2468,10 @@ components:
         dataset-backed prepare (`exchangeId: user`), coverage is reported on the dataset's own
         cadence grid instead — hour-walking a daily dataset would report `1/24` and read as
         broken — via `cadence`/`gaps`/`largestGapSteps`; `totalHours`/`hoursWithData`/
-        `hoursWithoutData` are absent in that case. `dataFrom`/`dataTo`/`coverageRatio` are present
-        either way, computed accordingly.
+        `hoursWithoutData` are absent in that case. `dataFrom`/`dataTo` are present either way, and
+        `coverageRatio` too, computed accordingly — except against a dataset whose `cadence` is `rt`:
+        with no fixed step there is no expected row count to measure against, so `coverageRatio`
+        is absent and `gaps`/`largestGapSteps` are `0`.
       allOf:
         - $ref: '#/components/schemas/JobState'
         - type: object
@@ -2486,7 +2496,8 @@ components:
                 `totalHours` is 0), the fraction of hours in the requested range that have served
                 data. Against a dataset (`exchangeId: user`): `rows / expectedStepsAtCadence`
                 over the dataset version's own range — echoing what ingest computed once, not
-                recomputed against a narrower prepare request.
+                recomputed against a narrower prepare request. Absent for an `rt` dataset (no
+                fixed step, so no expected row count).
               example: 0.994
             totalHours:
               type: integer
@@ -2503,20 +2514,21 @@ components:
             cadence:
               type: string
               description: |
-                The dataset version's own discovered cadence (e.g. `1m`, `1h`). Only present for a
-                dataset-backed prepare (`exchangeId: user`).
+                The dataset version's own discovered cadence — a fixed grid (e.g. `1m`, `1h`) or
+                `rt` (see `DatasetVersion.cadence`). Only present for a dataset-backed prepare
+                (`exchangeId: user`).
               example: "1m"
             gaps:
               type: integer
               description: |
                 Number of gaps in the dataset version at its own cadence, as discovered at ingest
-                time. Only present for a dataset-backed prepare.
+                time. `0` for `rt`. Only present for a dataset-backed prepare.
               example: 0
             largestGapSteps:
               type: integer
               description: |
-                The largest gap in the dataset version, in units of its own cadence step. Only
-                present for a dataset-backed prepare.
+                The largest gap in the dataset version, in units of its own cadence step. `0` for
+                `rt`. Only present for a dataset-backed prepare.
               example: 0
             hoursWithoutData:
               type: array
@@ -3814,8 +3826,8 @@ components:
         cadence:
           type: string
           description: |
-            `currentVersionId`'s own discovered bar cadence (e.g. `1s`, `1m`, `1h`). Absent until a
-            version exists.
+            `currentVersionId`'s own discovered cadence — a fixed grid (e.g. `1s`, `1m`, `1h`) or
+            `rt` (see `DatasetVersion.cadence`). Absent until a version exists.
           example: "1m"
     DatasetWithLinks:
       description: A `Dataset` plus a self link. Returned by `GET /datasets/{datasetId}`.
@@ -3935,7 +3947,13 @@ components:
           example: 86400
         cadence:
           type: string
-          description: The discovered bar cadence (e.g. `1s`, `1m`, `1h`).
+          description: |
+            The cadence discovered from the data's own timestamps. Either a fixed grid — `1s`,
+            `5s`, `15s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d` — when at least half the
+            intervals between consecutive rows fall on that step (small clock jitter tolerated), or
+            `rt`: native data at the rate it was captured, each row at its own timestamp with no
+            fixed step — per-trade on-chain swaps, block-spaced or sub-second ticks, irregular
+            intervals. An `rt` dataset can be resampled to any fixed cadence at prepare time.
           example: "1s"
         timestampUnit:
           type: string
@@ -3946,11 +3964,11 @@ components:
           example: "iso"
         gaps:
           type: integer
-          description: Number of gaps at the discovered cadence.
+          description: Number of gaps at the discovered cadence. Always `0` for `rt`.
           example: 0
         largestGapSteps:
           type: integer
-          description: The largest gap, in units of the discovered cadence step.
+          description: The largest gap, in units of the discovered cadence step. Always `0` for `rt`.
           example: 0
         dataUrl:
           type: string
@@ -4035,8 +4053,9 @@ components:
           type: string
           enum: ["1s", "1m", "5m"]
           description: |
-            Optional. Omitted/blank keeps native per-trade event cadence (tagged `RT` on the
-            resulting version) — the only behavior for a plain `dex` import. Set to `1s`, `1m` or
+            Optional. Omitted/blank keeps native per-trade event cadence — each swap at its own
+            timestamp, so the resulting version's `cadence` is `rt` unless the swaps happen to sit
+            on a fixed grid (see `DatasetVersion.cadence`). Set to `1s`, `1m` or
             `5m` instead to get pre-aggregated candles at that width rather than raw trades (the
             resulting dataset's `type` becomes `klines`); any other value is `400`. Not every
             network supports every cadence — an unsupported combination fails asynchronously, not
