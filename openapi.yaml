@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.115.1
+  version: 0.116.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1976,6 +1976,138 @@ paths:
         - bearerAuth: []
       tags:
         - Dataset
+  '/datasets/imports':
+    post:
+      operationId: importDataset
+      summary: Create a dataset by importing history instead of uploading it
+      description: |
+        A second way to get data into a dataset, alongside `POST /datasets`: instead of `PUT`ting a
+        file yourself, ask the API to go fetch history on your behalf. Creates the dataset and
+        starts the fetch in the same call — there is no separate upload step, and the result lands
+        as a dataset version indistinguishable from an uploaded one once it's ready. Poll
+        `GET /datasets/{datasetId}/imports/{importId}` for progress.
+
+        `type` selects the source. `dex` — Uniswap V2/V3 swap history over the pool/pair's own
+        chain — is the only value today; other source types join this same endpoint later.
+
+        Cadence is native, not resampled: a `dex` import keeps the source's own per-trade event
+        cadence (tagged `RT` on the resulting version) rather than bucketing into candles. Request
+        an explicit `cadence` and this call rejects it with `400` — resampling to a coarser cadence
+        is a separate step you run afterward, not something an import does implicitly.
+      requestBody:
+        description: What to fetch, and where from
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DatasetImportRequest'
+            example:
+              name: "weth-usdc-week"
+              instrument: "WETH/USDC"
+              from: "2026-08-01T00:00:00Z"
+              to: "2026-08-08T00:00:00Z"
+              type: "dex"
+              dex:
+                network: "ethereum"
+                version: "v3"
+                contract: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+      responses:
+        '202':
+          description: Dataset created, fetch started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetImportCreated'
+              example:
+                datasetId: "ds_3f9a1c2e7b0d4a5f"
+                importId: "imp_01j9z1x2y3z4a5b6c7d8e9f0g1"
+                jobId: "dataset-import:00000000-.../ds_3f9a1c2e7b0d4a5f:imp_01j9z1x2y3z4a5b6c7d8e9f0g1"
+                status: "fetching"
+        '400':
+          description: |
+            Invalid request; `instrument` isn't a plain spot pair; `from >= to`; an explicit
+            `cadence` on a `dex` request; the requested range exceeds your tier's import range
+            ceiling; the requested range's rough size estimate exceeds your tier's row limit; or
+            `network`/`contract`/`factory` fail basic shape validation. Whether the pool/pair
+            actually exists and resolves is checked later, asynchronously — see the `failed` status
+            on the poll endpoint below.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '409':
+          description: You already have a dataset with this `name`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '429':
+          description: Your tier's dataset count limit is reached. Delete one, or upgrade.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Dataset
+  '/datasets/{datasetId}/imports/{importId}':
+    get:
+      operationId: getDatasetImport
+      summary: Get the state of an import/ingest
+      description: |
+        Poll after `POST /datasets/imports` until `status` is `ready` or `failed`. An import spends
+        real time fetching from its source before anything is even staged — `fetching` is the one
+        status only an import ever reports; `ingesting`/`ready`/`failed` mean exactly what they do
+        on `GET /datasets/{datasetId}/uploads/{uploadId}`, since an import re-enters that same
+        ingest chain once it has fetched and staged its data.
+      parameters:
+        - name: datasetId
+          in: path
+          required: true
+          description: The id returned by `POST /datasets/imports`
+          schema:
+            type: string
+            example: "ds_3f9a1c2e7b0d4a5f"
+        - name: importId
+          in: path
+          required: true
+          description: The `importId` returned by `POST /datasets/imports`
+          schema:
+            type: string
+            example: "imp_01j9z1x2y3z4a5b6c7d8e9f0g1"
+      responses:
+        '200':
+          description: Current fetch/ingest state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DatasetImportState'
+              example:
+                importId: "imp_01j9z1x2y3z4a5b6c7d8e9f0g1"
+                status: "ready"
+                version:
+                  datasetId: "ds_3f9a1c2e7b0d4a5f"
+                  id: "dsv_8e2b4f19c6a03d7e"
+                  bytes: 4831022
+                  rows: 604800
+                  cadence: "RT"
+                  timestampUnit: "us"
+                  gaps: 0
+                  largestGapSteps: 0
+                  dataUrl: "https://storage.qtsurfer.com/00000000-.../ds_3f9a1c2e7b0d4a5f/dsv_8e2b4f19c6a03d7e/ticker_WETH_USDC_....lastra?X-Amz-..."
+                  dataFormat: "lastra"
+        '404':
+          description: |
+            No such dataset for this user, or genuinely nothing is known about this `importId`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Dataset
 components:
   schemas:
     ResponseError:
@@ -3836,6 +3968,144 @@ components:
         jobId:
           type: string
           description: The ingest job id, while `status` is `ingesting`.
+        error:
+          type: string
+          description: |
+            A human-readable reason, present when `status` is `failed` (e.g. bad CSV contract,
+            mixed timestamp units, a `.zip` with no file inside or more than one). Durably
+            recorded alongside the failure itself, so it stays available however long after the
+            fact you poll — not tied to how recently the failure happened.
+          example: "line 3: column 'close' is not a number: not-a-number"
+        version:
+          allOf:
+            - $ref: '#/components/schemas/DatasetVersion'
+          description: Present when `status` is `ready` or `failed`.
+    DatasetImportRequest:
+      type: object
+      description: |
+        `POST /datasets/imports`'s request body. A common block plus one type-specific block,
+        selected by `type` — `dex` is the only value today.
+      required: [name, instrument, from, to, type]
+      properties:
+        name:
+          type: string
+          description: A name unique among your datasets. `409` if already taken.
+          example: "weth-usdc-week"
+        instrument:
+          $ref: '#/components/schemas/Instrument'
+        from:
+          type: string
+          format: date-time
+          description: Start of the range to fetch, inclusive. Must be before `to`.
+          example: "2026-08-01T00:00:00Z"
+        to:
+          type: string
+          format: date-time
+          description: |
+            End of the range to fetch, exclusive. The total span is capped by your tier — a
+            request wider than that ceiling is `400`, regardless of source type.
+          example: "2026-08-08T00:00:00Z"
+        cadence:
+          type: string
+          description: |
+            Must be omitted for `type: "dex"` today — an import keeps native event cadence
+            (tagged `RT` on the resulting version) rather than resampling. An explicit value is
+            `400`. Future non-`dex` source types make this field required instead.
+        type:
+          type: string
+          enum: [dex]
+          description: The source to fetch from. `dex` is the only value today.
+          example: "dex"
+        dex:
+          $ref: '#/components/schemas/DatasetImportDexRequest'
+    DatasetImportDexRequest:
+      type: object
+      description: The `dex` source's own fields — required when `type` is `dex`.
+      required: [network, version, contract]
+      properties:
+        network:
+          type: string
+          description: Which chain the pool/pair lives on.
+          example: "ethereum"
+        version:
+          type: string
+          enum: [v2, v3]
+          description: Uniswap version the pool/pair contract implements.
+          example: "v3"
+        contract:
+          type: string
+          description: The pool (v3) or pair (v2) contract address.
+          example: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+        factory:
+          type: string
+          description: |
+            The factory that deployed `contract`. Optional — when omitted, it is discovered
+            on-chain from `contract` itself at fetch time. Supply it explicitly only if you
+            already know it, or the pool/pair belongs to a factory other than the canonical one
+            for `network`/`version`. Either way, the pool/pair is validated against whichever
+            factory is used before anything is fetched — a wrong or unrelated factory fails the
+            import rather than silently fetching from the wrong pool.
+      example:
+        network: "ethereum"
+        version: "v3"
+        contract: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+    DatasetImportCreated:
+      type: object
+      description: The response to `POST /datasets/imports` — the dataset now exists, and its fetch has started.
+      required: [datasetId, importId, jobId, status]
+      properties:
+        datasetId:
+          type: string
+          description: Opaque id of the newly created dataset — same id space as `POST /datasets`.
+          example: "ds_3f9a1c2e7b0d4a5f"
+        importId:
+          type: string
+          description: |
+            Identifies this import. Pass to `GET /datasets/{datasetId}/imports/{importId}` to poll
+            it — there is no separate "finalize" step the way an upload has.
+          example: "imp_01j9z1x2y3z4a5b6c7d8e9f0g1"
+        jobId:
+          type: string
+          description: The fetch/ingest job id.
+          example: "dataset-import:00000000-.../ds_3f9a1c2e7b0d4a5f:imp_01j9z1x2y3z4a5b6c7d8e9f0g1"
+        status:
+          type: string
+          enum: [fetching]
+          description: Always `fetching` in this response — the fetch has only just started.
+          example: "fetching"
+    DatasetImportState:
+      type: object
+      description: |
+        Progress of one import, from fetching through ingest. `fetching` is the one status only an
+        import ever reports — an upload's file already exists by the time you can poll it; an
+        import's doesn't, until this source finishes fetching it.
+      required: [importId, status]
+      properties:
+        importId:
+          type: string
+          example: "imp_01j9z1x2y3z4a5b6c7d8e9f0g1"
+        status:
+          type: string
+          enum: [fetching, ingesting, ready, failed]
+          description: |
+            * `fetching` — reading from the source; nothing staged yet.
+            * `ingesting` — fetch complete, staged, and re-entered the same ingest chain an
+              upload uses; the worker is parsing and validating it.
+            * `ready` — ingested successfully. `version` carries the result.
+            * `failed` — the fetch or the ingest that followed it was rejected. `error` names why.
+          example: "ready"
+        jobId:
+          type: string
+          description: The fetch/ingest job id, while `status` is `fetching` or `ingesting`.
+        error:
+          type: string
+          description: |
+            A human-readable reason, present when `status` is `failed` — an unresolvable
+            pool/pair, no data in the requested range, a range older than the configured source
+            retains, the fetch exceeding your tier's time ceiling, or any of
+            `DatasetUploadState.error`'s own ingest-side reasons once fetching hands off to it.
+            Durably recorded, same as on the upload path.
+          example: "Import exceeded the tier's 12 minute ceiling"
         version:
           allOf:
             - $ref: '#/components/schemas/DatasetVersion'

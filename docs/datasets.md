@@ -13,6 +13,8 @@ Backtest against a CSV or parquet file you upload instead of a managed exchange:
 | `POST` | `/datasets/{datasetId}/uploads` | Open a new upload session for an existing dataset |
 | `POST` | `/datasets/{datasetId}/uploads/{uploadId}/finalize` | Trigger ingest |
 | `GET` | `/datasets/{datasetId}/uploads/{uploadId}` | Poll upload/ingest state |
+| `POST` | `/datasets/imports` | Create a dataset by fetching history instead of uploading it |
+| `GET` | `/datasets/{datasetId}/imports/{importId}` | Poll fetch/ingest state |
 
 v1 is ticker data only — `type` is always `"ticker"`. `instrument` must be a plain spot pair
 (`BASE/QUOTE`, exactly one `/`); derivative forms (`BTC/USDT:USDT`) are rejected.
@@ -148,7 +150,8 @@ case below).
 |---|---|
 | `status` | `uploading` (file `PUT`, not finalized yet) → `ingesting` (finalize called, worker parsing/validating) → `ready` (`version` carries the result) \| `failed` (e.g. bad CSV contract, mixed timestamp units, a `.zip` with no file inside or more than one) |
 | `jobId` | the ingest job id, while `status` is `ingesting` |
-| `version` | a [`DatasetVersion`](#datasetversion), present when `status` is `ready` or `failed` |
+| `error` | human-readable reason, present when `status` is `failed`. Durably recorded alongside the failure — stays available however long after the fact you poll |
+| `version` | a [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload), present when `status` is `ready` or `failed` |
 
 #### `DatasetVersion` — one successfully ingested upload
 
@@ -184,6 +187,98 @@ curl https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads/$UPLOAD_ID \
 
 Errors: `404` no such dataset for this user, or genuinely nothing known about this `uploadId` — no
 version, no in-flight job, nothing was ever `PUT` to its upload URL.
+
+## Importing a dataset instead of uploading one
+
+`POST /datasets/imports` — a second way to get data into a dataset: instead of `PUT`ting a file
+yourself, ask the API to go fetch history on your behalf. Creates the dataset and starts the fetch
+in the same call — there's no separate upload step, and the result lands as a dataset version
+indistinguishable from an uploaded one once it's ready.
+
+`type` selects the source. `dex` — Uniswap V2/V3 swap history over the pool/pair's own chain — is
+the only value today; other source types join this same endpoint later.
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | required, unique among your datasets. `409` if already taken |
+| `instrument` | string | required, plain spot pair — the dataset's own label, independent of the pool's on-chain token order |
+| `from`, `to` | string (date-time) | required, ISO-8601 UTC. `from` inclusive, `to` exclusive, `from < to`. Total span is capped by your tier |
+| `cadence` | string | must be omitted for `type: "dex"` — see below |
+| `type` | string | required, `"dex"` is the only value today |
+| `dex.network` | string | required, which chain the pool/pair lives on |
+| `dex.version` | string | required, `"v2"` \| `"v3"` |
+| `dex.contract` | string | required, the pool (v3) or pair (v2) contract address |
+| `dex.factory` | string | optional — omit to auto-discover on-chain from `contract`; supply only if you already know it or the pool/pair belongs to a non-canonical factory. Either way the pool/pair is validated against whichever factory is used before anything is fetched |
+
+**Cadence is native, not resampled.** A `dex` import keeps the source's own per-trade event
+cadence — tagged `RT` on the resulting version — rather than bucketing into candles. Requesting an
+explicit `cadence` gets you `400`; resample to a coarser cadence afterward as a separate step if
+you need one.
+
+```bash
+curl -X POST https://api.qtsurfer.net/v1/datasets/imports \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "weth-usdc-week",
+    "instrument": "WETH/USDC",
+    "from": "2026-08-01T00:00:00Z",
+    "to": "2026-08-08T00:00:00Z",
+    "type": "dex",
+    "dex": {
+      "network": "ethereum",
+      "version": "v3",
+      "contract": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+    }
+  }'
+# → 202 {"datasetId":"ds_3f9a1c2e7b0d4a5f","importId":"imp_01j9z...","jobId":"dataset-import:...","status":"fetching"}
+```
+
+`importId` is what you poll with, below — there's no separate "finalize" step the way an upload
+has.
+
+Errors: `400` invalid request, `instrument` isn't a plain spot pair, `from >= to`, an explicit
+`cadence` on a `dex` request, the range exceeds your tier's import ceiling, the range's rough size
+estimate exceeds your tier's row limit, or `network`/`contract`/`factory` fail basic shape
+validation (whether the pool/pair actually resolves is checked later, asynchronously — see
+`failed` below) · `409` dataset name already taken · `429` your tier's dataset count limit is
+reached.
+
+## Polling an import
+
+`GET /datasets/{datasetId}/imports/{importId}` — poll after `POST /datasets/imports` until
+`status` is `ready` or `failed`. An import spends real time fetching from its source before
+anything is even staged; once fetched, it re-enters the exact same ingest chain an upload uses.
+
+### Response — `DatasetImportState`
+
+| Field | Notes |
+|---|---|
+| `status` | `fetching` (reading from the source, nothing staged yet — the one status only an import ever reports) → `ingesting` (fetched, staged, worker parsing/validating) → `ready` (`version` carries the result) \| `failed` |
+| `jobId` | the fetch/ingest job id, while `status` is `fetching` or `ingesting` |
+| `error` | human-readable reason, present when `status` is `failed` — an unresolvable pool/pair, no data in the requested range, a range older than the source retains, the fetch exceeding your tier's time ceiling, or any of the ingest-side reasons `DatasetUploadState.error` can carry, once fetching hands off to that same chain. Durably recorded, same as on the upload path |
+| `version` | a [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload), present when `status` is `ready` or `failed` |
+
+```bash
+curl https://api.qtsurfer.net/v1/datasets/$DATASET_ID/imports/$IMPORT_ID \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "importId": "imp_01j9z1x2y3z4a5b6c7d8e9f0g1",
+  "status": "ready",
+  "version": {
+    "datasetId": "ds_3f9a1c2e7b0d4a5f", "id": "dsv_8e2b4f19c6a03d7e",
+    "bytes": 4831022, "rows": 604800, "cadence": "RT",
+    "timestampUnit": "us", "gaps": 0, "largestGapSteps": 0,
+    "dataUrl": "https://storage.qtsurfer.com/.../dsv_8e2b4f19c6a03d7e/ticker_WETH_USDC_....lastra?X-Amz-...",
+    "dataFormat": "lastra"
+  }
+}
+```
+
+Errors: `404` no such dataset for this user, or genuinely nothing known about this `importId`.
 
 ## Dataset shape
 
