@@ -195,25 +195,34 @@ yourself, ask the API to go fetch history on your behalf. Creates the dataset an
 in the same call — there's no separate upload step, and the result lands as a dataset version
 indistinguishable from an uploaded one once it's ready.
 
-`type` selects the source. `dex` — Uniswap V2/V3 swap history over the pool/pair's own chain — is
-the only value today; other source types join this same endpoint later.
+`type` selects the source. `dex` — history over a pool/pair's own market — is the only value
+today; other source types join this same endpoint later. A `dex` import has two data shapes,
+chosen by `dex.provider`:
+
+* Omitted (default) — Uniswap V2/V3 swap history, replayed directly from the pool/pair's own
+  chain.
+* `"coingecko"` — pre-aggregated OHLCV candles at a width you choose, fetched from CoinGecko's
+  market data instead of the chain. The resulting dataset's `type` is `klines`, not `ticker`.
 
 | Field | Type | Notes |
 |---|---|---|
 | `name` | string | required, unique among your datasets. `409` if already taken |
 | `instrument` | string | required, plain spot pair — the dataset's own label, independent of the pool's on-chain token order |
 | `from`, `to` | string (date-time) | required, ISO-8601 UTC. `from` inclusive, `to` exclusive, `from < to`. Total span is capped by your tier |
-| `cadence` | string | must be omitted for `type: "dex"` — see below |
+| `cadence` | string | must be omitted for `type: "dex"` regardless of `dex.provider` — see below |
 | `type` | string | required, `"dex"` is the only value today |
 | `dex.network` | string | required, which chain the pool/pair lives on |
-| `dex.version` | string | required, `"v2"` \| `"v3"` |
+| `dex.version` | string | required unless `dex.provider` is `"coingecko"`, which needs no version distinction and ignores this field if sent. `"v2"` \| `"v3"` |
 | `dex.contract` | string | required, the pool (v3) or pair (v2) contract address |
-| `dex.factory` | string | optional — omit to auto-discover on-chain from `contract`; supply only if you already know it or the pool/pair belongs to a non-canonical factory. Either way the pool/pair is validated against whichever factory is used before anything is fetched |
+| `dex.factory` | string | optional — omit to auto-discover on-chain from `contract`; supply only if you already know it or the pool/pair belongs to a non-canonical factory. Either way the pool/pair is validated against whichever factory is used before anything is fetched. Ignored when `dex.provider` is `"coingecko"` |
+| `dex.provider` | string | optional, `"coingecko"` is the only non-default value — see above |
+| `dex.cadence` | string | required when `dex.provider` is `"coingecko"`, rejected otherwise. One of `1s` \| `15s` \| `30s` \| `1m` \| `5m` \| `15m` \| `1h` \| `4h` \| `12h` \| `1d` — a different field from the top-level `cadence` above |
 
-**Cadence is native, not resampled.** A `dex` import keeps the source's own per-trade event
-cadence — tagged `RT` on the resulting version — rather than bucketing into candles. Requesting an
-explicit `cadence` gets you `400`; resample to a coarser cadence afterward as a separate step if
-you need one.
+**On-chain cadence is native, not resampled.** The default `dex` provider keeps the source's own
+per-trade event cadence — tagged `RT` on the resulting version — rather than bucketing into
+candles. Requesting an explicit top-level `cadence` gets you `400` regardless of provider; resample
+to a coarser cadence afterward as a separate step if you need one from on-chain data. The
+`"coingecko"` provider instead buckets at source, by design — that's what `dex.cadence` picks.
 
 ```bash
 curl -X POST https://api.qtsurfer.net/v1/datasets/imports \
@@ -234,15 +243,37 @@ curl -X POST https://api.qtsurfer.net/v1/datasets/imports \
 # → 202 {"datasetId":"ds_3f9a1c2e7b0d4a5f","importId":"imp_01j9z...","jobId":"dataset-import:...","status":"fetching"}
 ```
 
+Or, for pre-aggregated candles instead of raw on-chain swaps:
+
+```bash
+curl -X POST https://api.qtsurfer.net/v1/datasets/imports \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "weth-usdc-1s",
+    "instrument": "WETH/USDC",
+    "from": "2026-08-01T00:00:00Z",
+    "to": "2026-08-01T06:00:00Z",
+    "type": "dex",
+    "dex": {
+      "network": "ethereum",
+      "contract": "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640",
+      "provider": "coingecko",
+      "cadence": "1s"
+    }
+  }'
+```
+
 `importId` is what you poll with, below — there's no separate "finalize" step the way an upload
 has.
 
 Errors: `400` invalid request, `instrument` isn't a plain spot pair, `from >= to`, an explicit
-`cadence` on a `dex` request, the range exceeds your tier's import ceiling, the range's rough size
-estimate exceeds your tier's row limit, or `network`/`contract`/`factory` fail basic shape
-validation (whether the pool/pair actually resolves is checked later, asynchronously — see
-`failed` below) · `409` dataset name already taken · `429` your tier's dataset count limit is
-reached.
+top-level `cadence` on a `dex` request, the range exceeds your tier's import ceiling, the range's
+rough size estimate exceeds your tier's row limit, `network`/`contract`/`factory` fail basic shape
+validation, or — for `dex.provider: "coingecko"` — `dex.cadence` missing/unsupported (whether the
+pool/pair actually resolves, and for `"coingecko"` whether `network` is one it covers, is checked
+later, asynchronously — see `failed` below) · `409` dataset name already taken · `429` your tier's
+dataset count limit is reached.
 
 ## Polling an import
 
@@ -289,7 +320,7 @@ a dataset covers.
 
 | Field | Notes |
 |---|---|
-| `datasetId`, `name`, `type` (`"ticker"`), `instrument`, `createdAt` | always present |
+| `datasetId`, `name`, `type` (`"ticker"` \| `"klines"`), `instrument`, `createdAt` | always present. `type` is `"klines"` only for a `dex` import with `provider: "coingecko"`; `"ticker"` for everything else (uploads, and on-chain `dex` imports) |
 | `currentVersionId` | the most recently finalized, successfully ingested version. **Absent until at least one upload has finished ingesting** |
 | `updatedAt` | when `currentVersionId` last changed; absent until it has a value |
 | `from`, `to`, `cadence` | the current version's own range/cadence, as discovered at ingest. **Absent until a version exists** |
