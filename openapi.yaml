@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.117.0
+  version: 0.118.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1987,22 +1987,18 @@ paths:
         as a dataset version indistinguishable from an uploaded one once it's ready. Poll
         `GET /datasets/{datasetId}/imports/{importId}` for progress.
 
-        `type` selects the source. `dex` — Uniswap V2/V3 swap history over the pool/pair's own
-        chain — is the only value today; other source types join this same endpoint later.
+        `type` selects the source. `dex` — history over a pool/pair's own on-chain market — is the
+        only value today; other source types join this same endpoint later.
 
-        A `dex` import has two data shapes, chosen by `dex.provider`:
+        A `dex` import has two data shapes, chosen by the top-level `cadence`:
 
-        * Omitted (default) — on-chain swap history, replayed directly from the pool/pair's own
-          chain. Cadence is native, not resampled: it keeps the source's own per-trade event
+        * Omitted/blank (default) — on-chain swap history, replayed directly from the pool/pair's
+          own chain. Cadence is native, not resampled: it keeps the source's own per-trade event
           cadence (tagged `RT` on the resulting version) rather than bucketing into candles.
-          Request an explicit top-level `cadence` and this call rejects it with `400` — resampling
-          to a coarser cadence is a separate step you run afterward, not something an import does
-          implicitly.
-        * `"coingecko"` — pre-aggregated OHLCV candles at a width you choose (`dex.cadence`),
-          fetched from CoinGecko's own market data rather than the chain directly. The resulting
-          dataset's `type` is `klines`, not `ticker`. Network coverage differs from the on-chain
-          path's — check `dex.network` against a chain CoinGecko actually indexes before relying
-          on this for a given network.
+        * One of `1s` / `1m` / `5m` — pre-aggregated candles at that width instead of raw trades.
+          The resulting dataset's `type` is `klines`, not `ticker`. Not every network supports every
+          cadence yet — an unsupported combination fails asynchronously, same as an unresolvable
+          pool (see the `failed` status on the poll endpoint below).
       requestBody:
         description: What to fetch, and where from
         required: true
@@ -2012,7 +2008,7 @@ paths:
               $ref: '#/components/schemas/DatasetImportRequest'
             examples:
               onChain:
-                summary: On-chain swap history (default provider)
+                summary: On-chain swap history (native cadence)
                 value:
                   name: "weth-usdc-week"
                   instrument: "WETH/USDC"
@@ -2021,21 +2017,21 @@ paths:
                   type: "dex"
                   dex:
                     network: "ethereum"
+                    id: "uniswap"
                     version: "v3"
                     contract: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
-              coingecko:
-                summary: Pre-aggregated OHLCV candles via CoinGecko
+              candles:
+                summary: Pre-aggregated 1-second candles
                 value:
                   name: "weth-usdc-1s"
                   instrument: "WETH/USDC"
                   from: "2026-08-01T00:00:00Z"
                   to: "2026-08-01T06:00:00Z"
+                  cadence: "1s"
                   type: "dex"
                   dex:
                     network: "ethereum"
                     contract: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
-                    provider: "coingecko"
-                    cadence: "1s"
       responses:
         '202':
           description: Dataset created, fetch started
@@ -2050,15 +2046,14 @@ paths:
                 status: "fetching"
         '400':
           description: |
-            Invalid request; `instrument` isn't a plain spot pair; `from >= to`; an explicit
-            top-level `cadence` on a `dex` request; the requested range exceeds your tier's import
+            Invalid request; `instrument` isn't a plain spot pair; `from >= to`; `cadence` present
+            but not one of its supported values; the requested range exceeds your tier's import
             range ceiling; the requested range's rough size estimate exceeds your tier's row limit;
-            `network`/`contract`/`factory` fail basic shape validation; or, for `dex.provider:
-            "coingecko"`, `dex.cadence` is missing or not one of its supported values (and for the
-            default provider, `dex.cadence` present at all, or `dex.version` missing). Whether the
-            pool/pair actually exists and resolves — and, for `"coingecko"`, whether `network` is
-            one CoinGecko covers — is checked later, asynchronously — see the `failed` status on
-            the poll endpoint below.
+            `dex.network`/`dex.id` not one of their supported values; `dex.contract`/`dex.factory`
+            fail basic shape validation; or, when `cadence` is omitted, `dex.id`/`dex.version`
+            missing. Whether the pool/pair actually exists and resolves — and, for a candle
+            `cadence`, whether that combination is actually servable on the requested `network` —
+            is checked later, asynchronously — see the `failed` status on the poll endpoint below.
           content:
             application/json:
               schema:
@@ -3780,9 +3775,9 @@ components:
           type: string
           enum: [ticker, klines]
           description: |
-            `ticker` for an upload or an on-chain `dex` import. `klines` only for a `dex` import
-            with `provider: "coingecko"` — pre-aggregated OHLCV candles rather than raw ticks.
-            Purely informational; both shapes are read the same way.
+            `ticker` for an upload or a `dex` import with no `cadence` requested (native per-trade
+            data). `klines` for a `dex` import that requested a candle `cadence` — pre-aggregated
+            bars rather than raw ticks. Purely informational; both shapes are read the same way.
           example: "ticker"
         instrument:
           $ref: '#/components/schemas/Instrument'
@@ -4038,10 +4033,14 @@ components:
           example: "2026-08-08T00:00:00Z"
         cadence:
           type: string
+          enum: ["1s", "1m", "5m"]
           description: |
-            Must be omitted for `type: "dex"` today — an import keeps native event cadence
-            (tagged `RT` on the resulting version) rather than resampling. An explicit value is
-            `400`. Future non-`dex` source types make this field required instead.
+            Optional. Omitted/blank keeps native per-trade event cadence (tagged `RT` on the
+            resulting version) — the only behavior for a plain `dex` import. Set to `1s`, `1m` or
+            `5m` instead to get pre-aggregated candles at that width rather than raw trades (the
+            resulting dataset's `type` becomes `klines`); any other value is `400`. Not every
+            network supports every cadence — an unsupported combination fails asynchronously, not
+            at request time (see `DatasetImportState.error`).
         type:
           type: string
           enum: [dex]
@@ -4052,21 +4051,30 @@ components:
     DatasetImportDexRequest:
       type: object
       description: |
-        The `dex` source's own fields — required when `type` is `dex`. Shape depends on
-        `provider`: the default (omitted) on-chain path requires `version`; `"coingecko"` instead
-        requires `cadence` and ignores `version`/`factory`.
+        The `dex` source's own fields — required when `type` is `dex`. `id`/`version` are required
+        for a plain (native-cadence) import; both are ignored if the top-level `cadence` requested
+        pre-aggregated candles instead, since that path needs neither a protocol nor a version
+        distinction.
       required: [network, contract]
       properties:
         network:
           type: string
+          enum: [ethereum, robinhood]
           description: Which chain the pool/pair lives on.
           example: "ethereum"
+        id:
+          type: string
+          enum: [uniswap]
+          description: |
+            Which on-chain DEX protocol `contract` implements. Required unless the top-level
+            `cadence` requested pre-aggregated candles, in which case it's ignored.
+          example: "uniswap"
         version:
           type: string
           enum: [v2, v3]
           description: |
-            Uniswap version the pool/pair contract implements. Required unless `provider` is
-            `"coingecko"`, which needs no version distinction and ignores this field if sent.
+            Uniswap version the pool/pair contract implements. Required unless the top-level
+            `cadence` requested pre-aggregated candles, in which case it's ignored.
           example: "v3"
         contract:
           type: string
@@ -4080,27 +4088,11 @@ components:
             already know it, or the pool/pair belongs to a factory other than the canonical one
             for `network`/`version`. Either way, the pool/pair is validated against whichever
             factory is used before anything is fetched — a wrong or unrelated factory fails the
-            import rather than silently fetching from the wrong pool. Ignored when `provider` is
-            `"coingecko"` — that path needs no factory discovery.
-        provider:
-          type: string
-          enum: [coingecko]
-          description: |
-            Omit for the default on-chain path (replayed directly from the chain). Set to
-            `"coingecko"` to instead fetch pre-aggregated OHLCV candles from CoinGecko's own market
-            data — the resulting dataset's `type` is `klines`. CoinGecko's own network coverage
-            differs from the on-chain path's; an unsupported `network` fails the import, reported
-            asynchronously on the poll endpoint.
-        cadence:
-          type: string
-          enum: ["1s", "15s", "30s", "1m", "5m", "15m", "1h", "4h", "12h", "1d"]
-          description: |
-            Which candle width to fetch. Required when `provider` is `"coingecko"`, and rejected
-            with `400` otherwise — this is a different field from the top-level `cadence`, which
-            stays forbidden for every `dex` request regardless of `provider`.
-          example: "1s"
+            import rather than silently fetching from the wrong pool. Ignored if the top-level
+            `cadence` requested pre-aggregated candles.
       example:
         network: "ethereum"
+        id: "uniswap"
         version: "v3"
         contract: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
     DatasetImportCreated:
