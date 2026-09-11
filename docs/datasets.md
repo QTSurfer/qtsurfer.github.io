@@ -209,21 +209,25 @@ chosen by the top-level `cadence`:
 | `name` | string | required, unique among your datasets. `409` if already taken |
 | `instrument` | string | required, plain spot pair — the dataset's own label, independent of the pool's on-chain token order |
 | `from`, `to` | string (date-time) | required, ISO-8601 UTC. `from` inclusive, `to` exclusive, `from < to`. Total span is capped by your tier |
-| `cadence` | string | optional. Omitted/blank = native per-trade cadence (see below). One of `1s` \| `1m` \| `5m` instead asks for pre-aggregated candles at that width — any other value is `400` |
+| `cadence` | string | optional. Omitted/blank = native per-trade cadence (see below). One of `1s` \| `1m` \| `5m` asks for pre-aggregated candles at that width on a network that supports it (any other value is `400`) — on a network that doesn't, it's silently ignored, see below |
 | `type` | string | required, `"dex"` is the only value today |
 | `dex.network` | string | required, one of `ethereum` \| `robinhood` |
-| `dex.id` | string | required unless `cadence` requested candles, in which case it's ignored. `"uniswap"` is the only value today — which on-chain DEX protocol `dex.contract` implements |
-| `dex.version` | string | required unless `cadence` requested candles, in which case it's ignored. `"v2"` \| `"v3"` |
+| `dex.id` | string | required unless a candle `cadence` actually resolves (see below) — a candle `cadence` ignored on a non-candle network still requires this. `"uniswap"` is the only value today — which on-chain DEX protocol `dex.contract` implements |
+| `dex.version` | string | required unless a candle `cadence` actually resolves (see below). `"v2"` \| `"v3"` |
 | `dex.contract` | string | required, the pool (v3) or pair (v2) contract address |
-| `dex.factory` | string | optional — omit to auto-discover on-chain from `contract`; supply only if you already know it or the pool/pair belongs to a non-canonical factory. Either way the pool/pair is validated against whichever factory is used before anything is fetched. Ignored if `cadence` requested candles |
+| `dex.factory` | string | optional — omit to auto-discover on-chain from `contract`; supply only if you already know it or the pool/pair belongs to a non-canonical factory. Either way the pool/pair is validated against whichever factory is used before anything is fetched. Ignored if a candle `cadence` actually resolves (see below) |
 
 **On-chain cadence is native, not resampled.** A plain `dex` import (no `cadence`) keeps the
 source's own per-trade event cadence — each swap at the timestamp it happened, so the resulting
 version's `cadence` is `rt` unless the swaps happen to sit on a fixed grid — rather than bucketing
 into candles; resample to a coarser cadence afterward as a separate step if you need one from
 on-chain data. Asking for `cadence: "1s"`/`"1m"`/`"5m"` instead gets you pre-aggregated candles at
-that width directly. Not every network supports every cadence yet — an unsupported combination
-fails asynchronously, same as an unresolvable pool (see `failed` below), not at request time.
+that width directly — but only on a network that actually has a candle source behind it. On any
+other network a candle `cadence` is silently ignored and the import proceeds as if `cadence` were
+never sent (native, `dex.id`/`dex.version` required) — it does not fail, sync or async. Which
+networks support candles today isn't part of this contract and may change; if you need to know
+before importing, request the native cadence and check the resulting version's own `cadence`
+instead of assuming.
 
 ```bash
 curl -X POST https://api.qtsurfer.net/v1/datasets/imports \
@@ -316,16 +320,16 @@ Errors: `404` no such dataset for this user, or genuinely nothing known about th
 ## Dataset shape
 
 Both [`GET /datasets`](#listing-your-datasets) and [`GET
-/datasets/{datasetId}`](#getting-a-dataset) return this — `from`/`to`/`cadence` mirror the
-*current* version's own discovered range and cadence, so you don't need a second call to see what
-a dataset covers.
+/datasets/{datasetId}`](#getting-a-dataset) return this — `from`/`to`/`cadence`/`timestampUnit`
+mirror the *current* version's own discovered range, cadence and timestamp unit, so you don't need
+a second call to see what a dataset covers.
 
 | Field | Notes |
 |---|---|
 | `datasetId`, `name`, `type` (`"ticker"` \| `"klines"`), `instrument`, `createdAt` | always present. `type` is `"klines"` only for a `dex` import that requested a candle `cadence`; `"ticker"` for everything else (uploads, and native-cadence `dex` imports) |
 | `currentVersionId` | the most recently finalized, successfully ingested version. **Absent until at least one upload has finished ingesting** |
 | `updatedAt` | when `currentVersionId` last changed; absent until it has a value |
-| `from`, `to`, `cadence` | the current version's own range/cadence (a fixed grid or `rt`, see [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload)), as discovered at ingest. **Absent until a version exists** |
+| `from`, `to`, `cadence`, `timestampUnit` | the current version's own range/cadence/timestamp unit (a fixed grid or `rt` cadence, `iso`\|`s`\|`ms`\|`us` for `timestampUnit`, see [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload)), as discovered at ingest. **Absent until a version exists** |
 
 `GET /datasets/{datasetId}` alone adds `dataUrl`/`dataFormat` (same meaning as on
 [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload)) once the current version is
