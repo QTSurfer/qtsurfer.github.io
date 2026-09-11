@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.118.0
+  version: 0.119.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1313,14 +1313,21 @@ paths:
         backtest result with the curve included.
 
         The same request (same `prepareJobId`, `strategyId`, `storeSignals`, `equityCurve`,
-        `params`) always returns the same `jobId` (idempotent) — a request that omits `equityCurve`
-        or `params` dedupes exactly as it did before those fields existed. Two different `params`
-        vectors over one prepare are two different jobs, and `9` and `9.0` are the same one.
+        `baseConfig`, `params`) always returns the same `jobId` (idempotent) — a request that omits
+        `equityCurve`, `baseConfig` or `params` dedupes exactly as it did before those fields
+        existed. Two different `params` vectors over one prepare are two different jobs, and `9`
+        and `9.0` are the same one.
 
         The re-run is an independent execution rather than a replay of the sweep trial — the two
         paths do not share a simulator — but they are pinned to agree: one vector run both ways
         matches on every leaderboard metric, asserted as a regression test. Treat a difference as a
         bug worth reporting, not as expected behaviour.
+
+        Optionally takes `baseConfig`, the same `SweepBaseConfig` shape `executeSweep` accepts —
+        `initialFunding`, `feeRate`, `percentAmountToLock`, etc. — so the same object can be reused
+        against either endpoint. This endpoint has one effective fee rate rather than a sweep's
+        independent buy/sell legs: a `baseConfig` that resolves to different buy/sell rates, or sets
+        a non-default `feeLeg`, is rejected with `400` rather than silently collapsed to one side.
 
         Works unchanged for a dataset-backed prepare (`exchangeId: user`) — the request body is
         identical either way, since the instrument and range are recovered from `prepareJobId`.
@@ -1363,6 +1370,16 @@ paths:
                   default: false
                 equityCurve:
                   $ref: '#/components/schemas/EquityCurveOptions'
+                baseConfig:
+                  allOf:
+                    - $ref: '#/components/schemas/SweepBaseConfig'
+                  description: |
+                    Capital/fee/position-size overrides for this one run — the same shape
+                    `executeSweep`'s `baseConfig` accepts. Omit to run at the platform defaults
+                    (`initialFunding: 100`, `feeRate: 0.001`). `buyFeeRate`/`sellFeeRate`/`feeLeg`
+                    are accepted for shape compatibility with a sweep's `baseConfig`, but this
+                    endpoint has one fee-rate slot: a value that implies asymmetric buy/sell fees,
+                    or a non-default `feeLeg`, is rejected with `400`.
                 params:
                   type: object
                   maxProperties: 64
@@ -2637,7 +2654,7 @@ components:
           type: number
           format: double
           exclusiveMinimum: 0
-          default: 10000
+          default: 100
         feeRate:
           type: number
           format: double

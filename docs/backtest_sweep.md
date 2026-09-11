@@ -62,7 +62,7 @@ Applied identically to every trial in the sweep.
 
 | Field | Type | Default | Notes |
 |---|---|---|---|
-| `initialFunding` | number > 0 | `10000` | |
+| `initialFunding` | number > 0 | `100` | |
 | `feeRate` | number ≥ 0 | `0.001` | |
 | `buyFeeRate` / `sellFeeRate` | number ≥ 0 | — | override `feeRate` per side |
 | `feeLeg` | `RECEIVED` \| `QUOTE` \| `BASE` | `RECEIVED` | |

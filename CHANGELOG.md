@@ -7,6 +7,21 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.119.0] — 2026-09-11
+
+### Added ✨
+
+- `executeBacktest` (`POST .../execute`) accepts `baseConfig`, the same `SweepBaseConfig` shape
+  `executeSweep` already accepts (`initialFunding`, `feeRate`/`buyFeeRate`/`sellFeeRate`, `feeLeg`,
+  `percentAmountToLock`) — a client can send the identical object to either endpoint. This endpoint
+  has one effective fee rate rather than a sweep's independent buy/sell legs: a `baseConfig` that
+  implies asymmetric buy/sell fees, or a non-default `feeLeg`, is rejected with `400`.
+
+### Changed 🔄
+
+- `SweepBaseConfig.initialFunding`'s default is `100` (was `10000`) — same default capital on both
+  `executeBacktest` and `executeSweep`. The default fee rate is unchanged.
+
 ## [0.115.1] — 2026-09-07
 
 ### Changed 🔄
