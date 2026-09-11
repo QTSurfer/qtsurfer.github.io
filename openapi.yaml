@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.119.0
+  version: 0.120.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3787,9 +3787,10 @@ components:
         A dataset's own metadata — not its data. `currentVersionId` is what a prepare against
         `exchangeId: user` reads by default; see `DatasetVersion` for what a version carries.
 
-        `from`/`to`/`cadence` mirror that current version's own discovered range and cadence, so
-        you don't need a second call to `GET /datasets/{datasetId}/uploads/{uploadId}` just to see
-        what a dataset covers. Absent until a version exists.
+        `from`/`to`/`cadence`/`timestampUnit` mirror that current version's own discovered range,
+        cadence and timestamp unit, so you don't need a second call to `GET
+        /datasets/{datasetId}/uploads/{uploadId}` just to see what a dataset covers. Absent until a
+        version exists.
       required: [datasetId, name, type, instrument, createdAt]
       properties:
         datasetId:
@@ -3846,6 +3847,13 @@ components:
             `currentVersionId`'s own discovered cadence — a fixed grid (e.g. `1s`, `1m`, `1h`) or
             `rt` (see `DatasetVersion.cadence`). Absent until a version exists.
           example: "1m"
+        timestampUnit:
+          type: string
+          enum: [iso, s, ms, us]
+          description: |
+            `currentVersionId`'s own timestamp unit (see `DatasetVersion.timestampUnit`) — decode
+            the `timestamp` column of `dataUrl`'s file accordingly. Absent until a version exists.
+          example: "iso"
     DatasetWithLinks:
       description: A `Dataset` plus a self link. Returned by `GET /datasets/{datasetId}`.
       allOf:
