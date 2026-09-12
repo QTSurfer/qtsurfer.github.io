@@ -140,6 +140,7 @@ touched.
 | **[Parameter sweeps](docs/backtest_sweep.md)** | Run across a parameter grid, walk-forward validation, sensitivity marginals/heatmaps |
 | **[Equity curves](docs/equity_curves.md)** | Plot, compact, resample, delta-encode, retain and fetch backtest or sweep curves |
 | **[Datasets](docs/datasets.md)** | Bring your own data instead of a managed exchange |
+| **[Account](docs/account.md)** | Your tier limits and live storage usage |
 
 ## Key Technologies
 

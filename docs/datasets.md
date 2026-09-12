@@ -134,7 +134,9 @@ curl -X POST https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads/$UPLOAD_ID
 Errors: `404` no such dataset for this user; `uploadId` wasn't issued for this dataset (never
 minted, or minted for a different one); or nothing was `PUT` to `upload.url` yet — a finalize with
 nothing to finalize · `409` `uploadId` already produced a version (the error message names it) ·
-`413` the uploaded file exceeds your tier's size limit for a dataset.
+`413` the uploaded file exceeds your tier's size limit for a dataset · `429` your account's total
+storage limit ([`GET /account`](account.md)'s `maxTotalStorageBytes`) is reached or would be
+exceeded — delete a dataset to free space, or upgrade.
 
 ## Polling ingest
 
@@ -279,7 +281,8 @@ supported values, `dex.contract`/`dex.factory` fail basic shape validation, or (
 omitted) `dex.id`/`dex.version` missing (whether the pool/pair actually resolves, and for a candle
 `cadence` whether that combination is servable on the requested network, is checked later,
 asynchronously — see `failed` below) · `409` dataset name already taken · `429` your tier's dataset
-count limit is reached.
+count limit is reached, or your account's total storage limit ([`GET /account`](account.md)'s
+`maxTotalStorageBytes`) is already reached — delete a dataset to free a slot or space, or upgrade.
 
 ## Polling an import
 

@@ -7,6 +7,35 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.121.0] — 2026-09-12
+
+### Added ✨
+
+- `GET /account` — your identity, current tier, and that tier's limits (`maxDatasets`,
+  `maxDatasetBytes`, `maxTotalStorageBytes`). No database call behind it, safe to fetch on every
+  page load.
+- `GET /account/usage` — your live storage usage against `maxTotalStorageBytes`: datasets,
+  strategy-execution signals, and registered strategies all count against one shared pool, not a
+  cap per resource type, since they compete for the same underlying storage.
+- `429` on `POST /datasets/{datasetId}/uploads/{uploadId}/finalize` and `POST /datasets/imports`
+  when the account's total storage limit is reached or would be exceeded — see
+  [Account](docs/account.md) and [Datasets](docs/datasets.md).
+
+## [0.120.0] — 2026-09-12
+
+### Added ✨
+
+- `Dataset` (and `DatasetWithLinks`) gains `timestampUnit`, mirroring `from`/`to`/`cadence` from
+  the current version — a dataset viewer can now decode the `timestamp` column of `dataUrl`'s file
+  without a second call to `GET .../uploads/{uploadId}`.
+
+### Fixed 🐛
+
+- `POST /datasets/imports`'s docs previously said an unsupported cadence/network combination fails
+  asynchronously; it's actually silently ignored (the import falls back to native cadence).
+  Corrected in [Datasets](docs/datasets.md); `dex.id`/`dex.version` are documented as required in
+  that fallback case too.
+
 ## [0.119.0] — 2026-09-11
 
 ### Added ✨

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.120.0
+  version: 0.121.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -63,6 +63,70 @@ paths:
         - apiKeyAuth: []
       tags:
         - Auth
+  '/account':
+    get:
+      operationId: getAccount
+      summary: Get your account's identity and tier limits
+      description: |
+        Your userId, current tier, and that tier's limits — no database call, safe to fetch on
+        every page load. For live usage against these limits, see `_links.usage`
+        (`GET /account/usage`).
+      responses:
+        '200':
+          description: Your account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+              example:
+                userId: "76b90203-03c2-46f6-b366-9944f167e818"
+                tier: "free"
+                maxDatasets: 3
+                maxDatasetBytes: 52428800
+                maxTotalStorageBytes: 104857600
+                _links:
+                  self:
+                    href: "/v1/account"
+                  usage:
+                    href: "/v1/account/usage"
+      security:
+        - bearerAuth: []
+      tags:
+        - Account
+  '/account/usage':
+    get:
+      operationId: getAccountUsage
+      summary: Get your live storage usage
+      description: |
+        How much of your account's shared storage pool (`GET /account`'s `maxTotalStorageBytes`)
+        you're currently using. Datasets, strategy-execution signals, and registered strategies
+        all count against the same total — they compete for the same underlying storage, so
+        there's one number to watch, not one per resource type. Not guaranteed real-time — a
+        just-completed upload or strategy execution may take a short moment to be reflected here.
+      responses:
+        '200':
+          description: Your current usage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountUsage'
+              example:
+                datasetsUsed: 2
+                datasetBytesUsed: 15728640
+                signalsUsed: 1
+                signalBytesUsed: 524288
+                strategiesUsed: 4
+                strategyBytesUsed: 40960
+                storageBytesUsed: 16293888
+                _links:
+                  self:
+                    href: "/v1/account/usage"
+                  account:
+                    href: "/v1/account"
+      security:
+        - bearerAuth: []
+      tags:
+        - Account
   '/exchanges':
     get:
       operationId: listExchanges
@@ -1934,6 +1998,14 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '429':
+          description: |
+            Your account's total storage limit (`GET /account`'s `maxTotalStorageBytes`) is
+            reached or would be exceeded. Delete a dataset to free space, or upgrade.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
       security:
         - bearerAuth: []
       tags:
@@ -2083,7 +2155,10 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResponseError'
         '429':
-          description: Your tier's dataset count limit is reached. Delete one, or upgrade.
+          description: |
+            Your tier's dataset count limit is reached, or your account's total storage limit
+            (`GET /account`'s `maxTotalStorageBytes`) is already reached. Delete a dataset to free
+            a slot or space, or upgrade.
           content:
             application/json:
               schema:
@@ -2265,6 +2340,123 @@ components:
           type: boolean
           description: True when `href` is an RFC 6570 URI Template.
           example: false
+    Account:
+      type: object
+      description: |
+        Your identity and tier limits. No database call behind this one — safe to fetch on every
+        page load. Live usage against these limits is a separate resource, `GET /account/usage`,
+        deliberately: usage changes on every upload/execution and costs a query to compute, this
+        one doesn't.
+      required: [userId, tier, maxDatasets, maxDatasetBytes, maxTotalStorageBytes, _links]
+      properties:
+        userId:
+          type: string
+          description: Your account id — the JWT `sub` claim.
+          example: "76b90203-03c2-46f6-b366-9944f167e818"
+        tier:
+          type: string
+          description: Your current subscription tier.
+          example: "free"
+        maxDatasets:
+          type: integer
+          description: Maximum number of active datasets your tier allows.
+          example: 3
+        maxDatasetBytes:
+          type: integer
+          format: int64
+          description: Maximum size, in bytes, of a single dataset version.
+          example: 52428800
+        maxTotalStorageBytes:
+          type: integer
+          format: int64
+          description: |
+            Maximum combined storage, in bytes, across every dataset, strategy-execution signal,
+            and registered strategy on your account — one shared pool, not a separate cap per
+            resource type, since they all compete for the same underlying storage. See `GET
+            /account/usage`'s `storageBytesUsed` for your current usage against this number.
+          example: 104857600
+        _links:
+          $ref: '#/components/schemas/AccountLinks'
+    AccountLinks:
+      description: HAL `_links` for `GET /account`
+      type: object
+      required: [self, usage]
+      properties:
+        self:
+          allOf:
+            - $ref: '#/components/schemas/HalLink'
+          description: Link to this resource.
+        usage:
+          allOf:
+            - $ref: '#/components/schemas/HalLink'
+          description: Link to your live usage, `GET /account/usage`.
+    AccountUsage:
+      type: object
+      description: |
+        Your live usage of the shared storage pool `GET /account`'s `maxTotalStorageBytes` caps.
+        Not guaranteed real-time — a just-completed upload or strategy execution may take a short
+        moment to be reflected here.
+      required:
+        - datasetsUsed
+        - datasetBytesUsed
+        - signalsUsed
+        - signalBytesUsed
+        - strategiesUsed
+        - strategyBytesUsed
+        - storageBytesUsed
+        - _links
+      properties:
+        datasetsUsed:
+          type: integer
+          description: Active datasets counted — the same set `GET /account`'s `maxDatasets` limits.
+          example: 2
+        datasetBytesUsed:
+          type: integer
+          format: int64
+          description: Combined bytes of every active dataset's current version.
+          example: 15728640
+        signalsUsed:
+          type: integer
+          description: Recorded strategy-execution signal uploads.
+          example: 1
+        signalBytesUsed:
+          type: integer
+          format: int64
+          description: Combined bytes of every recorded signal upload.
+          example: 524288
+        strategiesUsed:
+          type: integer
+          description: Registered strategies (see `GET /strategies`).
+          example: 4
+        strategyBytesUsed:
+          type: integer
+          format: int64
+          description: |
+            Combined bytes of each registered strategy's source plus its latest compiled
+            bytecode. Superseded (non-latest) compilations aren't counted.
+          example: 40960
+        storageBytesUsed:
+          type: integer
+          format: int64
+          description: |
+            `datasetBytesUsed + signalBytesUsed + strategyBytesUsed` — the number checked
+            against `GET /account`'s `maxTotalStorageBytes`.
+          example: 16293888
+        _links:
+          $ref: '#/components/schemas/AccountUsageLinks'
+    AccountUsageLinks:
+      description: HAL `_links` for `GET /account/usage`
+      type: object
+      required: [self, account]
+      properties:
+        self:
+          allOf:
+            - $ref: '#/components/schemas/HalLink'
+          description: Link to this resource.
+        account:
+          allOf:
+            - $ref: '#/components/schemas/HalLink'
+          description: Link to your tier limits, `GET /account`.
     InstrumentDetail:
       description: Exchange instrument with per-data-type coverage and market info
       type: object
@@ -4264,6 +4456,16 @@ tags:
       - Exchange an API key for a JWT carrying the caller's subscription tier.
       - Refresh the JWT before expiry without re-using the API key against any
         other endpoint.
+  - name: Account
+    description: |-
+      The **account** endpoints report your identity, tier limits, and live usage against them.
+      Split in two on purpose: tier limits never change mid-session and cost nothing to fetch,
+      while usage is a live figure that changes on every upload or strategy execution.
+
+      **Key functionalities**:
+      - Get your tier and its limits (dataset count, dataset size, total storage).
+      - Get your live storage usage — datasets, strategy-execution signals, and registered
+        strategies all count against one shared total.
   - name: Exchange
     description: |-
       This set of endpoints allows interaction with various **exchanges** for cryptocurrencies and financial assets. With these endpoints, users can access information about available exchanges, 
