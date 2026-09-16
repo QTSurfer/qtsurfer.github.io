@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.121.0
+  version: 0.122.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -79,7 +79,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/Account'
               example:
-                userId: "76b90203-03c2-46f6-b366-9944f167e818"
+                userId: "00000000-0000-0000-0000-000000000000"
                 tier: "free"
                 maxDatasets: 3
                 maxDatasetBytes: 52428800
@@ -1695,16 +1695,21 @@ paths:
         response. `instrument` must be a plain spot pair (`BASE/QUOTE`, exactly one `/`); derivative
         forms (e.g. `BTC/USDT:USDT`) are rejected.
 
-        **Upload format.** A CSV with a header row, or a parquet file with the same columns by
-        name. Required: `timestamp` (ISO-8601, or numeric epoch seconds/millis/micros — detected
-        from the first row, then enforced for every later row), `close`. Optional: `open`, `high`,
-        `low`, `volume`, `quoteVolume`, `bid`, `bidSize`, `ask`, `askSize`. Cadence and timestamp
-        unit are discovered from the data, not declared.
+        **Upload format.** A CSV with a header row, a parquet file with the same columns by
+        name, or a lastra file — our own native columnar format, the same one a dataset's
+        `dataUrl` hands back by default, so a downloaded dataset can be handed to another user to
+        upload with no conversion in between. For CSV/parquet, required: `timestamp` (ISO-8601, or
+        numeric epoch seconds/millis/micros — detected from the first row, then enforced for every
+        later row), `close`. Optional: `open`, `high`, `low`, `volume`, `quoteVolume`, `bid`,
+        `bidSize`, `ask`, `askSize`. A lastra upload carries its own fixed column set instead and
+        only needs a timestamp series and a close series present. Cadence and timestamp unit are
+        discovered from the data, not declared, for all three.
 
         A CSV upload is converted to our native columnar format (`lastra`) for storage. A parquet
-        upload is stored as-is today. Either way, always check `dataFormat` on
+        or lastra upload is stored as-is today. Either way, always check `dataFormat` on
         `GET /datasets/{datasetId}` and `GET /datasets/{datasetId}/uploads/{uploadId}` for which
-        one `dataUrl` actually is, rather than assuming from how you uploaded it.
+        one `dataUrl` actually is, rather than assuming from how you uploaded it (a converted CSV
+        and an uploaded lastra file both report `dataFormat: "lastra"`).
 
         The bytes PUT to `upload.url` may be that file directly, gzipped (`.gz`), or zipped
         (`.zip`, exactly one file inside — a dataset is one file regardless of how it travels).
@@ -2352,7 +2357,7 @@ components:
         userId:
           type: string
           description: Your account id — the JWT `sub` claim.
-          example: "76b90203-03c2-46f6-b366-9944f167e818"
+          example: "00000000-0000-0000-0000-000000000000"
         tier:
           type: string
           description: Your current subscription tier.
@@ -2626,7 +2631,7 @@ components:
               id, and the instrument — but that structure is not a committed contract and may
               change without notice. Treat it as an opaque token: store and pass it back, don't
               parse it.
-            example: "jctx:ticker:76b90203-03c2-46f6-b366-9944f167e818:binance:5ikyamio8b3v9wcnfxztzg:btc/usdt:0vicnz3thzhrqvfczks1pu"
+            example: "jctx:ticker:00000000-0000-0000-0000-000000000000:binance:5ikyamio8b3v9wcnfxztzg:btc/usdt:0vicnz3thzhrqvfczks1pu"
           status:
             type: string
             description: |
@@ -4067,8 +4072,9 @@ components:
               description: |
                 Which format `dataUrl` is actually in — check this rather than assuming it
                 matches how you uploaded it. `lastra` — our native columnar format — for a CSV (or
-                gzip/zip of one) upload, always converted on ingest. `parquet` for a parquet
-                upload, stored as-is today.
+                gzip/zip of one) upload, always converted on ingest, or for a lastra upload,
+                stored as-is (the value alone doesn't tell you which). `parquet` for a parquet
+                upload, also stored as-is today.
               example: "lastra"
             _links:
               type: object
@@ -4201,8 +4207,9 @@ components:
           description: |
             Which format `dataUrl` is actually in — check this rather than assuming it matches
             how you uploaded it. `lastra` — our native columnar format — for a CSV (or gzip/zip
-            of one) upload, always converted on ingest. `parquet` for a parquet upload, stored
-            as-is today.
+            of one) upload, always converted on ingest, or for a lastra upload, stored as-is
+            (the value alone doesn't tell you which). `parquet` for a parquet upload, also
+            stored as-is today.
           example: "lastra"
     DatasetUploadState:
       type: object

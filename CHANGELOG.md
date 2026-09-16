@@ -7,6 +7,21 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.122.0] — 2026-09-16
+
+### Added ✨
+
+- Dataset uploads now accept a `lastra` file (our own native columnar format — the same one a
+  dataset's `dataUrl` hands back by default) in addition to CSV and parquet. A `lastra` upload is
+  stored as-is, same as parquet today, so downloading a dataset and handing that exact file to
+  another user to upload works with no conversion in between.
+
+### Changed
+
+- `dataFormat` on `DatasetVersion`/`GetDatasetResult` clarified: `lastra` can now mean either a
+  converted CSV upload or an unconverted lastra upload — the value alone no longer implies how the
+  data was originally uploaded.
+
 ## [0.121.0] — 2026-09-12
 
 ### Added ✨

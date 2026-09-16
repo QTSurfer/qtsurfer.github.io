@@ -1,6 +1,6 @@
 # Datasets — bring your own data
 
-Backtest against a CSV or parquet file you upload instead of a managed exchange: create a dataset,
+Backtest against a CSV, parquet, or lastra file you upload instead of a managed exchange: create a dataset,
 `PUT` the file to a presigned URL, finalize it to trigger ingest, then
 [prepare/execute](backtest_execute.md) exactly as normal but with the reserved `exchangeId: user`.
 
@@ -93,16 +93,22 @@ Errors: `404` no such dataset for this user.
 
 ## Uploading the file
 
-**CSV or parquet.** A CSV needs a header row; a parquet file carries its columns by name already.
-Either way, `timestamp` (ISO-8601, or numeric epoch seconds / millis / micros — detected from the
-first row, then enforced for every later row) and `close` are required. Optional: `open`, `high`,
-`low`, `volume`, `quoteVolume`, `bid`, `bidSize`, `ask`, `askSize`. **Cadence and timestamp unit
-are discovered from the data, not declared.**
+**CSV, parquet, or lastra.** A CSV needs a header row; a parquet file carries its columns by name
+already; a `lastra` file is our own native columnar format — the same one a dataset's `dataUrl`
+hands you back by default, so downloading a dataset and handing that exact file to another user to
+upload works with no conversion in between. For CSV/parquet, `timestamp` (ISO-8601, or numeric
+epoch seconds / millis / micros — detected from the first row, then enforced for every later row)
+and `close` are required; optional: `open`, `high`, `low`, `volume`, `quoteVolume`, `bid`,
+`bidSize`, `ask`, `askSize`. A lastra upload carries its own fixed column set instead (it's already
+a `dataUrl` download, not a format you construct by hand) and only needs a timestamp series and a
+close series present. **Cadence and timestamp unit are discovered from the data, not declared,**
+for all three.
 
-A CSV upload is converted to our native columnar format (`lastra`) for storage. A parquet upload
-is stored as-is today. Either way, check `dataFormat` on the [ready
+A CSV upload is converted to our native columnar format (`lastra`) for storage. A parquet or
+lastra upload is stored as-is today. Either way, check `dataFormat` on the [ready
 version](#datasetversion--one-successfully-ingested-upload) for which one you actually get back —
-don't assume it from how you uploaded it.
+don't assume it from how you uploaded it (a converted CSV and an uploaded lastra file both report
+`dataFormat: "lastra"`).
 
 The bytes `PUT` to `upload.url` may be that file directly, gzipped (`.gz`), or zipped (`.zip`,
 exactly one file inside — a dataset is one file regardless of how it travels). Format is detected
@@ -160,13 +166,13 @@ case below).
 | Field | Notes |
 |---|---|
 | `id` | the version id — pass as `datasetVersionId` on prepare to pin it |
-| `bytes` | size of the **stored** file (`dataUrl`) — a converted `lastra` for a CSV upload (decompressed first, if it arrived as `.gz`/`.zip`), or the parquet file itself for a parquet upload. Not the size of the bytes originally `PUT` |
+| `bytes` | size of the **stored** file (`dataUrl`) — a converted `lastra` for a CSV upload (decompressed first, if it arrived as `.gz`/`.zip`), or the parquet/lastra file itself, unconverted, for a parquet or lastra upload. Not the size of the bytes originally `PUT` |
 | `rows` | number of data rows |
 | `cadence` | discovered from the data's own timestamps: a fixed grid (`1s`, `5s`, `15s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`) when at least half the intervals between rows fall on that step (small clock jitter tolerated), or `rt` — native data at the rate it was captured, each row at its own timestamp with no fixed step (per-trade on-chain swaps, block-spaced or sub-second ticks, irregular intervals). An `rt` dataset can be resampled to any fixed cadence at prepare time |
 | `timestampUnit` | `iso` \| `s` \| `ms` \| `us` — the unit the `timestamp` column arrived in |
 | `gaps`, `largestGapSteps` | gap count at the discovered cadence, and the largest one's size in cadence steps. Always `0` for `rt` |
 | `dataUrl` | presigned GET URL to the stored file — see `dataFormat`. Present once `ready` |
-| `dataFormat` | `lastra` (converted, from a CSV/gzip/zip upload) \| `parquet` (unconverted, from a parquet upload) |
+| `dataFormat` | `lastra` (either converted, from a CSV/gzip/zip upload, or unconverted, from a lastra upload — the value alone doesn't tell you which) \| `parquet` (unconverted, from a parquet upload) |
 
 ```bash
 curl https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads/$UPLOAD_ID \

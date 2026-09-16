@@ -21,7 +21,7 @@ curl https://api.qtsurfer.net/v1/account \
 
 ```json
 {
-  "userId": "76b90203-03c2-46f6-b366-9944f167e818",
+  "userId": "00000000-0000-0000-0000-000000000000",
   "tier": "free",
   "maxDatasets": 3,
   "maxDatasetBytes": 52428800,
