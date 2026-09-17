@@ -7,6 +7,17 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.123.0] — 2026-09-17
+
+### Added ✨
+
+- `Dataset` gains `status` (`ready`/`failed`/`pending`, always present) plus `bytes`/`rows`/`gaps`/
+  `largestGapSteps` (present when `status` is `ready`) and `error` (present when `status` is
+  `failed`) — mirrors what `DatasetUploadState`/`DatasetVersion` already report for a specific
+  upload/import, now also on `GET /datasets` and `GET /datasets/{datasetId}` without needing an
+  `uploadId`/`importId`. Backward-compatible: purely additive fields, `currentVersionId`'s own
+  semantics unchanged.
+
 ## [0.122.0] — 2026-09-16
 
 ### Added ✨
