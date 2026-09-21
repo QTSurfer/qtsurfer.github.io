@@ -330,15 +330,19 @@ Errors: `404` no such dataset for this user, or genuinely nothing known about th
 
 Both [`GET /datasets`](#listing-your-datasets) and [`GET
 /datasets/{datasetId}`](#getting-a-dataset) return this — `from`/`to`/`cadence`/`timestampUnit`
-mirror the *current* version's own discovered range, cadence and timestamp unit, so you don't need
-a second call to see what a dataset covers.
+mirror the *current* version's own discovered range, cadence and timestamp unit, and `status`,
+`bytes`, `rows`, `gaps` and `largestGapSteps` say whether it is usable and how big it is, so you
+don't need a second call to see what a dataset covers.
 
 | Field | Notes |
 |---|---|
-| `datasetId`, `name`, `type` (`"ticker"` \| `"klines"`), `instrument`, `createdAt` | always present. `type` is `"klines"` only for a `dex` import that requested a candle `cadence`; `"ticker"` for everything else (uploads, and native-cadence `dex` imports) |
+| `datasetId`, `name`, `type` (`"ticker"` \| `"klines"`), `instrument`, `createdAt`, `status` | always present. `type` is `"klines"` only for a `dex` import that requested a candle `cadence`; `"ticker"` for everything else (uploads, and native-cadence `dex` imports) |
 | `currentVersionId` | the most recently finalized, successfully ingested version. **Absent until at least one upload has finished ingesting** |
+| `status` | `ready` — `currentVersionId` is set and the fields below describe it; `failed` — the most recent upload or import attempt failed, there is nothing to read yet (see `error`); `pending` — nothing has ever been attempted (just created, or an upload was never finalized) |
 | `updatedAt` | when `currentVersionId` last changed; absent until it has a value |
 | `from`, `to`, `cadence`, `timestampUnit` | the current version's own range/cadence/timestamp unit (a fixed grid or `rt` cadence, `iso`\|`s`\|`ms`\|`us` for `timestampUnit`, see [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload)), as discovered at ingest. **Absent until a version exists** |
+| `bytes`, `rows`, `gaps`, `largestGapSteps` | the current version's own stored size, row count, gap count and largest gap (in steps of its cadence). **Present only when `status` is `ready`** — see [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload) for what `bytes` measures |
+| `error` | why the most recent attempt failed. **Present only when `status` is `failed`** |
 
 `GET /datasets/{datasetId}` alone adds `dataUrl`/`dataFormat` (same meaning as on
 [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload)) once the current version is
