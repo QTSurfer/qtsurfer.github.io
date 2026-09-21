@@ -545,22 +545,34 @@ paths:
       description: |
         Compiles raw strategy source and registers it, returning its `strategyId`.
 
-        **This answers one question: is the source valid Java.** It compiles, registers, and hands
+        The source is either **Java** — a class extending a strategy base class — or **QTScript**
+        (beta), a compact strategy language whose braced bodies are plain Java. QTScript source
+        begins with the `strategy` keyword, and that is how the two are told apart: there is no
+        separate endpoint and no header to set. Once registered, a strategy is used the same way
+        whichever language it was written in.
+
+        **This answers one question: is the source valid.** It compiles, registers, and hands
         back the id — nothing more. Whether the class can actually run is
         `POST /strategy/{strategyId}/validate`, and everything known about a strategy, validation
         included, is read from `GET /strategy/{strategyId}`. One place to ask, so there is no second
         answer to keep in step.
 
-        The `strategyId` is derived from what the code *means*, not from how it is written. Adding a
-        comment, inserting a blank line, re-indenting, reordering imports, or moving a method around
-        all return the **same** id — you have not created a second strategy. Renaming a variable,
-        changing an identifier's case, reordering fields, or reordering statements inside a method
-        return a **different** one.
+        For **Java**, the `strategyId` is derived from what the code *means*, not from how it is
+        written. Adding a comment, inserting a blank line, re-indenting, reordering imports, or
+        moving a method around all return the **same** id — you have not created a second strategy.
+        Renaming a variable, changing an identifier's case, reordering fields, or reordering
+        statements inside a method return a **different** one.
+
+        For **QTScript**, the id is derived from the text, because indentation is part of its
+        grammar. Only differences that cannot change the strategy are ignored: a byte-order mark, the
+        style of line endings, whitespace at the end of a line, and blank lines before the first and
+        after the last line. Anything else — a comment, the indentation, a blank line in between —
+        returns a **different** id.
 
         Two rules follow, and they are worth designing around:
 
-        - re-submitting a strategy you have only reformatted is free, and gives you back the id you
-          already had, along with any validation already recorded against it;
+        - re-submitting a Java strategy you have only reformatted is free, and gives you back the id
+          you already had, along with any validation already recorded against it;
         - the id says nothing about *behaviour*. Two sources that compute the same thing by
           different means are two strategies, because deciding otherwise would mean deciding program
           equivalence.
@@ -575,7 +587,7 @@ paths:
           text/plain:
             schema:
               type: string
-              description: Raw strategy Java source code
+              description: Raw strategy source code, Java or QTScript
       responses:
         '200':
           description: Compiled and registered
@@ -609,7 +621,8 @@ paths:
                     reflected: true
         '400':
           description: |
-            The source is not valid Java; the message carries the compiler diagnostics. Nothing is
+            The source is not valid; the message carries the diagnostics — the compiler's for Java,
+            and for QTScript `Line N, Column M:` entries against your own source. Nothing is
             registered, so there is no id to look up afterwards.
           content:
             application/json:
@@ -799,7 +812,7 @@ paths:
                     $ref: '#/components/schemas/strategyId'
                   code:
                     type: string
-                    description: Raw strategy Java source code, exactly as registered.
+                    description: Raw strategy source code (Java or QTScript), exactly as registered.
               example:
                 strategyId: 6bsh31ikwkuivhtgcoa6s4
                 code: |
@@ -3833,8 +3846,9 @@ components:
     strategyId:
       description: |
         Unique identifier for a compiled strategy, derived from the source itself: the same code
-        always yields the same id, for every caller, whatever its formatting. See
-        `POST /strategy` for exactly which rewrites preserve it and which do not.
+        always yields the same id, for every caller. How much formatting the id ignores depends on
+        the language — see `POST /strategy` for exactly which rewrites preserve it and which do
+        not.
       type: string
       example: 6bsh31ikwkuivhtgcoa6s4
     DeclaredProperty:
@@ -4585,7 +4599,7 @@ tags:
       wish to ensure their strategy is both executable and effective before deploying it in a live/backtesting environment.
 
       **Key functionalities**:
-      - Submit rich Java&trade; based trading strategies for validation and compilation.
+      - Submit rich Java&trade; based trading strategies — or QTScript (beta) ones — for validation and compilation.
       - Ensure strategies meet the required syntax and operational constraints.
       - Validate strategies to identify potential issues or errors before execution.
       - Integrate strategies with specific exchanges and market instruments for tailored use.

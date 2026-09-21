@@ -20,6 +20,14 @@ pre-1.0, its version follows the version in `openapi.yaml`.
   is queued (`funding data can be prepared but not executed yet`), naming the sources that can be
   run. Running funding-rate strategies is not available yet.
 
+### Changed 🔄
+
+- The strategy endpoints describe both languages a source can be written in: Java, and QTScript
+  (beta), a compact language whose braced bodies are plain Java, told apart by starting with
+  `strategy`. Descriptions only — no request or response changes. One statement changes with it:
+  `strategyId` ignoring comments and re-indentation holds for Java, not for QTScript, where
+  indentation is part of the grammar; the QTScript rules are spelled out on `POST /strategy`.
+
 ## [0.123.0] — 2026-09-17
 
 ### Added ✨
