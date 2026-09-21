@@ -547,8 +547,9 @@ paths:
 
         The source is either **Java** — a class extending a strategy base class — or **QTScript**
         (beta), a compact strategy language whose braced bodies are plain Java. QTScript source
-        begins with the `strategy` keyword, and that is how the two are told apart: there is no
-        separate endpoint and no header to set. Once registered, a strategy is used the same way
+        begins with the `strategy` keyword — whitespace and comments (`//` or `/* */`) before it
+        are ignored — and that is how the two are told apart: there is no separate endpoint and
+        no header to set. Once registered, a strategy is used the same way
         whichever language it was written in.
 
         **This answers one question: is the source valid.** It compiles, registers, and hands
