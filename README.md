@@ -119,7 +119,7 @@ setup:
   }
 ```
 
-QTScript is in beta. Java remains the route with the full engine API, and anything QTScript cannot express is written in Java. See [Strategies](docs/strategy.md#qtscript-beta) for how a source is recognised and how its `strategyId` is derived. To write QTScript with an agent, install the maintained skill:
+QTScript is in beta. Java remains the route with the full engine API, and anything QTScript cannot express is written in Java. See the [QTScript guide](docs/qtscript.md) for the language and [Strategies](docs/strategy.md#qtscript-beta) for how a source is recognised and how its `strategyId` is derived. To write QTScript with an agent, install the maintained skill:
 
 ```bash
 npx skills add QTSurfer/strategy-skills --skill qtsurfer-qtscript-strategy
@@ -170,6 +170,7 @@ touched.
 | Area | Covers |
 |---|---|
 | **[Strategy coding](docs/strategy_coding.md)** | Write Java strategies; emit execution and information signals; configure orders and chart markers |
+| **[QTScript (beta)](docs/qtscript.md)** | Write a strategy in a compact language whose braced bodies are plain Java — the parts of a file, windows, examples |
 | **[Market data](docs/market_data.md)** | Discover exchanges and instruments; download hourly ticker or kline segments |
 | **[Strategies](docs/strategy.md)** | Compile a Java or QTScript strategy, validate, list, inspect, delete it; read back its source |
 | **[Backtests](docs/backtest_execute.md)** | Prepare a dataset, run a strategy once, poll the result, plot the equity curve |

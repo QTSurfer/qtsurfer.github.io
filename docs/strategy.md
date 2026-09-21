@@ -19,7 +19,8 @@ Java strategies](strategy_coding.md).
 ## Compiling a strategy
 
 `POST /strategy` — body is the raw source, `Content-Type: text/plain`. Java is the established
-route; QTScript is a newer, compact language in beta (see [QTScript](#qtscript-beta) below).
+route; QTScript is a newer, compact language in beta (see [QTScript](#qtscript-beta) below, and
+the [QTScript guide](qtscript.md)).
 
 ```bash
 curl -X POST https://api.qtsurfer.net/v1/strategy \
@@ -57,6 +58,7 @@ see [below](#qtscript-beta).) Two consequences:
 
 ### QTScript (beta)
 
+The [QTScript guide](qtscript.md) covers the language in one page, with examples. In short:
 QTScript removes the ceremony around a strategy — package, imports, class, base class, property
 annotations — and keeps every `{ }` body as plain Java. It is told apart from Java by its first
 token: a QTScript file begins with `strategy`. Whitespace and comments (`//` or `/* */`) before it
