@@ -1,10 +1,12 @@
-# QTSurfer
+# [QTSurfer](https://www.qtsurfer.com)
 
-Quantitative trading strategy backtesting platform.
+**[QTSurfer](https://www.qtsurfer.com)** is a quantitative trading strategy backtesting platform.
 
-Write trading strategies in Java, submit them to be compiled, run backtests against historical exchange data, and visualize results with millions of data points — all through a REST API.
+Write trading strategies in Java — or in QTScript, a compact language, currently in beta, that compiles to Java — submit them to be compiled, run backtests against historical exchange data, and visualize results with millions of data points — all through a REST API. Everything about the platform lives at **[www.qtsurfer.com](https://www.qtsurfer.com)**.
 
 ## API Documentation
+
+**[QTSurfer API documentation](https://www.qtsurfer.com/docs/developers/api)** — the developer documentation, on the public site at [www.qtsurfer.com](https://www.qtsurfer.com)
 
 **[qtsurfer.github.io](https://qtsurfer.github.io)** — Interactive OpenAPI documentation
 
@@ -12,14 +14,16 @@ Write trading strategies in Java, submit them to be compiled, run backtests agai
 
 **[Java strategy coding guide](docs/strategy_coding.md)** — signal emission, order parameters, chart metadata, and links to the maintained authoring skill
 
+The Markdown guides in [`docs/`](docs/) are the source of the per-area documentation — full parameter tables, request/response examples and error cases. The [API Quick Start](#api-quick-start) below links to each one.
+
 ## How It Works
 
 ```
-Strategy (Java) ──► Compile ──► Prepare Data ──┬─► Execute ──► Signals (Parquet) ──► Visualize
-                                               └─► Execute Sweep ──► Ranked trials
+Strategy (Java or QTScript) ──► Compile ──► Prepare Data ──┬─► Execute ──► Signals (Parquet) ──► Visualize
+                                                           └─► Execute Sweep ──► Ranked trials
 ```
 
-1. **Write** a trading strategy in Java using the strategy SDK (indicators, signals, execution)
+1. **Write** a trading strategy in Java using the strategy SDK (indicators, signals, execution) — or in QTScript (beta), which compiles to Java
 2. **Compile** it via `POST /strategy` — no build tools needed on the client
 3. **Prepare** historical market data via `POST /backtest/{exchange}/{type}/prepare` — returns a `jobId`. `{exchange}` can be a managed exchange (e.g. `binance`) or the reserved value `user` to prepare from your own uploaded [dataset](docs/datasets.md) instead
 4. **Execute** either one backtest via `POST /backtest/{exchange}/{type}/execute` or a parameter sweep via `POST /backtest/{exchange}/{type}/executeSweep/{prepareJobId}`
@@ -27,7 +31,9 @@ Strategy (Java) ──► Compile ──► Prepare Data ──┬─► Execute
 
 ## Strategy Example
 
-The example emits two different kinds of signal: `emitBuy`/`emitSell` drive execution, while the
+A strategy is written in Java, or in [QTScript](docs/strategy.md#qtscript-beta), a compact language that compiles to Java. Both are submitted the same way — the raw source to `POST /strategy` — and the platform tells them apart by their text.
+
+The Java example emits two different kinds of signal: `emitBuy`/`emitSell` drive execution, while the
 `InfoStrategySignal` records indicator values and chart-marker metadata. See [Coding Java
 strategies](docs/strategy_coding.md) for the signal helpers and their advanced order parameters.
 For agent-assisted authoring, install the maintained
@@ -89,6 +95,36 @@ public class EmaCrossStrategy extends AbstractTickerStrategy {
 }
 ```
 
+### The same strategy in QTScript
+
+QTScript drops the ceremony — imports, class, base class, listener — and keeps every `{ }` body as plain Java. This file is the whole strategy: the same crossing logic, the same buy/sell signals and the same chart markers as the Java above, and run over the same data it produces the same trades and metrics.
+
+```
+strategy "EMA cross"
+
+setup:
+  ema(20)
+  ema(50)
+  window ema20 s1 {
+    boolean bullish = actual > value("ema50");
+    if (bullish && !store.is("bullish")) {
+      store.set("bullish");
+      emitInfo("_m", "position", "belowBar", "shape", "arrowUp", "color", "#26a69a", "text", "BUY");
+      emitBuy(price);
+    } else if (!bullish && store.is("bullish")) {
+      store.unset("bullish");
+      emitInfo("_m", "position", "aboveBar", "shape", "arrowDown", "color", "#ef5350", "text", "SELL");
+      emitSell(price);
+    }
+  }
+```
+
+QTScript is in beta. Java remains the route with the full engine API, and anything QTScript cannot express is written in Java. See [Strategies](docs/strategy.md#qtscript-beta) for how a source is recognised and how its `strategyId` is derived. To write QTScript with an agent, install the maintained skill:
+
+```bash
+npx skills add QTSurfer/strategy-skills --skill qtsurfer-qtscript-strategy
+```
+
 ## Servers
 
 The spec lists two, and only one of them serves the API today:
@@ -135,7 +171,7 @@ touched.
 |---|---|
 | **[Strategy coding](docs/strategy_coding.md)** | Write Java strategies; emit execution and information signals; configure orders and chart markers |
 | **[Market data](docs/market_data.md)** | Discover exchanges and instruments; download hourly ticker or kline segments |
-| **[Strategies](docs/strategy.md)** | Compile, validate, list, inspect, delete a strategy; read back its source |
+| **[Strategies](docs/strategy.md)** | Compile a Java or QTScript strategy, validate, list, inspect, delete it; read back its source |
 | **[Backtests](docs/backtest_execute.md)** | Prepare a dataset, run a strategy once, poll the result, plot the equity curve |
 | **[Parameter sweeps](docs/backtest_sweep.md)** | Run across a parameter grid, walk-forward validation, sensitivity marginals/heatmaps |
 | **[Equity curves](docs/equity_curves.md)** | Plot, compact, resample, delta-encode, retain and fetch backtest or sweep curves |
@@ -146,17 +182,21 @@ touched.
 
 | Layer | Technology |
 |-------|-----------|
-| Strategy runtime | Java |
+| Strategy runtime | Java (QTScript compiles to it) |
 | Signal storage | Apache Parquet, S3-compatible object storage |
 | Visualization | [svelte-timeseries](https://github.com/QTSurfer/svelte-timeseries) (DuckDB-WASM + ECharts) |
 
 ## Data Sources
 
-| Type | Description |
-|------|-------------|
-| `ticker` | Real-time bid/ask/last/volume |
-| `kline` | Candlestick OHLCV |
-| `frate` | Funding rates (futures) |
+The `{type}` of the `/backtest/{exchange}/{type}/...` paths:
+
+| Type | Description | Backtests |
+|------|-------------|-----------|
+| `ticker` | Real-time bid/ask/last/volume | prepare, execute, sweep |
+| `kline` | Candlestick OHLCV, at the `cadence` you prepare the data at | prepare, execute, sweep |
+| `funding` | Funding rates (futures) | prepare only, for now |
+
+See [Backtests](docs/backtest_execute.md#data-sources) for what each one can run.
 
 ## SDKs & Client Libraries
 
@@ -174,13 +214,13 @@ Also part of the ecosystem:
 
 - [lastra-ts](https://github.com/QTSurfer/lastra-ts) / [lastra-py](https://github.com/QTSurfer/lastra-py) — low-level readers for the Lastra columnar format in the browser / Python
 - [mcp-java](https://github.com/QTSurfer/mcp-java) — Model Context Protocol server exposing the API as AI-agent tools (`qtsurfer-mcp`)
-- [strategy-skills](https://github.com/QTSurfer/strategy-skills) — maintained agent skill for writing Java strategies
+- [strategy-skills](https://github.com/QTSurfer/strategy-skills) — maintained agent skills for writing Java and QTScript strategies
 
 ## Related Projects
 
 | Repository | Description |
 |------------|-------------|
-| [strategy-skills](https://github.com/QTSurfer/strategy-skills) | Maintained agent skill for writing, reviewing, and debugging QTSurfer Java strategies |
+| [strategy-skills](https://github.com/QTSurfer/strategy-skills) | Maintained agent skills for writing, reviewing, and debugging QTSurfer strategies in Java and QTScript |
 | [svelte-timeseries](https://github.com/QTSurfer/svelte-timeseries) | OSS Svelte component for time-series visualization |
 
 ## License
