@@ -59,7 +59,8 @@ see [below](#qtscript-beta).) Two consequences:
 
 QTScript removes the ceremony around a strategy — package, imports, class, base class, property
 annotations — and keeps every `{ }` body as plain Java. It is told apart from Java by its first
-token: a QTScript file begins with `strategy`. The same endpoint takes it, and a registered
+token: a QTScript file begins with `strategy`. Whitespace and comments (`//` or `/* */`) before it
+are ignored, so a description can sit on top of the file. The same endpoint takes it, and a registered
 QTScript strategy is used like any other.
 
 ```
