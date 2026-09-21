@@ -1,7 +1,7 @@
 # Strategies
 
-Compile a Java strategy, check it can actually run, list/inspect/delete what you've registered,
-and read back its source.
+Compile a strategy (Java, or QTScript in beta), check it can actually run, list/inspect/delete
+what you've registered, and read back its source.
 
 This page documents the strategy REST resources. For the Java source itself — base classes,
 execution and information signals, advanced order parameters, and chart metadata — see [Coding
@@ -18,7 +18,8 @@ Java strategies](strategy_coding.md).
 
 ## Compiling a strategy
 
-`POST /strategy` — body is the raw Java source, `Content-Type: text/plain`.
+`POST /strategy` — body is the raw source, `Content-Type: text/plain`. Java is the established
+route; QTScript is a newer, compact language in beta (see [QTScript](#qtscript-beta) below).
 
 ```bash
 curl -X POST https://api.qtsurfer.net/v1/strategy \
@@ -38,20 +39,51 @@ curl -X POST https://api.qtsurfer.net/v1/strategy \
 }
 ```
 
-**This answers one question: is the source valid Java.** It compiles, registers, and hands back
+**This answers one question: is the source valid.** It compiles, registers, and hands back
 the id — nothing more. Whether the class can actually run is [`validate`](#checking-it-actually-runs);
 everything known about a strategy, validation included, is read from [`GET
 /strategy/{strategyId}`](#getting-a-strategy).
 
-**`strategyId` is derived from what the code *means*, not from how it's written.** A comment, a
-blank line, re-indenting, reordering imports, or moving a method around all return the **same**
-id — you have not created a second strategy. Renaming a variable, changing an identifier's case,
-or reordering fields/statements returns a **different** one. Two consequences:
+**For Java, `strategyId` is derived from what the code *means*, not from how it's written.** A
+comment, a blank line, re-indenting, reordering imports, or moving a method around all return the
+**same** id — you have not created a second strategy. Renaming a variable, changing an identifier's
+case, or reordering fields/statements returns a **different** one. (For QTScript the rules differ —
+see [below](#qtscript-beta).) Two consequences:
 
-- re-submitting a strategy you only reformatted is free — you get back the id you already had,
-  along with any validation already recorded against it;
+- re-submitting a Java strategy you only reformatted is free — you get back the id you already
+  had, along with any validation already recorded against it;
 - the id says nothing about *behaviour*. Two sources computing the same thing by different means
   are two strategies, since deciding otherwise would mean deciding program equivalence.
+
+### QTScript (beta)
+
+QTScript removes the ceremony around a strategy — package, imports, class, base class, property
+annotations — and keeps every `{ }` body as plain Java. It is told apart from Java by its first
+token: a QTScript file begins with `strategy`. The same endpoint takes it, and a registered
+QTScript strategy is used like any other.
+
+```
+strategy MiniKline kline
+
+param buyBelow = 30
+param sellAbove = 70
+
+setup:
+  rsi(14) window m1 {
+    if (actual < buyBelow) emitBuy(price);
+    if (actual > sellAbove) emitSell(price);
+  }
+```
+
+- `strategy Name [kline|funding]` picks the data source (ticker by default) — see
+  [Data sources](backtest_execute.md#data-sources) for what each can run.
+- A `400` carries `Line N, Column M:` entries against your own source.
+- **`strategyId` comes from the text**, because indentation is part of the grammar. A byte-order
+  mark, the style of line endings, trailing whitespace and blank lines before the first and after
+  the last line are ignored; anything else — a comment, the indentation, a blank line in between —
+  gives a different id.
+- A failure while a QTScript strategy runs is reported against your source, as
+  `QTScript line 6: Index 2 out of bounds for length 1`.
 
 ### `declaredProperties` — `DeclaredProperty`
 
@@ -69,7 +101,7 @@ appear here — a name absent from this list may still be valid.
 | `reflected` | `true` — a value is injected into the strategy's field; `false` — only available through the property map |
 | `min`, `max`, `step` | suggested sweep/range bounds, if declared. **Advisory only, never validated** |
 
-Errors: `400` not valid Java — the message carries the compiler diagnostics, nothing is
+Errors: `400` not valid — the message carries the diagnostics, nothing is
 registered · `429` too many compilations in flight, retry later.
 
 ## Checking it actually runs
