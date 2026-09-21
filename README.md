@@ -1,4 +1,4 @@
-# [QTSurfer](https://www.qtsurfer.com)
+# QTSurfer OpenAPI specification
 
 **[QTSurfer](https://www.qtsurfer.com)** is a quantitative trading strategy backtesting platform.
 
@@ -6,7 +6,7 @@ Write trading strategies in Java — or in QTScript, a compact language, current
 
 ## API Documentation
 
-**[QTSurfer API documentation](https://www.qtsurfer.com/docs/developers/api)** — the developer documentation, on the public site at [www.qtsurfer.com](https://www.qtsurfer.com)
+**[QTSurfer API documentation](https://www.qtsurfer.com/docs/developers/api)** — the developer documentation, on the public site
 
 **[qtsurfer.github.io](https://qtsurfer.github.io)** — Interactive OpenAPI documentation
 
