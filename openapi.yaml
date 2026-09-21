@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.123.0
+  version: 0.124.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -827,6 +827,10 @@ paths:
         The same params always return the same `jobId` (idempotent). Repeated calls with identical
         params do not enqueue duplicate work — they reuse the existing job.
 
+        Every source in `DataSourceType` can be prepared, but not every one can then be run: `funding`
+        data can be prepared and is rejected by `execute` and `executeSweep`. A `kline` prepare takes
+        the bar width from `cadence` — see `PrepareRequest`.
+
         **`exchangeId: user` is reserved for your own uploaded data.** Instead of a managed
         exchange, it prepares from a dataset you created via `POST /datasets` (see the **Dataset**
         endpoints) — send `datasetId` in place of `instrument`. See `PrepareRequest` below for the
@@ -864,7 +868,9 @@ paths:
         '400':
           description: |
             Invalid request or parameters. Also returned when `from` is older than the configured
-            lookback window or `to` is in the future. For `exchangeId: user`, also returned when
+            lookback window or `to` is in the future, or when `type` is `kline` and `cadence` is not
+            one of the cadences kline data is available at (the message lists them). For
+            `exchangeId: user`, also returned when
             the dataset's current upload has not finished ingesting, or `cadence` asks for a finer
             granularity than the dataset's own discovered cadence (or one that isn't an exact
             multiple of it), or the requested range exceeds your tier's range limit.
@@ -978,6 +984,10 @@ paths:
         The backend expands and executes the matrix internally; clients poll the returned
         `sweepId` for incremental results.
 
+        `type` must be `ticker` or `kline`; a `kline` sweep, walk-forward included, runs over bars of
+        the cadence the request was prepared at. `funding` can be prepared but not swept yet: it is
+        rejected with `400` before anything is queued.
+
         Supplying `walkForward` runs the sweep in a different mode entirely. Instead of scoring
         every parameter vector once over the whole range, the data is split into F sequential
         folds; each fold optimizes the full grid on its own window and then scores only its winner
@@ -1020,7 +1030,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ExecuteSweepAccepted'
         '400':
-          description: Invalid sweep specification or the expanded grid exceeds the server limit.
+          description: |
+            Invalid sweep specification, a `type` that cannot be swept yet (`funding`), or the
+            expanded grid exceeds the server limit.
           content:
             application/json:
               schema:
@@ -1370,6 +1382,11 @@ paths:
         Returns immediately with a `jobId`; poll `GET /backtest/{exchangeId}/{type}/execute/{jobId}`
         for the result.
 
+        `type` must be a source that can be executed: `ticker` or `kline`. A `kline` strategy is fed
+        bars of the cadence its `prepareJobId` was prepared at — chosen by you when preparing, not by
+        the strategy. `funding` can be prepared but not executed yet: it is rejected with `400`
+        before anything is queued.
+
         Optionally takes `params`: strategy properties for this one run, applied without
         recompiling. This is how a sweep leaderboard winner gets re-run for its `equityCurve` —
         a sweep row carries the ten ranking metrics but never a curve, whatever its size. Compile
@@ -1491,7 +1508,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResponseError'
         '400':
-          description: Invalid request or parameters
+          description: |
+            Invalid request or parameters. Also returned for a `type` that cannot be executed yet
+            (`funding`); the message names the sources that can.
           content:
             application/json:
               schema:
@@ -2558,9 +2577,20 @@ components:
           example: Binance cryptocurrency exchange
     DataSourceType:
       type: string
-      description: Managed exchange data sources available for backtesting.
+      description: |
+        Managed exchange data sources available for backtesting.
+
+        * `ticker` — trades. Can be prepared, executed and swept.
+        * `kline` — aggregated bars (candlesticks). Can be prepared, executed and swept. A run reads
+          bars of the `cadence` the data was prepared at: you choose the bar width when you prepare,
+          and the strategy does not fix it. See `PrepareRequest.cadence` for the accepted values.
+        * `funding` — funding rates. Can be **prepared but not executed or swept yet**: a `funding`
+          request to `execute` or `executeSweep` is rejected with `400` before anything is queued,
+          and the message names the sources that can be run.
       enum:
         - ticker
+        - kline
+        - funding
       example: ticker
     PrepareRequest:
       type: object
@@ -2613,9 +2643,14 @@ components:
             than the source, or not an exact multiple of it, returns `400`. What's accepted, and
             what omitting it means, depends on the source:
 
-            * Managed exchange — one of `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`,
-              `4h`, `8h`, `12h`, `1d`, `1w`, `1q`; any other label returns `400`. Omitted = `1s`,
-              the publisher's native cadence.
+            * Managed exchange, `ticker` or `funding` — one of `1s`, `5s`, `1m`, `3m`, `5m`, `15m`,
+              `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w`, `1q`; any other label returns `400`.
+              Omitted = `1s`, the publisher's native cadence.
+            * Managed exchange, `kline` — one of `1s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`;
+              any other label, including `5s`, `3m` and `8h`, returns `400` and names the accepted
+              ones. Omitted = `1s`. This is the width of the bars a run reads: it is chosen here,
+              once, and the same strategy can be run at several cadences by preparing the range at
+              each.
             * Dataset (`exchangeId: user`) — omitted = the dataset version's own discovered
               `cadence` (see `DatasetVersion.cadence`), served as-is. Any cadence equal to or
               coarser than it and an exact multiple of it is accepted, including ones outside the
