@@ -6,7 +6,10 @@ which parameters actually moved the objective.
 
 All five endpoints share `{exchangeId}/{type}/executeSweep/{requestId}` (`requestId` is the
 `jobId` from `POST /backtest/{exchangeId}/{type}/prepare` — a sweep reuses the same prepared
-dataset, never a fresh one):
+dataset, never a fresh one). `{type}` is `ticker` or `kline`; a kline sweep, walk-forward included,
+runs over bars of the cadence the request was prepared at (see
+[`docs/backtest_execute.md`](backtest_execute.md#data-sources)). `funding` can be prepared but not
+swept yet:
 
 | Method | Path | Purpose |
 |---|---|---|
@@ -108,7 +111,8 @@ curl -X POST "https://api.qtsurfer.net/v1/backtest/binance/ticker/executeSweep/$
 `queued: false` means an identical sweep already existed and this call did not enqueue a
 duplicate — prepare and execute requests are idempotent, keyed on their body.
 
-Errors: `400` invalid spec or the expanded grid exceeds the server limit · `404` `requestId`
+Errors: `400` invalid spec, a `type` that can't be swept yet (`funding`), or the expanded grid
+exceeds the server limit · `404` `requestId`
 not found or expired · `429` sweep queue or per-user concurrency limit reached.
 
 ## Polling progress and the leaderboard

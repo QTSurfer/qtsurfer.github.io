@@ -7,6 +7,19 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.124.0] — 2026-09-21
+
+### Added ✨
+
+- `DataSourceType` is now `ticker`, `kline` or `funding` (it was `ticker`). `kline` can be prepared,
+  executed and swept — walk-forward included — over bars of the `cadence` the data was prepared at.
+  The bar width is the caller's choice at prepare time, not the strategy's, so one strategy can be
+  run at several cadences. For `kline`, `PrepareRequest.cadence` accepts `1s` (the default), `1m`,
+  `5m`, `15m`, `30m`, `1h`, `4h` and `1d`; any other label is `400` and the message lists them.
+- `funding` can be prepared, but `execute` and `executeSweep` reject it with `400` before anything
+  is queued (`funding data can be prepared but not executed yet`), naming the sources that can be
+  run. Running funding-rate strategies is not available yet.
+
 ## [0.123.0] — 2026-09-17
 
 ### Added ✨
