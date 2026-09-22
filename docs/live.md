@@ -85,6 +85,12 @@ Polling `GET .../live` tells you the run's *state*; it does not stream its outpu
 run's signals as they happen, or to send a parameter update over the same connection instead of a
 separate REST call, open a WebSocket connection:
 
+Signals only reach this channel for a run started with `relay: true` (`POST .../live`'s own field,
+default `false`) — and only once it reaches the `live` stage; a run still in `sandbox` never
+relays, whatever was requested at start. `GET`/`PATCH .../live` echo back what was requested as the
+run's own `relay` field, already folded with that stage rule — `true` there means signals are
+reaching the channel right now, not merely that `relay: true` was once passed.
+
 1. **Mint a token.** `POST /live/token` (JWT bearer, same as any other endpoint) returns a
    short-lived `token` and its `expiresAtMs`. Mint a fresh one before the current one expires or on
    a connection failure that looks auth-related.
@@ -144,7 +150,7 @@ Each `push` payload on a `sig:<runId>` channel:
 | field | meaning |
 |---|---|
 | `signalId` | Stable id for this exact signal — dedupe on it if your connection ever reconnects mid-stream. |
-| `stage` | `sandbox` or `live` — mirrors `GET .../live`'s `stage`. |
+| `stage` | Always `live` on this channel — a run only relays once `relay` is in effect, which never happens in `sandbox` (see above). |
 | `paramsVersion` | The parameter set in force when this signal was produced. |
 | `type` | `hint`, `info`, `marker`, or `command`. |
 | `kind` | `BUY`/`SELL` for a `hint`; the command name for a `command`; absent otherwise. |

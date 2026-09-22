@@ -7,6 +7,24 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.125.2] — 2026-09-22
+
+### Fixed 🐛
+
+- `LiveRun.relay` now reflects a promoted run's real state — it used to always report `false`, even
+  once relay was genuinely active on a `live` run. `StartLiveRequest` was also missing its own
+  `relay` field: the flag was already accepted by `POST /strategy/{strategyId}/live`, just absent
+  from the spec. See [`docs/live.md`](docs/live.md) for the stage rule around it.
+
+## [0.125.1] — 2026-09-22
+
+### Changed 🔄
+
+- The request/response bodies inline on `POST /strategy/{strategyId}/live`, `PATCH /live/{runId}`,
+  `PUT /live/{runId}/params`, and `GET /live/public`'s pagination wrapper are now named schemas
+  (`StartLiveRequest`, `UpdateLiveRequest`, `UpdateLiveParamsRequest`, `PublicLiveListResponse`)
+  instead of anonymous inline objects — same shapes, only how they're named in the spec changes.
+
 ## [0.125.0] — 2026-09-22
 
 ### Added ✨

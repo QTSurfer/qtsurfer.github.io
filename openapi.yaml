@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.125.1
+  version: 0.125.2
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -4961,6 +4961,10 @@ components:
           enum: [private, public]
           default: private
           description: A `public` run appears in `GET /live/public` and its signal channel accepts subscriptions from anyone, not only you.
+        relay:
+          type: boolean
+          default: false
+          description: Request that this run's signals be relayed over its WebSocket channel once it reaches the `live` stage — see the "Live execution" guide. Has no effect while the run is still in the `sandbox` stage, regardless of this value.
         name:
           type: string
         description:
@@ -5026,7 +5030,7 @@ components:
           description: Increments on every accepted `PUT .../params` call, including one that resends the current values.
         relay:
           type: boolean
-          description: Whether this run's signals are also relayed over the WebSocket channel described in the "Live execution" guide.
+          description: Whether this run's signals are being relayed over the WebSocket channel described in the "Live execution" guide, right now. This is the effective value — `false` on a `sandbox` run regardless of what was requested at start; matches the requested value once `stage` reaches `live`.
         startedAtMs:
           type: integer
           format: int64
