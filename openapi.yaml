@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.125.2
+  version: 0.126.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2628,6 +2628,131 @@ paths:
         - bearerAuth: []
       tags:
         - Live Execution
+  '/live/{runId}/signals':
+    get:
+      operationId: getLiveRunSignals
+      summary: Read a run's signals
+      description: |
+        Returns one page of the signals a run has already produced, newest-last, optionally from a
+        given time and narrowed to one or more instruments.
+
+        This is the counterpart to the real-time WebSocket channel: that channel only carries what
+        happens while you are connected, and only for a run that asked for `relay`. A run's signals
+        are recorded either way, so this endpoint serves them whether or not `relay` was ever on,
+        in both the `sandbox` and `live` stages — use it to catch up after a disconnect, to read a
+        run you never relayed, or to page back over what has already happened.
+
+        **The available window moves.** Signals are kept for a limited span, and the oldest are
+        continuously discarded as new ones arrive, so how far back you can read is not a fixed
+        number of hours: on a busy run it can be a good deal shorter. Every response carries
+        `availableSinceMs`, the oldest moment that can still be answered for. Asking for a
+        `sinceMs` older than that is not an error — you get everything from `availableSinceMs`
+        onwards, and that field tells you it happened.
+
+        **A cursor can expire, and on a busy run it expires quickly.** If the position a cursor
+        points at has since been discarded, the next page answers `410` rather than silently
+        serving a shortened page that looks complete. Treat that as a normal outcome: read
+        `availableSinceMs` from the error and start again from there.
+
+        Readable by the run's owner, and by anyone if the run is `public` — the same rule the
+        signal channel applies to a subscription.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: The run whose signals to read.
+        - name: sinceMs
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Start from this moment (epoch ms). Omitted, or older than the available window, starts at `availableSinceMs`. Ignored when `cursor` is given.
+        - name: instrument
+          in: query
+          required: false
+          schema:
+            type: string
+          description: |
+            Narrow to one or more instruments. Omitted, or `*`, returns every instrument the run
+            covers. Accepts a single pair (`BTC/USDT`), either half as a wildcard (`*/USDT` for any
+            base against that quote, `BTC/*` for that base against any quote), or a comma-separated
+            list of pairs (`BTC/USDT,ETH/EUR`). Symbols are matched exactly, case included — pass
+            them as this API reports them.
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Continue from a previous page's `_links.next`. Takes precedence over `sinceMs`.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: Page size.
+      responses:
+        '200':
+          description: One page of signals
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveSignalPage'
+              example:
+                signals:
+                  - v: 1
+                    signalId: 5t5oAmQ4PD0lQRoCU58uE0-000042
+                    runId: 6TzAPiPpsOWwBLdLBZCxwH
+                    stage: live
+                    paramsVersion: 2
+                    type: hint
+                    kind: BUY
+                    eventTsMs: 1758330012000
+                    emittedAtMs: 1758330012040
+                    instrument:
+                      exchange: binance
+                      segment: spot
+                      symbol: BTC/USDT
+                    order:
+                      orderKind: MARKET
+                      price: null
+                      amount: null
+                      stopPrice: null
+                      trailPct: null
+                    data: {}
+                    regenerated: false
+                    digest: 9f2c…
+                availableSinceMs: 1757725212000
+                _links:
+                  next:
+                    href: '/v1/live/6TzAPiPpsOWwBLdLBZCxwH/signals?cursor=eyJzZXEiOjQyfQ&limit=20'
+        '400':
+          description: '`instrument`, `sinceMs`, `limit` or `cursor` is malformed.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: No such run, or not one you may read.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '410':
+          description: The cursor's position is no longer available — restart from the `availableSinceMs` named in the message.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
   '/live/token':
     post:
       operationId: mintLiveConnectionToken
@@ -5103,6 +5228,99 @@ components:
       properties:
         href:
           type: string
+    LiveSignalPage:
+      type: object
+      required: [signals]
+      description: One page of a run's recorded signals, oldest first.
+      properties:
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveSignal'
+        availableSinceMs:
+          type: integer
+          format: int64
+          description: The oldest moment this run's signals can still be read from. Absent when the run has produced nothing yet. It moves forward over time as older signals are discarded, so a `sinceMs` earlier than this is served from here instead.
+        _links:
+          $ref: '#/components/schemas/PublicLiveListLinks'
+    LiveSignal:
+      type: object
+      required: [v, signalId, runId, stage, type, eventTsMs, emittedAtMs, instrument, digest]
+      description: One signal, in the same shape the real-time signal channel delivers.
+      properties:
+        v:
+          type: integer
+          description: Envelope schema version.
+        signalId:
+          type: string
+          description: Stable id for this exact signal — dedupe on it across reconnects or overlapping reads.
+        runId:
+          type: string
+        stage:
+          type: string
+          enum: [sandbox, live]
+          description: The stage the run was in when this signal was produced.
+        paramsVersion:
+          type: integer
+          description: The parameter set in force when this signal was produced.
+        type:
+          type: string
+          enum: [hint, info, marker, command]
+        kind:
+          type: string
+          nullable: true
+          description: '`BUY`/`SELL` for a `hint`, the command name for a `command`, absent otherwise.'
+        eventTsMs:
+          type: integer
+          format: int64
+          description: Market time the signal was produced.
+        emittedAtMs:
+          type: integer
+          format: int64
+          description: Time it was published — always at or after `eventTsMs`.
+        instrument:
+          $ref: '#/components/schemas/LiveSignalInstrument'
+        order:
+          $ref: '#/components/schemas/LiveSignalOrder'
+        data:
+          type: object
+          additionalProperties: true
+          description: The signal's own free-form payload.
+        regenerated:
+          type: boolean
+          description: '`true` only for a signal republished to fill a gap in the record.'
+        digest:
+          type: string
+          description: Content hash, for checking that two independent deliveries of the same signal agree.
+    LiveSignalInstrument:
+      type: object
+      properties:
+        exchange:
+          type: string
+        segment:
+          type: string
+        symbol:
+          type: string
+          description: Slashed form, e.g. `BTC/USDT`.
+    LiveSignalOrder:
+      type: object
+      nullable: true
+      description: Present only for a `hint`.
+      properties:
+        orderKind:
+          type: string
+        price:
+          type: string
+          nullable: true
+        amount:
+          type: string
+          nullable: true
+        stopPrice:
+          type: string
+          nullable: true
+        trailPct:
+          type: string
+          nullable: true
     LiveConnectionToken:
       type: object
       required: [token, expiresAtMs]

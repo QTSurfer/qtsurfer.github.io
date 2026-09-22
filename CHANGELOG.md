@@ -7,6 +7,25 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.126.0] — 2026-09-23
+
+### Added ✨
+
+- `GET /live/{runId}/signals` — read the signals a run has already produced, page by page. The
+  real-time channel only carries what happens while you are connected, and only for a run that
+  asked for `relay`; signals are recorded either way, so this serves them whether or not `relay`
+  was ever on, in both the `sandbox` and `live` stages.
+  - Optional `instrument` filter: a pair (`BTC/USDT`), either half wildcarded (`*/USDT`, `BTC/*`),
+    or a comma-separated list. Symbols match exactly, case included.
+  - `sinceMs`, `cursor` and `limit` (default 20, max 100) for positioning and paging; entries come
+    back in the same shape the signal channel pushes.
+  - Every response carries `availableSinceMs`, the oldest moment still readable. The window moves
+    as older signals are discarded, so a `sinceMs` earlier than that is served from
+    `availableSinceMs` rather than rejected.
+  - A cursor whose position has since been discarded answers `410` (with that `availableSinceMs`
+    in the message) instead of silently returning a shortened page. On a busy run this is an
+    ordinary outcome of paging, not a failure — see [`docs/live.md`](docs/live.md).
+
 ## [0.125.2] — 2026-09-22
 
 ### Fixed 🐛

@@ -11,6 +11,7 @@ change its parameters without restarting it.
 | `GET` | `/live/public` | Browse runs other users made public |
 | `PATCH` | `/live/{runId}` | Change visibility, name, or description |
 | `PUT` | `/live/{runId}/params` | Change parameters while it stays live |
+| `GET` | `/live/{runId}/signals` | Read the signals it has already produced |
 | `POST` | `/live/token` | Mint a WebSocket connection token |
 
 ## Lifecycle: sandbox, then live
@@ -163,3 +164,65 @@ Each `push` payload on a `sig:<runId>` channel:
 
 Who owns the run, which strategy or compilation produced a signal, and the exact market-data
 position behind it are never included on this channel, whether the run is public or private.
+
+## Reading signals a run already produced
+
+The channel above is live only: it carries what happens while you are connected, and only for a run
+that asked for `relay`. `GET /live/{runId}/signals` serves the record instead — a run's signals are
+kept either way, so this works whether or not `relay` was ever on, and in both stages. Use it to
+catch up after a disconnect, to read a run you never relayed, or simply to page back over what has
+already happened.
+
+```
+GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/signals?sinceMs=1758330000000&limit=20
+
+200
+{
+  "signals": [ { "signalId": "…", "eventTsMs": 1758330012000, … } ],
+  "availableSinceMs": 1757725212000,
+  "_links": {"next": {"href": "/v1/live/6TzAPiPpsOWwBLdLBZCxwH/signals?cursor=eyJzZXEiOjQyfQ&limit=20"}}
+}
+```
+
+Each entry is the same shape the channel pushes — the table above applies unchanged, except that
+`stage` here is whichever stage the run was in when the signal was produced, so a sandbox run's
+signals read back as `sandbox`. Page with `_links.next` while it is present; `limit` defaults to 20
+and caps at 100. Readable by the run's owner, and by anyone if the run is `public` — the same rule
+the channel applies to a subscription.
+
+### Filtering by instrument
+
+`instrument` is optional and narrows the page without changing anything else:
+
+| `instrument` | returns |
+|---|---|
+| omitted, or `*` | every instrument the run covers |
+| `BTC/USDT` | just that pair |
+| `*/USDT` | any base against that quote |
+| `BTC/*` | that base against any quote |
+| `BTC/USDT,ETH/EUR` | each pair in the list |
+
+Symbols match exactly, case included — pass them as this API reports them (as they appear in the
+run's own `sources`, or in a signal's `instrument.symbol`).
+
+### The window moves, and cursors expire
+
+Signals are kept for a limited span, and the oldest are discarded continuously as new ones arrive.
+How far back you can read is therefore not a fixed number of hours: a run producing a lot of signals
+consumes that span faster, and so do other runs sharing it. Two consequences worth designing for:
+
+- **`availableSinceMs`** in every response is the oldest moment still answerable. Asking for a
+  `sinceMs` older than that is not an error: you are served from `availableSinceMs` onwards, and
+  the field tells you that is what happened.
+- **A cursor can expire**, and on a busy run it can expire within minutes. When the position it
+  points at has already been discarded, the next page answers `410` rather than quietly serving a
+  shortened page that looks complete:
+
+  ```json
+  {"code": 410, "message": "the cursor's position is no longer retained by the signal stream (it now starts at availableSinceMs=1757725212000)"}
+  ```
+
+  Treat it as an ordinary outcome of paging a live system, not as a failure: read the
+  `availableSinceMs` it names and start again from there. If you are paging to display a long
+  history, fetch the pages you need in one pass rather than holding a cursor across a user's
+  think-time.
