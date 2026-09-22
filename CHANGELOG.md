@@ -7,6 +7,21 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.125.0] — 2026-09-22
+
+### Added ✨
+
+- **Live execution**, a new endpoint group: run a strategy continuously against a live market feed
+  instead of a fixed historical window.
+  - `POST`/`GET`/`DELETE` `/strategy/{strategyId}/live` — start, inspect, and stop a run. A new run
+    starts in a `SANDBOX` trial and is promoted to `LIVE` automatically once it passes.
+  - `GET /live/public` — browse other users' runs marked `public`, without revealing who owns them.
+  - `PATCH /live/{runId}` — change a run's visibility, name, or description.
+  - `PUT /live/{runId}/params` — change a running strategy's parameters without restarting it.
+  - `POST /live/token` — mint a token for the WebSocket connection that streams a run's signals in
+    real time and carries the `live.params` RPC (the WebSocket form of the `PUT` above). See
+    [`docs/live.md`](docs/live.md) for the full protocol.
+
 ## [0.124.0] — 2026-09-21
 
 ### Added ✨

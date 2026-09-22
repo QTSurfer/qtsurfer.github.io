@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.124.0
+  version: 0.125.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2274,6 +2274,433 @@ paths:
         - bearerAuth: []
       tags:
         - Dataset
+  '/strategy/{strategyId}/live':
+    post:
+      operationId: startLive
+      summary: Start a strategy on a live market feed
+      description: |
+        Starts your strategy against a live market feed. A new run always begins in the **sandbox**
+        stage — a short trial that compares an independent second execution against the first for
+        agreement — before it is eligible for promotion to the live stage where it actually
+        publishes signals other systems can act on. Poll `GET /strategy/{strategyId}/live` (or
+        `PATCH`/`DELETE` `/live/{runId}` once you have the `runId`) to watch `stage` move from
+        `SANDBOX` to `LIVE`.
+
+        Only one run per strategy at a time — starting again while one is already running is `409`;
+        stop the current one first.
+
+        `sources` takes exactly one entry today (multi-source strategies are not supported yet).
+        `type` is `ticker` or `kline`; anything else is rejected. Both connect to the lightest
+        (fastest) cadence available for the exchange — today that is 1 tick/second on every
+        supported exchange; choosing among several cadences is not offered yet.
+
+        `params` is passed straight through to the strategy at start — the same free-form object
+        `POST /strategy/{strategyId}/validate` and the backtest endpoints already accept. To change
+        a parameter **while the run is live**, use `PUT /live/{runId}/params` instead; this endpoint
+        only sets the values a run starts with.
+
+        Consuming a run's own output — its signals, and updating its parameters over a live
+        connection instead of polling — is a WebSocket protocol on top of these REST endpoints; see
+        the "Live execution" guide linked from this tag's description for the full flow (minting a
+        connection token, the channel and RPC method).
+      parameters:
+        - name: strategyId
+          in: path
+          required: true
+          description: The id returned by `POST /strategy`
+          schema:
+            $ref: '#/components/schemas/strategyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sources]
+              properties:
+                sources:
+                  type: array
+                  minItems: 1
+                  maxItems: 1
+                  items:
+                    $ref: '#/components/schemas/LiveSource'
+                params:
+                  type: object
+                  description: Strategy parameters to start with. Opaque key/value pairs — see this strategy's own `declaredProperties` (from `POST /strategy`) for the keys it accepts.
+                  additionalProperties: true
+                visibility:
+                  type: string
+                  enum: [private, public]
+                  default: private
+                  description: A `public` run appears in `GET /live/public` and its signal channel accepts subscriptions from anyone, not only you.
+                name:
+                  type: string
+                description:
+                  type: string
+            example:
+              sources:
+                - venueType: cx
+                  exchange: binance
+                  segment: spot
+                  type: ticker
+                  instruments: [BTC/USDT]
+              visibility: private
+              name: EMA cross
+      responses:
+        '201':
+          description: Started — the run's own state, in the sandbox stage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveRun'
+              example:
+                strategyId: 6bsh31ikwkuivhtgcoa6s4
+                runId: 5t5oAmQ4PD0lQRoCU58uE0
+                visibility: private
+                stage: SANDBOX
+                state: STARTING
+                desired: RUNNING
+                sources:
+                  - venueType: cx
+                    exchange: binance
+                    segment: spot
+                    type: ticker
+                    instruments: [BTC/USDT]
+                params: {}
+                paramsVersion: 0
+                relay: false
+                startedAtMs: 1758330000000
+        '400':
+          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), or an invalid `visibility`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: No such registered strategy for this user, or it has never been compiled.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '409':
+          description: A run for this strategy is already active. Stop it first.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 409
+                message: A live run is already active for strategy 6bsh31ikwkuivhtgcoa6s4 -- stop it before starting another
+        '429':
+          description: |
+            Your plan does not include live runs, would exceed your concurrent-run or
+            instrument-count limit, or the platform is at capacity right now. Carries a
+            `Retry-After` header.
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Seconds to wait before retrying.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+    get:
+      operationId: getLive
+      summary: Get this strategy's current (or most recent) live run
+      description: |
+        The run you last started for this strategy — its most complete state, including `params`
+        and the promotion `gate` once the sandbox trial has one to report. Returns the run's last
+        known state even after it has stopped; this endpoint never disappears history.
+      parameters:
+        - name: strategyId
+          in: path
+          required: true
+          description: The id returned by `POST /strategy`
+          schema:
+            $ref: '#/components/schemas/strategyId'
+      responses:
+        '200':
+          description: The run's current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveRun'
+        '404':
+          description: You have never started a live run for this strategy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+    delete:
+      operationId: stopLive
+      summary: Stop this strategy's live run
+      description: |
+        Requests a stop. The run winds down at its own next check-in rather than instantly —
+        poll `GET`/`PATCH` `.../live` and expect `state` to remain `RUNNING` for a short window
+        after `desired` flips to `STOPPED`. Calling this again on an already-stopped run is not an
+        error; it returns the same (unchanged) state.
+      parameters:
+        - name: strategyId
+          in: path
+          required: true
+          description: The id returned by `POST /strategy`
+          schema:
+            $ref: '#/components/schemas/strategyId'
+      responses:
+        '200':
+          description: Stop requested (or already stopped) — the run's current state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveRun'
+        '404':
+          description: You have never started a live run for this strategy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+  '/live/public':
+    get:
+      operationId: listPublicLive
+      summary: Browse public live runs
+      description: |
+        Every run whose owner marked it `public` and is currently live and running — anyone's,
+        yours included, and listed without revealing who owns it. Most recently started first.
+
+        This is the only `Live Execution` endpoint that needs no `Authorization` header.
+      parameters:
+        - name: cursor
+          in: query
+          description: The `runId` from a previous page's `_links.next.href`. Omit for the first page.
+          schema:
+            type: string
+            maxLength: 64
+        - name: limit
+          in: query
+          description: Page size. Larger values are capped, not rejected.
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: A page of public runs
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [runs]
+                properties:
+                  runs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PublicLiveRun'
+                  _links:
+                    type: object
+                    description: Present only when another page exists.
+                    properties:
+                      next:
+                        type: object
+                        properties:
+                          href:
+                            type: string
+              example:
+                runs:
+                  - runId: 5t5oAmQ4PD0lQRoCU58uE0
+                    name: EMA cross
+                    sources:
+                      - venueType: cx
+                        exchange: binance
+                        segment: spot
+                        type: ticker
+                        instruments: [BTC/USDT]
+                    state: RUNNING
+                    createdAtMs: 1758330000000
+                _links:
+                  next:
+                    href: '/live/public?limit=20&cursor=5t5oAmQ4PD0lQRoCU58uE0'
+        '400':
+          description: An invalid `cursor` or `limit`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      tags:
+        - Live Execution
+  '/live/{runId}':
+    patch:
+      operationId: updateLive
+      summary: Change a run's visibility, name, or description
+      description: |
+        Owner only, addressed by `runId` directly rather than through its strategy — this is a
+        run's own canonical identity, independent of which strategy started it.
+
+        Setting `visibility` from `public` back to `private` also evicts anyone currently connected
+        to the run's live signal channel who is not its owner — best-effort; the change to this
+        record is not rolled back if that eviction fails.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          description: The `runId` from `POST`/`GET`/`DELETE` `.../live` or from `GET /live/public`
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                visibility:
+                  type: string
+                  enum: [private, public]
+                name:
+                  type: string
+                description:
+                  type: string
+            example:
+              visibility: public
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveRunCompact'
+              example:
+                runId: 5t5oAmQ4PD0lQRoCU58uE0
+                name: EMA cross
+                visibility: public
+                stage: LIVE
+                state: RUNNING
+                sources:
+                  - venueType: cx
+                    exchange: binance
+                    segment: spot
+                    type: ticker
+                    instruments: [BTC/USDT]
+        '400':
+          description: '`visibility` present but not `private`/`public`.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: No such run, or you do not own it — the two look identical on purpose.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+  '/live/{runId}/params':
+    put:
+      operationId: updateLiveParams
+      summary: Change a running strategy's parameters
+      description: |
+        Updates one or more parameters of a run **while it stays live** — unlike `params` on
+        `POST /strategy/{strategyId}/live`, which only sets the starting values. Owner only.
+
+        Every key in `params` must be one your strategy declares (see `declaredProperties` on
+        `POST /strategy`) as of the compilation this run is executing — recompiling the strategy
+        later never changes what an already-running instance accepts; start a new run for that.
+
+        The change does not take effect the instant this call returns: `effectiveAtMs` is the
+        earliest moment it is guaranteed to apply, a few seconds out, so both the REST and
+        WebSocket paths to this same update (see the "Live execution" guide) land on the exact same
+        value at the exact same moment.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [params]
+              properties:
+                params:
+                  type: object
+                  additionalProperties: true
+                  description: Must be non-empty; every key must be a property your strategy declares.
+            example:
+              params:
+                emaFastPeriod: '12'
+      responses:
+        '200':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveParamsUpdateResult'
+              example:
+                runId: 5t5oAmQ4PD0lQRoCU58uE0
+                paramsVersion: 2
+                effectiveAtMs: 1758330015000
+        '400':
+          description: '`params` missing, not an object, empty, or contains a key your strategy does not declare.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: No such run, or you do not own it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '409':
+          description: This run's compilation has no declared properties on record — recompile the strategy to enable runtime parameter updates.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+  '/live/token':
+    post:
+      operationId: mintLiveConnectionToken
+      summary: Mint a WebSocket connection token
+      description: |
+        Mints a short-lived token for the WebSocket connection used to receive a run's signals in
+        real time and to call `live.params` (the WebSocket form of `PUT /live/{runId}/params`) —
+        see the "Live execution" guide linked from this tag's description for the full protocol.
+        Carries no request body.
+      responses:
+        '200':
+          description: Token minted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveConnectionToken'
+              example:
+                token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI4YWViOTljYi01NjcyLTQ1ZmItYWJiNi02NDU4NTk1NzJkMDAiLCJpYXQiOjE3OTAwOTkxNTksImV4cCI6MTc5MDA5OTc1OX0.signature
+                expiresAtMs: 1758502200000
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
 components:
   schemas:
     ResponseError:
@@ -4540,6 +4967,148 @@ components:
         message:
           type: string
           description: Human-readable description of the failure.
+    LiveSource:
+      type: object
+      required: [venueType, exchange, segment, type, instruments]
+      description: One market feed a live run consumes. Exactly one entry per run today.
+      properties:
+        venueType:
+          type: string
+          example: cx
+          description: Venue category. `cx` (centralized exchange) is the only one live runs support today.
+        exchange:
+          type: string
+          example: binance
+        segment:
+          type: string
+          example: spot
+        type:
+          type: string
+          enum: [ticker, kline]
+          description: 'Both `ticker` and `kline` connect to the lightest (fastest) cadence available for the exchange — today, 1 tick/second on every supported exchange. Choosing a specific cadence is not offered yet.'
+        instruments:
+          type: array
+          items:
+            type: string
+          example: [BTC/USDT]
+          description: Instrument symbols, or `["*"]` for every instrument the exchange/segment offers (tier-gated).
+    LiveRun:
+      type: object
+      required: [strategyId, runId, visibility, stage, state, desired, sources, params, paramsVersion, relay, startedAtMs]
+      description: A live run's full state, as returned by starting, reading, or stopping it through its strategy.
+      properties:
+        strategyId:
+          $ref: '#/components/schemas/strategyId'
+        runId:
+          type: string
+          description: This run's own id — its canonical identity for `PATCH`/`PUT .../params` and for `GET /live/public`.
+        name:
+          type: string
+        description:
+          type: string
+        visibility:
+          type: string
+          enum: [private, public]
+        stage:
+          type: string
+          enum: [SANDBOX, LIVE]
+          description: A new run always starts `SANDBOX` — a trial run compared against a second execution for agreement — and moves to `LIVE` once it passes.
+        state:
+          type: string
+          description: '`STARTING` until first observed running; otherwise the runner''s own reported state (e.g. `RUNNING`).'
+        desired:
+          type: string
+          enum: [RUNNING, STOPPED]
+          description: What you last asked for. `state` can lag this briefly after `DELETE`.
+        reason:
+          type: string
+          description: Present only when the run stopped because it exceeded its resource allowance.
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveSource'
+        params:
+          type: object
+          additionalProperties: true
+        paramsVersion:
+          type: integer
+          description: Increments on every accepted `PUT .../params` call, including one that resends the current values.
+        relay:
+          type: boolean
+          description: Whether this run's signals are also relayed over the WebSocket channel described in the "Live execution" guide.
+        startedAtMs:
+          type: integer
+          format: int64
+          description: Epoch milliseconds.
+        gate:
+          type: object
+          additionalProperties: true
+          description: The sandbox trial's promotion verdict, once one exists. Shape is not yet stabilized as public API — treat as opaque diagnostics.
+    LiveRunCompact:
+      type: object
+      required: [runId, visibility, stage, state, sources]
+      description: A run's state as returned by `PATCH /live/{runId}` — narrower than `LiveRun` (no `strategyId`, `params`, or `desired`), since this endpoint is addressed by `runId` alone.
+      properties:
+        runId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        visibility:
+          type: string
+          enum: [private, public]
+        stage:
+          type: string
+          enum: [SANDBOX, LIVE]
+        state:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveSource'
+    PublicLiveRun:
+      type: object
+      required: [runId, sources, state, createdAtMs]
+      description: A run as it appears in `GET /live/public` — never reveals who owns it or which strategy it runs.
+      properties:
+        runId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveSource'
+        state:
+          type: string
+        createdAtMs:
+          type: integer
+          format: int64
+    LiveConnectionToken:
+      type: object
+      required: [token, expiresAtMs]
+      properties:
+        token:
+          type: string
+          description: Pass as the `token` field of the WebSocket `connect` command — see the "Live execution" guide.
+        expiresAtMs:
+          type: integer
+          format: int64
+    LiveParamsUpdateResult:
+      type: object
+      required: [runId, paramsVersion, effectiveAtMs]
+      properties:
+        runId:
+          type: string
+        paramsVersion:
+          type: integer
+        effectiveAtMs:
+          type: integer
+          format: int64
+          description: Epoch milliseconds — the earliest moment the new values are guaranteed to be in effect.
   securitySchemes:
     bearerAuth:
       type: http
@@ -4618,6 +5187,24 @@ tags:
       - List and inspect your datasets, including their current ingested version.
       - Prepare and execute backtests against a dataset exactly like against a managed exchange.
       - Delete a dataset you no longer need.
+  - name: Live Execution
+    description: |-
+      The **live execution** endpoints run your strategy continuously against a live market feed
+      instead of a fixed historical window, publishing its signals as they happen. A run always
+      starts in a short sandbox trial before promotion to live.
+
+      These endpoints cover the run's lifecycle (start, inspect, stop, change visibility) and its
+      runtime parameters. Consuming the run's own signal stream and updating parameters over a live
+      connection instead of polling is a WebSocket protocol built on top of these same endpoints —
+      see **[Live execution](docs/live.md)** for the full flow: minting a connection token
+      (`POST /live/token`), the signal channel, and the `live.params` RPC.
+
+      **Key functionalities**:
+      - Start, inspect, and stop a live run for one of your strategies.
+      - Browse other users' runs they have made public.
+      - Change a run's own visibility, name, or description.
+      - Update a running strategy's parameters without restarting it.
+      - Mint a token to receive a run's signals and updates in real time over WebSocket.
 externalDocs:
   description: Find out more about QTSurfer API
   url: 'https://qtsurfer.com/developers'

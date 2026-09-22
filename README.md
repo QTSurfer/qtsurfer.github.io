@@ -178,6 +178,7 @@ touched.
 | **[Equity curves](docs/equity_curves.md)** | Plot, compact, resample, delta-encode, retain and fetch backtest or sweep curves |
 | **[Datasets](docs/datasets.md)** | Bring your own data instead of a managed exchange |
 | **[Account](docs/account.md)** | Your tier limits and live storage usage |
+| **[Live execution](docs/live.md)** | Run a strategy continuously against a live feed; stream its signals and update parameters over WebSocket |
 
 ## Key Technologies
 
