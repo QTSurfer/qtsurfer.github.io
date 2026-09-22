@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.125.0
+  version: 0.125.1
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2315,28 +2315,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [sources]
-              properties:
-                sources:
-                  type: array
-                  minItems: 1
-                  maxItems: 1
-                  items:
-                    $ref: '#/components/schemas/LiveSource'
-                params:
-                  type: object
-                  description: Strategy parameters to start with. Opaque key/value pairs — see this strategy's own `declaredProperties` (from `POST /strategy`) for the keys it accepts.
-                  additionalProperties: true
-                visibility:
-                  type: string
-                  enum: [private, public]
-                  default: private
-                  description: A `public` run appears in `GET /live/public` and its signal channel accepts subscriptions from anyone, not only you.
-                name:
-                  type: string
-                description:
-                  type: string
+              $ref: '#/components/schemas/StartLiveRequest'
             example:
               sources:
                 - venueType: cx
@@ -2501,22 +2480,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [runs]
-                properties:
-                  runs:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/PublicLiveRun'
-                  _links:
-                    type: object
-                    description: Present only when another page exists.
-                    properties:
-                      next:
-                        type: object
-                        properties:
-                          href:
-                            type: string
+                $ref: '#/components/schemas/PublicLiveListResponse'
               example:
                 runs:
                   - runId: 5t5oAmQ4PD0lQRoCU58uE0
@@ -2562,15 +2526,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              properties:
-                visibility:
-                  type: string
-                  enum: [private, public]
-                name:
-                  type: string
-                description:
-                  type: string
+              $ref: '#/components/schemas/UpdateLiveRequest'
             example:
               visibility: public
       responses:
@@ -2635,13 +2591,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [params]
-              properties:
-                params:
-                  type: object
-                  additionalProperties: true
-                  description: Must be non-empty; every key must be a property your strategy declares.
+              $ref: '#/components/schemas/UpdateLiveParamsRequest'
             example:
               params:
                 emaFastPeriod: '12'
@@ -4992,6 +4942,47 @@ components:
             type: string
           example: [BTC/USDT]
           description: Instrument symbols, or `["*"]` for every instrument the exchange/segment offers (tier-gated).
+    StartLiveRequest:
+      type: object
+      required: [sources]
+      properties:
+        sources:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            $ref: '#/components/schemas/LiveSource'
+        params:
+          type: object
+          description: Strategy parameters to start with. Opaque key/value pairs — see this strategy's own `declaredProperties` (from `POST /strategy`) for the keys it accepts.
+          additionalProperties: true
+        visibility:
+          type: string
+          enum: [private, public]
+          default: private
+          description: A `public` run appears in `GET /live/public` and its signal channel accepts subscriptions from anyone, not only you.
+        name:
+          type: string
+        description:
+          type: string
+    UpdateLiveRequest:
+      type: object
+      properties:
+        visibility:
+          type: string
+          enum: [private, public]
+        name:
+          type: string
+        description:
+          type: string
+    UpdateLiveParamsRequest:
+      type: object
+      required: [params]
+      properties:
+        params:
+          type: object
+          additionalProperties: true
+          description: Must be non-empty; every key must be a property your strategy declares.
     LiveRun:
       type: object
       required: [strategyId, runId, visibility, stage, state, desired, sources, params, paramsVersion, relay, startedAtMs]
@@ -5087,6 +5078,27 @@ components:
         createdAtMs:
           type: integer
           format: int64
+    PublicLiveListResponse:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicLiveRun'
+        _links:
+          $ref: '#/components/schemas/PublicLiveListLinks'
+    PublicLiveListLinks:
+      type: object
+      description: Present only when another page exists.
+      properties:
+        next:
+          $ref: '#/components/schemas/PublicLiveNextLink'
+    PublicLiveNextLink:
+      type: object
+      properties:
+        href:
+          type: string
     LiveConnectionToken:
       type: object
       required: [token, expiresAtMs]
