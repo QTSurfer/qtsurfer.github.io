@@ -2499,7 +2499,7 @@ paths:
                     startedAtMs: 1758330015000
                 _links:
                   next:
-                    href: '/live?limit=20&cursor=5t5oAmQ4PD0lQRoCU58uE0'
+                    href: '/v1/live?limit=20&cursor=5t5oAmQ4PD0lQRoCU58uE0'
         '400':
           description: An invalid `cursor` or `limit`.
           content:
@@ -2554,7 +2554,7 @@ paths:
                     createdAtMs: 1758330000000
                 _links:
                   next:
-                    href: '/live/public?limit=20&cursor=5t5oAmQ4PD0lQRoCU58uE0'
+                    href: '/v1/live/public?limit=20&cursor=5t5oAmQ4PD0lQRoCU58uE0'
         '400':
           description: An invalid `cursor` or `limit`.
           content:
