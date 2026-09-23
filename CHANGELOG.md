@@ -7,6 +7,15 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.126.2] — 2026-09-23
+
+### Added ✨
+
+- `GET /live` — list your own live runs, any `stage`/`desired`/`visibility`, paged the same way
+  as `GET /live/public` (`cursor`/`limit`, `_links.next.href`). Unlike `GET /live/public` it needs
+  a Bearer token and does not filter by state, so a `sandbox` trial or an already-stopped run
+  still shows up. New schemas `LiveListResponse`/`LiveRunSummary`.
+
 ## [0.126.1] — 2026-09-23
 
 ### Added ✨

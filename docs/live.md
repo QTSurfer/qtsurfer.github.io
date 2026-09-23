@@ -8,6 +8,7 @@ change its parameters without restarting it.
 | `POST` | `/strategy/{strategyId}/live` | Start a strategy live |
 | `GET` | `/strategy/{strategyId}/live` | Read this strategy's current (or last) run |
 | `DELETE` | `/strategy/{strategyId}/live` | Stop it |
+| `GET` | `/live` | List your own runs |
 | `GET` | `/live/public` | Browse runs other users made public |
 | `PATCH` | `/live/{runId}` | Change visibility, name, or description |
 | `PUT` | `/live/{runId}/params` | Change parameters while it stays live |
@@ -46,6 +47,15 @@ exchange — today that is 1 tick/second on every supported exchange; choosing a
 cadences is not offered yet. `instruments`
 can be `["*"]` for every instrument the exchange/segment offers, subject to your plan's
 instrument-count limit.
+
+## Listing your runs
+
+`GET /live` (needs a Bearer token) returns every run you have started — any `stage`, any
+`desired` state, any `visibility` — newest first, paged the same way as `GET /live/public`
+(`cursor`/`limit`, `_links.next.href`). It does not filter by `state`: a `sandbox` trial or a
+run you have already stopped still shows up, unlike `GET /live/public`, which needs no
+`Authorization` header but only ever lists other runs — anyone's, yours included — that are
+`public` and currently `RUNNING`.
 
 ## Visibility
 

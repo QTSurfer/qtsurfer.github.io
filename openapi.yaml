@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.126.1
+  version: 0.126.2
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2443,6 +2443,65 @@ paths:
                 $ref: '#/components/schemas/LiveRun'
         '404':
           description: You have never started a live run for this strategy.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+  '/live':
+    get:
+      operationId: listLive
+      summary: List your own live runs
+      description: |
+        Every run you have started, in any `stage`, `desired` state, or `visibility` — newest
+        first. Unlike `GET /live/public`, this is not filtered to `RUNNING` public runs: it is
+        the complete list of runs you own, including `sandbox` trials and stopped ones.
+      parameters:
+        - name: cursor
+          in: query
+          description: The `runId` from a previous page's `_links.next.href`. Omit for the first page.
+          schema:
+            type: string
+            maxLength: 64
+        - name: limit
+          in: query
+          description: Page size. Larger values are capped, not rejected.
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+      responses:
+        '200':
+          description: A page of your own runs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveListResponse'
+              example:
+                runs:
+                  - strategyId: 6bsh31ikwkuivhtgcoa6s4
+                    runId: 5t5oAmQ4PD0lQRoCU58uE0
+                    name: EMA cross
+                    visibility: private
+                    stage: LIVE
+                    state: RUNNING
+                    desired: RUNNING
+                    sources:
+                      - venueType: cx
+                        exchange: binance
+                        segment: spot
+                        type: ticker
+                        instruments: [BTC/USDT]
+                    createdAtMs: 1758330000000
+                    startedAtMs: 1758330015000
+                _links:
+                  next:
+                    href: '/live?limit=20&cursor=5t5oAmQ4PD0lQRoCU58uE0'
+        '400':
+          description: An invalid `cursor` or `limit`.
           content:
             application/json:
               schema:
@@ -5187,6 +5246,56 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/LiveSource'
+    LiveRunSummary:
+      type: object
+      required: [strategyId, runId, visibility, stage, state, desired, sources, createdAtMs, startedAtMs]
+      description: A run as it appears in `GET /live` — one of your own, narrower than `LiveRun` (no `params`, `paramsVersion`, `relay`, or `gate`), since listing stays cheap regardless of how many runs you have. Check a specific run's full state with `GET /strategy/{strategyId}/live`.
+      properties:
+        strategyId:
+          $ref: '#/components/schemas/strategyId'
+        runId:
+          type: string
+          description: This run's own id — its canonical identity for `PATCH`/`PUT .../params` and for `GET /live/public`.
+        name:
+          type: string
+        description:
+          type: string
+        visibility:
+          type: string
+          enum: [private, public]
+        stage:
+          type: string
+          enum: [SANDBOX, LIVE]
+          description: A new run always starts `SANDBOX` — a trial run compared against a second execution for agreement — and moves to `LIVE` once it passes.
+        state:
+          type: string
+          description: '`STARTING` until first observed running; otherwise the runner''s own reported state (e.g. `RUNNING`).'
+        desired:
+          type: string
+          enum: [RUNNING, STOPPED]
+          description: What you last asked for. `state` can lag this briefly after `DELETE`.
+        sources:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveSource'
+        createdAtMs:
+          type: integer
+          format: int64
+          description: Epoch milliseconds this run was started.
+        startedAtMs:
+          type: integer
+          format: int64
+          description: Epoch milliseconds.
+    LiveListResponse:
+      type: object
+      required: [runs]
+      properties:
+        runs:
+          type: array
+          items:
+            $ref: '#/components/schemas/LiveRunSummary'
+        _links:
+          $ref: '#/components/schemas/PublicLiveListLinks'
     PublicLiveRun:
       type: object
       required: [runId, sources, state, createdAtMs]
