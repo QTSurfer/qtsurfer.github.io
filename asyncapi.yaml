@@ -1,0 +1,566 @@
+asyncapi: 3.1.0
+info:
+  title: QTSurfer Live Execution WebSocket
+  version: 0.1.0
+  description: |
+    The WebSocket side of Live Execution: receive a live run's signals as they happen, and change its
+    parameters over the same connection. The REST side (starting, reading and stopping runs, minting
+    the connection token, reading signals already produced) is in `openapi.yaml`; the narrative guide
+    is [`docs/live.md`](https://github.com/QTSurfer/qtsurfer.github.io/blob/main/docs/live.md).
+
+    ## The protocol is Centrifugo's
+
+    The connection speaks the [Centrifugo](https://centrifugal.dev) v6 client protocol, JSON
+    encoding. Use an official Centrifugo client library rather than implementing it by hand — they
+    already handle the pings, token refresh and reconnection this document describes:
+    [`centrifuge`](https://github.com/centrifugal/centrifuge-js) for JavaScript/TypeScript,
+    [`centrifuge-java`](https://github.com/centrifugal/centrifuge-java),
+    [`centrifuge-python`](https://github.com/centrifugal/centrifuge-python), and others listed at
+    [centrifugal.dev/docs/transports/client_sdk](https://centrifugal.dev/docs/transports/client_sdk).
+    With a library, what this document fixes is the QTSurfer part: the URL, the token, the channel
+    names, the payload each channel carries, the `live.params` call and the error codes.
+
+    The frames below are what travels on the socket, for anyone writing or debugging a client
+    without a library. Every command carries an `id`, and its reply echoes that same `id`. Frames the
+    server sends on its own (pushes and pings) carry no `id`. The server may put several replies in
+    a single WebSocket frame, one JSON object per line, so split a frame on `\n` before parsing it.
+
+    ## Flow
+
+    1. `POST /v1/live/token` on the REST API (JWT bearer) returns a short-lived `token`.
+    2. Open the socket and send `connect` with that token, as the first frame.
+    3. `subscribe` to `sig:<runId>` to receive the run's signals as `push` frames.
+    4. `rpc` with method `live.params` to change the run's parameters (owner only).
+    5. Answer every server ping (`{}`) with a pong (`{}`), and `refresh` the token before `ttl` runs out.
+
+    ## Origins
+
+    A browser connection is refused (`403` on the upgrade) unless its page is served from a QTSurfer
+    origin. A client that sends no `Origin` header — a server-side program, an SDK, a script — is
+    not affected.
+  contact:
+    name: QTSurfer Support
+    email: support@qtsurfer.com
+    url: 'https://qtsurfer.com/support'
+  license:
+    name: Apache-2.0
+    url: 'http://www.apache.org/licenses/LICENSE-2.0.html'
+defaultContentType: application/json
+servers:
+  staging:
+    host: rt.qtsurfer.net
+    protocol: wss
+    description: >-
+      Staging — the service this specification describes, paired with the REST API at
+      `api.qtsurfer.net`. Tokens minted there are the only ones it accepts.
+channels:
+  connection:
+    address: /connection/websocket
+    title: Live Execution connection
+    description: >-
+      One WebSocket connection carries every command, reply and push. Signal channels
+      (`sig:<runId>`) are not separate sockets: they are names inside `subscribe` commands and
+      `push` frames on this one connection.
+    messages:
+      connect:
+        $ref: '#/components/messages/Connect'
+      connectReply:
+        $ref: '#/components/messages/ConnectReply'
+      subscribe:
+        $ref: '#/components/messages/Subscribe'
+      subscribeReply:
+        $ref: '#/components/messages/SubscribeReply'
+      liveParams:
+        $ref: '#/components/messages/LiveParamsCall'
+      liveParamsReply:
+        $ref: '#/components/messages/LiveParamsReply'
+      refresh:
+        $ref: '#/components/messages/Refresh'
+      refreshReply:
+        $ref: '#/components/messages/RefreshReply'
+      errorReply:
+        $ref: '#/components/messages/ErrorReply'
+      signalPush:
+        $ref: '#/components/messages/SignalPush'
+      unsubscribePush:
+        $ref: '#/components/messages/UnsubscribePush'
+      ping:
+        $ref: '#/components/messages/Ping'
+      pong:
+        $ref: '#/components/messages/Pong'
+operations:
+  connect:
+    action: send
+    title: Authenticate the connection
+    summary: >-
+      First frame on a new socket. A refused token closes the socket (close code 3500); a token
+      left to expire without `refresh` closes it later (close code 3005).
+    channel:
+      $ref: '#/channels/connection'
+    messages:
+      - $ref: '#/channels/connection/messages/connect'
+    reply:
+      channel:
+        $ref: '#/channels/connection'
+      messages:
+        - $ref: '#/channels/connection/messages/connectReply'
+  subscribe:
+    action: send
+    title: Subscribe to a run's signals
+    summary: Allowed for the run's owner, or for anyone when the run is public; otherwise error 103.
+    channel:
+      $ref: '#/channels/connection'
+    messages:
+      - $ref: '#/channels/connection/messages/subscribe'
+    reply:
+      channel:
+        $ref: '#/channels/connection'
+      messages:
+        - $ref: '#/channels/connection/messages/subscribeReply'
+        - $ref: '#/channels/connection/messages/errorReply'
+  liveParams:
+    action: send
+    title: Change a run's parameters
+    summary: >-
+      The WebSocket form of `PUT /v1/live/{runId}/params` — same validation, same result. Owner
+      only.
+    channel:
+      $ref: '#/channels/connection'
+    messages:
+      - $ref: '#/channels/connection/messages/liveParams'
+    reply:
+      channel:
+        $ref: '#/channels/connection'
+      messages:
+        - $ref: '#/channels/connection/messages/liveParamsReply'
+        - $ref: '#/channels/connection/messages/errorReply'
+  refresh:
+    action: send
+    title: Renew the connection token
+    summary: >-
+      Send a freshly minted token before the current one's `ttl` runs out; the connection and its
+      subscriptions stay as they are.
+    channel:
+      $ref: '#/channels/connection'
+    messages:
+      - $ref: '#/channels/connection/messages/refresh'
+    reply:
+      channel:
+        $ref: '#/channels/connection'
+      messages:
+        - $ref: '#/channels/connection/messages/refreshReply'
+        - $ref: '#/channels/connection/messages/errorReply'
+  receiveSignal:
+    action: receive
+    title: Receive a signal
+    summary: One signal of a subscribed run, pushed as it is produced.
+    channel:
+      $ref: '#/channels/connection'
+    messages:
+      - $ref: '#/channels/connection/messages/signalPush'
+  receiveUnsubscribe:
+    action: receive
+    title: Removed from a run's channel
+    summary: >-
+      The server ended a subscription — for example the run was made private and you are not its
+      owner. The client is not resubscribed on its own.
+    channel:
+      $ref: '#/channels/connection'
+    messages:
+      - $ref: '#/channels/connection/messages/unsubscribePush'
+  ping:
+    action: receive
+    title: Server ping
+    summary: Sent by the server periodically; answer each one with a pong.
+    channel:
+      $ref: '#/channels/connection'
+    messages:
+      - $ref: '#/channels/connection/messages/ping'
+    reply:
+      channel:
+        $ref: '#/channels/connection'
+      messages:
+        - $ref: '#/channels/connection/messages/pong'
+components:
+  messages:
+    Connect:
+      name: connect
+      title: connect command
+      payload:
+        $ref: '#/components/schemas/ConnectCommand'
+      examples:
+        - payload:
+            id: 1
+            connect:
+              token: '<token from POST /v1/live/token>'
+    ConnectReply:
+      name: connectReply
+      title: connect reply
+      payload:
+        $ref: '#/components/schemas/ConnectReplyFrame'
+      examples:
+        - payload:
+            id: 1
+            connect:
+              client: 'a7c58b5b-63b2-4c42-b6f3-2dd8de3bd00e'
+              expires: true
+              ttl: 600
+              ping: 25
+              pong: true
+    Subscribe:
+      name: subscribe
+      title: subscribe command
+      payload:
+        $ref: '#/components/schemas/SubscribeCommand'
+      examples:
+        - payload:
+            id: 2
+            subscribe:
+              channel: 'sig:6TzAPiPpsOWwBLdLBZCxwH'
+    SubscribeReply:
+      name: subscribeReply
+      title: subscribe reply
+      payload:
+        $ref: '#/components/schemas/SubscribeReplyFrame'
+      examples:
+        - payload:
+            id: 2
+            subscribe: {}
+    LiveParamsCall:
+      name: liveParams
+      title: live.params call
+      payload:
+        $ref: '#/components/schemas/LiveParamsCommand'
+      examples:
+        - payload:
+            id: 3
+            rpc:
+              method: live.params
+              data:
+                runId: 6TzAPiPpsOWwBLdLBZCxwH
+                params:
+                  emaFastPeriod: '12'
+    LiveParamsReply:
+      name: liveParamsReply
+      title: live.params reply
+      payload:
+        $ref: '#/components/schemas/LiveParamsReplyFrame'
+      examples:
+        - payload:
+            id: 3
+            rpc:
+              data:
+                runId: 6TzAPiPpsOWwBLdLBZCxwH
+                paramsVersion: 2
+                effectiveAtMs: 1758330015000
+    Refresh:
+      name: refresh
+      title: refresh command
+      payload:
+        $ref: '#/components/schemas/RefreshCommand'
+      examples:
+        - payload:
+            id: 4
+            refresh:
+              token: '<a new token from POST /v1/live/token>'
+    RefreshReply:
+      name: refreshReply
+      title: refresh reply
+      payload:
+        $ref: '#/components/schemas/RefreshReplyFrame'
+      examples:
+        - payload:
+            id: 4
+            refresh:
+              expires: true
+              ttl: 600
+    ErrorReply:
+      name: errorReply
+      title: error reply
+      summary: Any command can be answered with an error instead of its own reply.
+      payload:
+        $ref: '#/components/schemas/ErrorReplyFrame'
+      examples:
+        - name: subscribeRefused
+          summary: Subscribing to a private run you do not own.
+          payload:
+            id: 2
+            error:
+              code: 103
+              message: permission denied
+        - name: runNotFound
+          summary: live.params on a run that does not exist or is not yours.
+          payload:
+            id: 3
+            error:
+              code: 404
+              message: no such run
+    SignalPush:
+      name: signalPush
+      title: signal
+      payload:
+        $ref: '#/components/schemas/SignalPushFrame'
+      examples:
+        - payload:
+            push:
+              channel: 'sig:6TzAPiPpsOWwBLdLBZCxwH'
+              pub:
+                data:
+                  v: 1
+                  signalId: '01J8Z6Y3N6QK2B7Q9W4E5R6T7Y'
+                  runId: 6TzAPiPpsOWwBLdLBZCxwH
+                  stage: live
+                  paramsVersion: 2
+                  type: hint
+                  kind: BUY
+                  eventTsMs: 1758330012000
+                  emittedAtMs: 1758330012040
+                  instrument:
+                    exchange: binance
+                    segment: spot
+                    symbol: BTC/USDT
+                  order:
+                    orderKind: MARKET
+                    price: null
+                    amount: null
+                    stopPrice: null
+                    trailPct: null
+                  data: {}
+                  regenerated: false
+                  digest: '9f2c…'
+                offset: 42
+    UnsubscribePush:
+      name: unsubscribePush
+      title: server unsubscribe
+      payload:
+        $ref: '#/components/schemas/UnsubscribePushFrame'
+      examples:
+        - payload:
+            push:
+              channel: 'sig:6TzAPiPpsOWwBLdLBZCxwH'
+              unsubscribe:
+                code: 2000
+                reason: server unsubscribe
+    Ping:
+      name: ping
+      title: ping
+      payload:
+        $ref: '#/components/schemas/EmptyFrame'
+      examples:
+        - payload: {}
+    Pong:
+      name: pong
+      title: pong
+      payload:
+        $ref: '#/components/schemas/EmptyFrame'
+      examples:
+        - payload: {}
+  schemas:
+    CommandId:
+      type: integer
+      minimum: 1
+      description: Chosen by the client, unique among its commands still waiting for a reply; the reply echoes it.
+    SignalChannel:
+      type: string
+      pattern: '^sig:.+$'
+      description: '`sig:` followed by the run''s `runId`.'
+      examples:
+        - 'sig:6TzAPiPpsOWwBLdLBZCxwH'
+    ConnectCommand:
+      type: object
+      required: [id, connect]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        connect:
+          type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: The `token` returned by `POST /v1/live/token`.
+    ConnectReplyFrame:
+      type: object
+      required: [id, connect]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        connect:
+          type: object
+          required: [client]
+          properties:
+            client:
+              type: string
+              description: This connection's id, assigned by the server.
+            version:
+              type: string
+              description: Server version string. Informational only; do not branch on it.
+            expires:
+              type: boolean
+              description: '`true` when the connection ends unless the token is refreshed within `ttl`.'
+            ttl:
+              type: integer
+              description: >-
+                Seconds until the token expires. Send `refresh` before then; otherwise the server
+                closes the socket with close code 3005 (`connection expired`).
+            ping:
+              type: integer
+              description: >-
+                Seconds between server pings. If nothing — ping or anything else — arrives for
+                noticeably longer than this, treat the connection as dead and reconnect.
+            pong:
+              type: boolean
+              description: '`true` when the client must answer each server ping with a pong.'
+    SubscribeCommand:
+      type: object
+      required: [id, subscribe]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        subscribe:
+          type: object
+          required: [channel]
+          properties:
+            channel:
+              $ref: '#/components/schemas/SignalChannel'
+    SubscribeReplyFrame:
+      type: object
+      required: [id, subscribe]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        subscribe:
+          type: object
+          description: >-
+            Success. It may carry protocol fields about stream position; missed signals are not
+            replayed on this channel — read them with `GET /v1/live/{runId}/signals`.
+    LiveParamsRequest:
+      type: object
+      required: [runId, params]
+      properties:
+        runId:
+          type: string
+        params:
+          type: object
+          minProperties: 1
+          additionalProperties: true
+          description: Every key must be a property the run's strategy declares; values as in `PUT /v1/live/{runId}/params`.
+    LiveParamsCommand:
+      type: object
+      required: [id, rpc]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        rpc:
+          type: object
+          required: [method, data]
+          properties:
+            method:
+              type: string
+              const: live.params
+            data:
+              $ref: '#/components/schemas/LiveParamsRequest'
+    LiveParamsReplyFrame:
+      type: object
+      required: [id, rpc]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        rpc:
+          type: object
+          required: [data]
+          properties:
+            data:
+              $ref: './openapi.yaml#/components/schemas/LiveParamsUpdateResult'
+    RefreshCommand:
+      type: object
+      required: [id, refresh]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        refresh:
+          type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+              description: A newly minted token for the same user.
+    RefreshReplyFrame:
+      type: object
+      required: [id, refresh]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        refresh:
+          type: object
+          properties:
+            expires:
+              type: boolean
+            ttl:
+              type: integer
+              description: Seconds until the new token expires.
+    ErrorReplyFrame:
+      type: object
+      required: [id, error]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: integer
+              description: |
+                - `103` — `subscribe`: the run is private and not yours (or does not exist).
+                - `400` — `live.params`: malformed call, empty `params`, or a key the strategy does not declare.
+                - `404` — `live.params`: no such run of yours.
+                - `409` — `live.params`: this run's strategy was compiled without the property list runtime updates need; recompile it and start the run again.
+
+                Other codes come from the protocol itself; see Centrifugo's client protocol documentation.
+            message:
+              type: string
+            temporary:
+              type: boolean
+              description: '`true` when retrying the same command later may succeed.'
+    SignalPushFrame:
+      type: object
+      required: [push]
+      properties:
+        push:
+          type: object
+          required: [channel, pub]
+          properties:
+            channel:
+              $ref: '#/components/schemas/SignalChannel'
+            pub:
+              type: object
+              required: [data]
+              properties:
+                data:
+                  $ref: './openapi.yaml#/components/schemas/LiveSignal'
+                offset:
+                  type: integer
+                  description: Position in the channel's stream. Informational; dedupe on `data.signalId`.
+    UnsubscribePushFrame:
+      type: object
+      required: [push]
+      properties:
+        push:
+          type: object
+          required: [channel, unsubscribe]
+          properties:
+            channel:
+              $ref: '#/components/schemas/SignalChannel'
+            unsubscribe:
+              type: object
+              properties:
+                code:
+                  type: integer
+                  description: '`2000` when the server removed the subscription.'
+                reason:
+                  type: string
+    EmptyFrame:
+      type: object
+      maxProperties: 0
+      description: 'An empty JSON object, `{}`.'

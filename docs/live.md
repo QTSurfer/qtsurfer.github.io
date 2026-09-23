@@ -84,7 +84,18 @@ PUT /live/6TzAPiPpsOWwBLdLBZCxwH/params
 
 Polling `GET .../live` tells you the run's *state*; it does not stream its output. To receive a
 run's signals as they happen, or to send a parameter update over the same connection instead of a
-separate REST call, open a WebSocket connection:
+separate REST call, open a WebSocket connection.
+
+The connection speaks the [Centrifugo](https://centrifugal.dev) v6 client protocol (JSON). Its
+machine-readable contract is [`asyncapi.yaml`](../asyncapi.yaml), next to the OpenAPI spec: the
+URL, every frame, the channel names, the `live.params` call and the error codes, with the signal
+payload shared with the REST schema `LiveSignal`. The easiest client is an official Centrifugo
+library — [`centrifuge`](https://github.com/centrifugal/centrifuge-js) (JavaScript/TypeScript),
+[`centrifuge-java`](https://github.com/centrifugal/centrifuge-java),
+[`centrifuge-python`](https://github.com/centrifugal/centrifuge-python) and
+[others](https://centrifugal.dev/docs/transports/client_sdk) — since it already does the pings,
+token refresh and reconnection described below. With one, you only supply the URL, a function
+that mints a token, the channel name and the RPC method.
 
 Signals only reach this channel for a run started with `relay: true` (`POST .../live`'s own field,
 default `false`) — and only once it reaches the `live` stage; a run still in `sandbox` never
@@ -93,25 +104,33 @@ run's own `relay` field, already folded with that stage rule — `true` there me
 reaching the channel right now, not merely that `relay: true` was once passed.
 
 1. **Mint a token.** `POST /live/token` (JWT bearer, same as any other endpoint) returns a
-   short-lived `token` and its `expiresAtMs`. Mint a fresh one before the current one expires or on
-   a connection failure that looks auth-related.
+   short-lived `token` and its `expiresAtMs`.
 2. **Connect.** Open a WebSocket to `wss://rt.qtsurfer.net/connection/websocket` and send, as your
    first message:
    ```json
    {"id": 1, "connect": {"token": "<the token from step 1>"}}
    ```
-   A successful connect replies with your own `client` id:
+   A successful connect replies with your own `client` id, and how long the token has left:
    ```json
-   {"id": 1, "connect": {"client": "<client-id>", "ping": 25000, "pong": true}}
+   {"id": 1, "connect": {"client": "<client-id>", "expires": true, "ttl": 600, "ping": 25, "pong": true}}
    ```
+   `ttl` and `ping` are in seconds. A token that is not accepted closes the socket with close code
+   `3500` (`invalid token`).
 3. **Subscribe to the run's signal channel**, named `sig:<runId>` — for example `sig:6TzAPiPpsOWwBLdLBZCxwH`:
    ```json
    {"id": 2, "subscribe": {"channel": "sig:6TzAPiPpsOWwBLdLBZCxwH"}}
    ```
    You may subscribe to any run's channel this way, but the connection is only actually allowed
    onto it if you own that run or it is `public` — a foreign private run's channel refuses the
-   subscription. Each signal then arrives as a `push` on the channel, its `data` in the shape
-   below.
+   subscription with `{"id": 2, "error": {"code": 103, "message": "permission denied"}}`. Each
+   signal then arrives as a `push` frame, with no `id`; the signal itself is its `pub.data`, in the
+   shape below:
+   ```json
+   {"push": {"channel": "sig:6TzAPiPpsOWwBLdLBZCxwH", "pub": {"data": {"v": 1, "signalId": "…", …}, "offset": 42}}}
+   ```
+   If the run is made private while you are subscribed and it is not yours, the server removes you
+   with `{"push": {"channel": "sig:…", "unsubscribe": {"code": 2000, "reason": "server unsubscribe"}}}`,
+   and you are not resubscribed.
 4. **Call `live.params`** (the WebSocket form of `PUT /live/{runId}/params`, owner-only):
    ```json
    {"id": 3, "rpc": {"method": "live.params", "data": {"runId": "6TzAPiPpsOWwBLdLBZCxwH", "params": {"emaFastPeriod": "12"}}}}
@@ -124,10 +143,30 @@ reaching the channel right now, not merely that `relay: true` was once passed.
    ```json
    {"id": 3, "error": {"code": 404, "message": "no such run"}}
    ```
+5. **Keep the connection alive.** The server sends an empty frame `{}` as a ping; answer each one
+   with `{}` (that is what `"pong": true` in the connect reply asks for). If nothing arrives for
+   well over `ping` seconds, treat the connection as dead and reconnect.
+6. **Refresh the token before `ttl` runs out**, on the same connection — mint a new one with
+   `POST /live/token` and send it:
+   ```json
+   {"id": 4, "refresh": {"token": "<a new token>"}}
+   ```
+   which answers `{"id": 4, "refresh": {"expires": true, "ttl": 600}}`. Your subscriptions are
+   untouched. A connection whose token is not refreshed in time is closed with close code `3005`
+   (`connection expired`); reconnect with a new token.
+
+Some protocol details to know if you write the client yourself: every reply carries the `id` of the
+command it answers, frames the server sends on its own (pushes, pings) carry none, and one
+WebSocket frame may hold several replies, one JSON object per line. A browser page served from
+another site's origin is refused at the WebSocket upgrade (`403`); a client that sends no `Origin`
+header, such as a server-side program or an SDK, is not affected.
+
+After a disconnect, the channel does not replay what you missed: read it back with
+`GET /live/{runId}/signals` (below), deduplicating on `signalId`.
 
 ### Signal shape
 
-Each `push` payload on a `sig:<runId>` channel:
+Each signal pushed on a `sig:<runId>` channel (the `pub.data` of the `push` frame):
 
 ```json
 {

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.126.0
+  version: 0.126.1
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -5267,8 +5267,7 @@ components:
           type: string
           enum: [hint, info, marker, command]
         kind:
-          type: string
-          nullable: true
+          type: ['string', 'null']
           description: '`BUY`/`SELL` for a `hint`, the command name for a `command`, absent otherwise.'
         eventTsMs:
           type: integer
@@ -5303,24 +5302,19 @@ components:
           type: string
           description: Slashed form, e.g. `BTC/USDT`.
     LiveSignalOrder:
-      type: object
-      nullable: true
+      type: ['object', 'null']
       description: Present only for a `hint`.
       properties:
         orderKind:
           type: string
         price:
-          type: string
-          nullable: true
+          type: ['string', 'null']
         amount:
-          type: string
-          nullable: true
+          type: ['string', 'null']
         stopPrice:
-          type: string
-          nullable: true
+          type: ['string', 'null']
         trailPct:
-          type: string
-          nullable: true
+          type: ['string', 'null']
     LiveConnectionToken:
       type: object
       required: [token, expiresAtMs]

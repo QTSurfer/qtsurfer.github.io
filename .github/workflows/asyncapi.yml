@@ -1,0 +1,38 @@
+name: Validate AsyncAPI spec
+
+on:
+  push:
+    paths:
+      - "asyncapi.yaml"
+      - "openapi.yaml"
+      - "scripts/live_ws_conformance.py"
+      - ".github/workflows/asyncapi.yml"
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "asyncapi.yaml"
+      - "openapi.yaml"
+      - "scripts/live_ws_conformance.py"
+      - ".github/workflows/asyncapi.yml"
+
+jobs:
+  validate:
+    # Same single-host guard as redoc_index.yml: this repository is mirrored and both hosts read
+    # .github/workflows, so the check runs on GitHub alone.
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # openapi.yaml is validated too because asyncapi.yaml takes its signal schemas from it by $ref:
+      # a change there can break the WebSocket contract without touching asyncapi.yaml.
+      - name: Validate asyncapi.yaml (and the openapi.yaml schemas it references)
+        run: npx -y @asyncapi/cli@6.2.0 validate asyncapi.yaml --fail-severity=warn
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Every example matches its schema
+        run: uv run scripts/live_ws_conformance.py --examples

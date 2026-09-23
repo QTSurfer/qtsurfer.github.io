@@ -7,6 +7,32 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.126.1] — 2026-09-23
+
+### Added ✨
+
+- `asyncapi.yaml` — the Live Execution WebSocket as a machine-readable contract (AsyncAPI 3.1.0,
+  its own version, starting at `0.1.0`), alongside this OpenAPI spec. It names the protocol — the
+  [Centrifugo](https://centrifugal.dev) v6 client protocol, JSON — so clients can use an official
+  Centrifugo library, and fixes what is QTSurfer's own: the URL, `connect` with the token from
+  `POST /live/token`, `sig:<runId>` channels, the signal `push`, the `live.params` RPC, `refresh`,
+  ping/pong, the server unsubscribe, and the error codes (`103`, `400`, `404`, `409`). The signal
+  payload and the `live.params` result are `$ref`s into this spec's `LiveSignal` and
+  `LiveParamsUpdateResult`, so REST and WebSocket share one definition.
+- `scripts/live_ws_conformance.py` checks it: offline, every example against its schema; live, every
+  frame the running service sends.
+
+### Fixed 🐛
+
+- `LiveSignal.kind`, `LiveSignalOrder` and its `price`/`amount`/`stopPrice`/`trailPct` were marked
+  `nullable: true`, an OpenAPI 3.0 keyword that 3.1 (and JSON Schema) ignores, so a validator
+  rejected the `null` values the service actually sends. They are now `type: ['string', 'null']`
+  (`['object', 'null']` for `order`). Generated clients may change these fields' types to optional.
+- `docs/live.md` gave the connect reply's `ping` as `25000`; the service answers in seconds (`25`).
+  The guide now also covers what a client needs to stay connected: answering pings, refreshing the
+  token on the same connection, the `push` frame around each signal, and being unsubscribed when a
+  run turns private.
+
 ## [0.126.0] — 2026-09-23
 
 ### Added ✨
