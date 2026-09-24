@@ -26,6 +26,9 @@ pre-1.0, its version follows the version in `openapi.yaml`.
   `instrument`.
 - `LiveSignal.type` gains `paper`: items a `mix` run writes into its own signals, never pushed on
   the WebSocket channel. `LiveSignal.instrument` is `null` for a paper item about a whole account.
+- `docs/live_paper.md`, a guide to paper trading on live runs: configuration and sizing, accounts per
+  quote currency, reading an account, the equity curve with paging, `mix` output, gaps. `docs/live.md`
+  links to it.
 - `SweepBaseConfig.percentAmountToLock` has a description.
 
 ### Fixed 🐛

@@ -5907,7 +5907,9 @@ tags:
       runtime parameters. Consuming the run's own signal stream and updating parameters over a live
       connection instead of polling is a WebSocket protocol built on top of these same endpoints —
       see **[Live execution](docs/live.md)** for the full flow: minting a connection token
-      (`POST /live/token`), the signal channel, and the `live.params` RPC.
+      (`POST /live/token`), the signal channel, and the `live.params` RPC. A run can also be
+      paper-traded — its signals executed in simulation, with equity and KPIs — see
+      **[Paper trading](docs/live_paper.md)**.
 
       **Key functionalities**:
       - Start, inspect, and stop a live run for one of your strategies.

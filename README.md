@@ -181,6 +181,7 @@ touched.
 | **[Datasets](docs/datasets.md)** | Bring your own data instead of a managed exchange |
 | **[Account](docs/account.md)** | Your tier limits and live storage usage |
 | **[Live execution](docs/live.md)** | Run a strategy continuously against a live feed; stream its signals and update parameters over WebSocket |
+| **[Paper trading](docs/live_paper.md)** | Execute a live run's signals in simulation; read its accounts, equity curve and KPIs |
 
 ## Key Technologies
 

@@ -13,8 +13,8 @@ change its parameters without restarting it.
 | `PATCH` | `/live/{runId}` | Change visibility, name, or description |
 | `PUT` | `/live/{runId}/params` | Change parameters while it stays live |
 | `GET` | `/live/{runId}/signals` | Read the signals it has already produced |
-| `GET` | `/live/{runId}/paper` | Read its paper trading: accounts, equity, positions, KPIs |
-| `GET` | `/live/{runId}/paper/equity` | Page through its paper equity curve |
+| `GET` | `/live/{runId}/paper` | Read its paper trading — see [Paper trading](live_paper.md) |
+| `GET` | `/live/{runId}/paper/equity` | Page through its paper equity curve — see [Paper trading](live_paper.md) |
 | `POST` | `/live/token` | Mint a WebSocket connection token |
 
 ## Lifecycle: sandbox, then live
@@ -208,7 +208,7 @@ Each signal pushed on a `sig:<runId>` channel (the `pub.data` of the `push` fram
 | `signalId` | Stable id for this exact signal — dedupe on it if your connection ever reconnects mid-stream. |
 | `stage` | Always `live` on this channel — a run only relays once `relay` is in effect, which never happens in `sandbox` (see above). |
 | `paramsVersion` | The parameter set in force when this signal was produced. |
-| `type` | `hint`, `info`, `marker`, or `command` — plus `paper` when reading a `mix` run's history (see "Paper trading"; paper items are never pushed on this channel). |
+| `type` | `hint`, `info`, `marker`, or `command` — plus `paper` when reading a `mix` run's history (see [Paper trading](live_paper.md#output-separate-or-mix); paper items are never pushed on this channel). |
 | `kind` | `BUY`/`SELL` for a `hint`; the command name for a `command`; absent otherwise. |
 | `eventTsMs` | Market time the signal was produced. |
 | `emittedAtMs` | Time it was published — always ≥ `eventTsMs`. |
@@ -290,83 +290,13 @@ consumes that span faster, and so do other runs sharing it. Two consequences wor
 
 ## Paper trading
 
-Start a run with a `paper` block and its hints are executed in simulation from its first tick,
-exactly as a backtest would execute them: fills, closed trades, equity and the same KPIs a backtest
-reports. Without the block the run has no paper trading.
+Start a run with a `paper` block and its hints are executed in simulation from its first tick, as a
+backtest would execute them — fills, closed trades, equity and the same KPIs a backtest reports:
 
 ```json
-POST /v1/strategy/6bsh31ikwkuivhtgcoa6s4/live
-{
-  "sources": [{"venueType": "cx", "exchange": "binance", "segment": "spot", "type": "ticker", "instruments": ["BTC/USDT", "ETH/USDT"]}],
-  "paper": {"initialFunding": 1000, "feeRate": 0.001, "percentAmountToLock": 20, "output": "separate"}
-}
+"paper": {"initialFunding": 1000, "feeRate": 0.001, "percentAmountToLock": 20}
 ```
 
-The block takes the same economics as a backtest's `baseConfig` — `initialFunding`, `feeRate`
-(or `buyFeeRate`/`sellFeeRate`), `feeLeg`, `percentAmountToLock` — with the same defaults and limits,
-so one object moves between a backtest and a live run unchanged. Two differences:
-
-- `initialFunding` is capped at 1,000,000,000.
-- Without `percentAmountToLock`, each entry locks 10% of the account's free balance (unless the
-  strategy sets its own), rather than a backtest's all-in: a live run trades several pairs at once,
-  and all-in would let the first one hold the whole account.
-
-Anything invalid — an unknown field, a wrong type, a value out of range — is a `400`. The run's own
-`GET /strategy/{strategyId}/live` returns the block as accepted, with `feeRate` resolved into the two
-sides and the defaults filled in.
-
-**One account per quote currency.** A run over `BTC/USDT` and `ETH/BTC` has a `USDT` account and a
-`BTC` account, each opened with `initialFunding` in its own currency. They are never added together.
-
-**Strategies that listen to their own execution.** A strategy that overrides
-`getExecutionCallback()` reacts to fills and stops, and paper trading is the only place a live run
-executes. Starting one without a `paper` block is a `400`.
-
-### Reading it
-
-`GET /live/{runId}/paper` returns each account as last recorded:
-
-```json
-{
-  "runId": "6TzAPiPpsOWwBLdLBZCxwH",
-  "stage": "SANDBOX",
-  "accounts": [{
-    "currency": "USDT",
-    "initialFunding": 1000,
-    "equity": 996.4, "equityAtMs": 1758330060000, "equityKind": "mark",
-    "realisedPnl": -2.1, "trades": 14, "gaps": 0,
-    "openPositions": [{"instrument": "BTC/USDT", "base": 0.0023, "cost": 194.2}],
-    "kpi": {"totalTrades": 14, "winRate": 0.4286, "pnlTotal": -2.1, "pnlTotalPercent": -0.21, "sharpeRatio": -0.08, "…": "…"}
-  }]
-}
-```
-
-`equity` is the latest value: at the last closed trade (`equityKind: equity`), or the last
-mark-to-market while positions are open (`mark`, once a minute of market time). `GET
-/live/{runId}/paper/equity` pages through the whole curve, oldest first; it is kept for the life of
-the run, so there is no moving window as with signals. Add `currency=USDT` for one account. A
-`gap` point marks a restart with positions open: those positions are not carried over, and the
-curve has no value there.
-
-Both routes follow the same access rule as the signals: the run's owner, or anyone if the run is
-`public`. A run without paper trading answers `404`.
-
-### Output: `separate` or `mix`
-
-With `output: separate` (the default), paper trading stays out of the run's signals: read it with
-the two routes above. With `output: mix`, each paper item is also written into the run's own
-signals, as `type: paper`, right after the signal that caused it — `GET /live/{runId}/signals?type=paper`
-reads them back. `kind` says what the item is:
-
-| `kind` | when | `data` |
-|---|---|---|
-| `fill` | an order filled | `side`, `orderKind`, `price`, `amount`, `counterAmount`, `feeBase`, `feeQuote` |
-| `trade` | a position closed | `side`, `entryTsMs`, `enterAmount`, `exitAmount`, `pnl` |
-| `equity` | after each closed trade | `currency`, `equity` |
-| `kpi` | after each closed trade | `currency` and the KPIs above |
-| `mark` | once a minute of market time while positions are open | `currency`, `equity`, `realisedPnl`, `unrealisedPnl`, `openPositions` |
-| `gap` | open positions lost at a restart | `currency`, `base`, `cost` |
-
-`equity`, `kpi` and `mark` are about a whole account, so their `instrument` is `null` and
-`data.currency` names the account. Paper items are recorded with the run's signals but are **not**
-pushed over the WebSocket channel, whatever `relay` says.
+Read it back with `GET /live/{runId}/paper` and `GET /live/{runId}/paper/equity`. Everything about it
+— the configuration, one account per quote currency, the equity curve, `mix` output and gaps — is in
+**[Paper trading on live runs](live_paper.md)**.
