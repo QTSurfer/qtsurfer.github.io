@@ -7,6 +7,32 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.127.0] — 2026-09-24
+
+### Added ✨
+
+- **Paper trading on live runs.** `POST /strategy/{strategyId}/live` accepts an optional `paper`
+  block (`LivePaperConfig`): the same economics as a backtest's `baseConfig`, plus `output`
+  (`separate` or `mix`). The run's hints are then executed in simulation from its first tick, with
+  one account per quote currency. The run echoes the block, normalised, as `LiveRun.paper`. An
+  invalid block is a `400`. A strategy that overrides `getExecutionCallback()` cannot start without
+  one, also a `400`.
+- `GET /live/{runId}/paper`: each paper account's starting capital, latest equity, realised PnL,
+  open positions and backtest KPIs (`LivePaper`, `LivePaperAccount`, `LivePaperPosition`,
+  `LivePaperKpi`).
+- `GET /live/{runId}/paper/equity`: the paper equity curve, paged, optionally for one currency
+  (`LivePaperEquityPage`, `LivePaperEquityPoint`).
+- `GET /live/{runId}/signals` takes a `type` filter (comma-separated), which combines with
+  `instrument`.
+- `LiveSignal.type` gains `paper`: items a `mix` run writes into its own signals, never pushed on
+  the WebSocket channel. `LiveSignal.instrument` is `null` for a paper item about a whole account.
+- `SweepBaseConfig.percentAmountToLock` has a description.
+
+### Fixed 🐛
+
+- `GET /live/{runId}/signals`: `_links.next` now carries the `instrument` (and `type`) filter, so
+  following it no longer returns the next page unfiltered.
+
 ## [0.126.2] — 2026-09-23
 
 ### Added ✨

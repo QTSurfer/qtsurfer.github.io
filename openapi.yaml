@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.126.2
+  version: 0.127.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2303,6 +2303,14 @@ paths:
         connection instead of polling — is a WebSocket protocol on top of these REST endpoints; see
         the "Live execution" guide linked from this tag's description for the full flow (minting a
         connection token, the channel and RPC method).
+
+        **Paper trading.** Pass a `paper` block to have the run's hints executed in simulation from
+        its first tick, as a backtest would execute them: fills, closed trades, equity and KPIs,
+        with one simulated account per quote currency. Omitted, the run has no paper trading. It
+        takes the same economics as a backtest's `baseConfig` plus where its output goes; read it
+        back with `GET /live/{runId}/paper`. A strategy that listens to its own execution events
+        (it overrides `getExecutionCallback()`) has no other execution venue, so it cannot start
+        without a `paper` block.
       parameters:
         - name: strategyId
           in: path
@@ -2325,6 +2333,10 @@ paths:
                   instruments: [BTC/USDT]
               visibility: private
               name: EMA cross
+              paper:
+                initialFunding: 1000
+                feeRate: 0.001
+                percentAmountToLock: 20
       responses:
         '201':
           description: Started — the run's own state, in the sandbox stage
@@ -2350,7 +2362,7 @@ paths:
                 relay: false
                 startedAtMs: 1758330000000
         '400':
-          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), or an invalid `visibility`.
+          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events.
           content:
             application/json:
               schema:
@@ -2740,6 +2752,12 @@ paths:
             base against that quote, `BTC/*` for that base against any quote), or a comma-separated
             list of pairs (`BTC/USDT,ETH/EUR`). Symbols are matched exactly, case included — pass
             them as this API reports them.
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Narrow to one or more signal types, comma-separated (`hint`, `info`, `marker`, `command`, `paper`). Combines with `instrument`.
         - name: cursor
           in: query
           required: false
@@ -2791,7 +2809,7 @@ paths:
                   next:
                     href: '/v1/live/6TzAPiPpsOWwBLdLBZCxwH/signals?cursor=eyJzZXEiOjQyfQ&limit=20'
         '400':
-          description: '`instrument`, `sinceMs`, `limit` or `cursor` is malformed.'
+          description: '`instrument`, `type`, `sinceMs`, `limit` or `cursor` is malformed.'
           content:
             application/json:
               schema:
@@ -2804,6 +2822,158 @@ paths:
                 $ref: '#/components/schemas/ResponseError'
         '410':
           description: The cursor's position is no longer available — restart from the `availableSinceMs` named in the message.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+  '/live/{runId}/paper':
+    get:
+      operationId: getLiveRunPaper
+      summary: Read a run's paper trading
+      description: |
+        The run's paper trading as last recorded: one entry per simulated account (one per quote
+        currency the run trades — never added together), with its starting capital, current
+        equity, realised PnL, open positions and KPIs. The KPIs are the same a backtest reports,
+        computed over the trades closed so far.
+
+        `equity` is the account's latest recorded value: at the last closed trade (`equityKind:
+        equity`), or the last periodic mark-to-market while positions are open (`equityKind:
+        mark`, taken every minute of market time). Until either exists the account holds its
+        starting capital.
+
+        Readable by the run's owner, and by anyone if the run is `public`. A run started without
+        a `paper` block answers `404`.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The run's paper accounts
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivePaper'
+              example:
+                runId: 6TzAPiPpsOWwBLdLBZCxwH
+                stage: SANDBOX
+                accounts:
+                  - currency: USDT
+                    initialFunding: 1000
+                    equity: 996.4
+                    equityAtMs: 1758330060000
+                    equityKind: mark
+                    realisedPnl: -2.1
+                    trades: 14
+                    gaps: 0
+                    openPositions:
+                      - instrument: BTC/USDT
+                        base: 0.0023
+                        cost: 194.2
+                    kpi:
+                      totalTrades: 14
+                      winCount: 6
+                      lossCount: 8
+                      winRate: 0.4286
+                      pnlTotal: -2.1
+                      pnlTotalPercent: -0.21
+                      sharpeRatio: -0.08
+                      sortinoRatio: -0.11
+                      cagr: -0.41
+                      maxDrawdown: 3.4
+                      maxDrawdownPercent: 0.34
+        '404':
+          description: No such run, not one you may read, or a run without paper trading.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+  '/live/{runId}/paper/equity':
+    get:
+      operationId: getLiveRunPaperEquity
+      summary: Read a run's paper equity curve
+      description: |
+        The run's paper equity curve, oldest first, page by page. It is kept for the life of the
+        run, so unlike signals it has no moving window. Points are `equity` at every closed trade,
+        `mark` every minute of market time while positions are open, and `gap` where the run was
+        restarted with positions open: those positions are not carried over, so the curve has no
+        value there.
+
+        `currency` narrows to one account; without it, every account's points come interleaved by
+        time, each carrying its currency.
+
+        Readable by the run's owner, and by anyone if the run is `public`.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+          description: One account's quote currency, e.g. `USDT`.
+        - name: sinceMs
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Start from this market time (epoch ms). Ignored when `cursor` is given.
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Continue from a previous page's `_links.next`.
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 1000
+            default: 100
+      responses:
+        '200':
+          description: One page of the curve
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivePaperEquityPage'
+              example:
+                points:
+                  - currency: USDT
+                    kind: equity
+                    eventTsMs: 1758330012000
+                    equity: 999.2
+                  - currency: USDT
+                    kind: mark
+                    eventTsMs: 1758330060000
+                    equity: 996.4
+                _links:
+                  next:
+                    href: '/v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?cursor=eyJ0cyI6MTc1ODMzMDA2MDAwMH0&limit=2&currency=USDT'
+        '400':
+          description: '`sinceMs`, `limit` or `cursor` is malformed.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: No such run, not one you may read, or a run without paper trading.
           content:
             application/json:
               schema:
@@ -3496,6 +3666,7 @@ components:
           format: double
           exclusiveMinimum: 0
           maximum: 100
+          description: Share of the free balance each entry locks, in percent (0-100]. Omitted, a backtest sizes every entry with everything available.
     ExecuteSweepRequest:
       type: object
       required: [strategyId, sweep]
@@ -5153,6 +5324,58 @@ components:
           type: string
         description:
           type: string
+        paper:
+          $ref: '#/components/schemas/LivePaperConfig'
+    LivePaperConfig:
+      type: object
+      additionalProperties: false
+      description: |
+        Paper trading for this run: the same economics as a backtest's `baseConfig` (same fields,
+        defaults and limits), plus `output`. An empty object takes every default. Each quote
+        currency the run trades gets its own simulated account, opened with `initialFunding` in
+        that currency; accounts are never added together. As returned on a run, the block is
+        normalised: `feeRate` is resolved into `buyFeeRate`/`sellFeeRate` and defaults are filled
+        in.
+      properties:
+        initialFunding:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 1000000000
+          default: 100
+          description: Starting capital of each account, in that account's own quote currency.
+        feeRate:
+          type: number
+          format: double
+          minimum: 0
+          default: 0.001
+          description: Fee rate for both sides (0.001 = 0.1%). Accepted on start; returned resolved into the two fields below.
+        buyFeeRate:
+          type: number
+          format: double
+          minimum: 0
+          description: Buy-side fee rate; overrides `feeRate`.
+        sellFeeRate:
+          type: number
+          format: double
+          minimum: 0
+          description: Sell-side fee rate; overrides `feeRate`.
+        feeLeg:
+          type: string
+          enum: [RECEIVED, QUOTE, BASE]
+          default: RECEIVED
+          description: Which asset fees are charged in. Case-insensitive on start.
+        percentAmountToLock:
+          type: number
+          format: double
+          exclusiveMinimum: 0
+          maximum: 100
+          description: Share of the account's free balance each entry locks, in percent. Omitted, the strategy's own setting applies, and without one 10%.
+        output:
+          type: string
+          enum: [separate, mix]
+          default: separate
+          description: '`separate` keeps paper output out of the run''s signals (read it with `GET /live/{runId}/paper`); `mix` also interleaves it into the run''s signals as `type: paper`, right after the signal that caused it.'
     UpdateLiveRequest:
       type: object
       properties:
@@ -5223,6 +5446,10 @@ components:
           type: object
           additionalProperties: true
           description: The sandbox trial's promotion verdict, once one exists. Shape is not yet stabilized as public API — treat as opaque diagnostics.
+        paper:
+          allOf:
+            - $ref: '#/components/schemas/LivePaperConfig'
+          description: The run's paper trading configuration as accepted at start, normalised. Absent when the run has no paper trading.
     LiveRunCompact:
       type: object
       required: [runId, visibility, stage, state, sources]
@@ -5352,6 +5579,148 @@ components:
           description: The oldest moment this run's signals can still be read from. Absent when the run has produced nothing yet. It moves forward over time as older signals are discarded, so a `sinceMs` earlier than this is served from here instead.
         _links:
           $ref: '#/components/schemas/PublicLiveListLinks'
+    LivePaper:
+      type: object
+      required: [runId, stage, accounts]
+      properties:
+        runId:
+          type: string
+        stage:
+          type: string
+          enum: [SANDBOX, LIVE]
+        accounts:
+          type: array
+          items:
+            $ref: '#/components/schemas/LivePaperAccount'
+    LivePaperAccount:
+      type: object
+      required: [currency, initialFunding, equity, realisedPnl, trades, gaps, openPositions]
+      description: One simulated account — one per quote currency the run trades.
+      properties:
+        currency:
+          type: string
+          description: The account's quote currency; every amount below is in it.
+        initialFunding:
+          type: number
+          format: double
+        equity:
+          type: number
+          format: double
+          description: Latest recorded equity — see `equityKind`.
+        equityAtMs:
+          type: integer
+          format: int64
+          description: Market time of that value. Absent while the account holds its starting capital.
+        equityKind:
+          type: string
+          enum: [equity, mark]
+          description: '`equity` at a closed trade, `mark` at a periodic mark-to-market (includes open positions at market price).'
+        realisedPnl:
+          type: number
+          format: double
+          description: Sum of the PnL of the closed trades.
+        trades:
+          type: integer
+          format: int64
+          description: Closed trades.
+        gaps:
+          type: integer
+          description: Times open positions were lost because the run was restarted with them open.
+        openPositions:
+          type: array
+          items:
+            $ref: '#/components/schemas/LivePaperPosition'
+        kpi:
+          $ref: '#/components/schemas/LivePaperKpi'
+    LivePaperPosition:
+      type: object
+      required: [instrument, base, cost]
+      properties:
+        instrument:
+          type: string
+          example: BTC/USDT
+        base:
+          type: number
+          format: double
+          description: Amount held, in the base asset.
+        cost:
+          type: number
+          format: double
+          description: What it cost, in the account's currency.
+    LivePaperKpi:
+      type: object
+      description: The same KPIs a backtest reports, over the trades closed so far. Absent until the first closed trade is recorded.
+      properties:
+        totalTrades:
+          type: integer
+          format: int64
+        winCount:
+          type: integer
+          format: int64
+        lossCount:
+          type: integer
+          format: int64
+        winRate:
+          type: number
+          format: double
+          description: Ratio (0.5 = half the trades won).
+        pnlTotal:
+          type: number
+          format: double
+        pnlTotalPercent:
+          type: number
+          format: double
+          description: Percent of `initialFunding` (0-100 scale).
+        sharpeRatio:
+          type: ['number', 'null']
+          format: double
+        sortinoRatio:
+          type: ['number', 'null']
+          format: double
+        cagr:
+          type: ['number', 'null']
+          format: double
+          description: Ratio (0.15 for 15%).
+        maxDrawdown:
+          type: number
+          format: double
+        maxDrawdownPercent:
+          type: number
+          format: double
+          description: Percent (0-100 scale).
+    LivePaperEquityPage:
+      type: object
+      required: [points]
+      properties:
+        points:
+          type: array
+          items:
+            $ref: '#/components/schemas/LivePaperEquityPoint'
+        _links:
+          type: object
+          properties:
+            next:
+              type: object
+              properties:
+                href:
+                  type: string
+    LivePaperEquityPoint:
+      type: object
+      required: [currency, kind, eventTsMs]
+      properties:
+        currency:
+          type: string
+        kind:
+          type: string
+          enum: [equity, mark, gap]
+        eventTsMs:
+          type: integer
+          format: int64
+          description: Market time of the point.
+        equity:
+          type: number
+          format: double
+          description: Absent on a `gap`.
     LiveSignal:
       type: object
       required: [v, signalId, runId, stage, type, eventTsMs, emittedAtMs, instrument, digest]
@@ -5374,10 +5743,11 @@ components:
           description: The parameter set in force when this signal was produced.
         type:
           type: string
-          enum: [hint, info, marker, command]
+          enum: [hint, info, marker, command, paper]
+          description: '`paper` items appear only for a run whose `paper.output` is `mix`; they are not relayed over the WebSocket channel.'
         kind:
           type: ['string', 'null']
-          description: '`BUY`/`SELL` for a `hint`, the command name for a `command`, absent otherwise.'
+          description: '`BUY`/`SELL` for a `hint`, the command name for a `command`; for `paper`, what the item is: `fill`, `trade`, `equity`, `mark`, `kpi` or `gap`. Absent otherwise.'
         eventTsMs:
           type: integer
           format: int64
@@ -5387,7 +5757,10 @@ components:
           format: int64
           description: Time it was published — always at or after `eventTsMs`.
         instrument:
-          $ref: '#/components/schemas/LiveSignalInstrument'
+          anyOf:
+            - $ref: '#/components/schemas/LiveSignalInstrument'
+            - type: 'null'
+          description: The instrument the signal is about. `null` only for a `paper` item about a whole account (`equity`, `mark`, `kpi`), whose `data.currency` names the account.
         order:
           $ref: '#/components/schemas/LiveSignalOrder'
         data:
