@@ -88,6 +88,33 @@ Main m1 {
 }
 ```
 
+### Which indicator a window is on
+
+Inside any window body, `$indicator` is the name of the indicator that window is attached to, as a
+`String`: `"ema12"` for a window written on the line `ema(12)`, `"price"` on a `Main` (`"rate"` on
+funding). The `$` marks a name QTScript provides; the names you declare cannot start with one. A named
+section attached to several indicators sees, each time it fires, the indicator that fired.
+
+It is also how a body reaches an indicator that the same builder call registered beside the one it is on.
+`bollinger(20, 2)` registers three under one name: the middle band, `blgr20_2`, and the outer bands, that
+name followed by `Upper` and `Lower`. A window written on that line attaches to the middle band, so
+`actual` is the middle band's value, and `value($indicator + "Upper")` and `value($indicator + "Lower")`
+read the other two:
+
+```
+setup:
+  bollinger(20, 2) window m1 {
+    if (price > value($indicator + "Upper")) emitSell(price);
+    if (price < value($indicator + "Lower")) emitBuy(price);
+  }
+```
+
+A window that names an indicator which is not registered, such as `window nosuch m1 { ... }`, is not
+rejected when you register the source. Whether the name exists can depend on your `param`s (a `param
+fast` used as `ema(fast)` registers a different name for each value) and on indicators registered from
+Java, so it is only found when the strategy is [validated](strategy.md#checking-it-actually-runs), which
+then fails on the window's line: `QTScript line 4: unknown indicator 'nosuch'`.
+
 ## Inside a body
 
 Your Java, plus what is already in scope — nothing needs importing:
@@ -97,6 +124,7 @@ Your Java, plus what is already in scope — nothing needs importing:
 | `actual`, `prev` | the window's new and previous value |
 | `price` (ticker) · `price open high low close volume` (kline) · `rate` (funding) | the current values, as plain variables |
 | `value("name")` | any other indicator's current value |
+| `$indicator` | the name of the indicator this window is on, as a `String` — [see above](#which-indicator-a-window-is-on) |
 | `store` | the per-instrument state shared by every window of that instrument |
 | `emitBuy(price)`, `emitSell(price)`, `emitInfo(key, values…)`, `emitSignal(signal)` | signal emission |
 | every `param` | readable by its name |
