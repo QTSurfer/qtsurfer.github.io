@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.127.0
+  version: 0.128.0
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2725,8 +2725,9 @@ paths:
         serving a shortened page that looks complete. Treat that as a normal outcome: read
         `availableSinceMs` from the error and start again from there.
 
-        Readable by the run's owner, and by anyone if the run is `public` — the same rule the
-        signal channel applies to a subscription.
+        Readable by the run's owner, and by anyone if the run is `public` and has reached the `live`
+        stage — the same rule the signal channel applies to a subscription. A `sandbox` run is read
+        by its owner only, whatever visibility it asked for.
       parameters:
         - name: runId
           in: path
@@ -2845,8 +2846,8 @@ paths:
         mark`, taken every minute of market time). Until either exists the account holds its
         starting capital.
 
-        Readable by the run's owner, and by anyone if the run is `public`. A run started without
-        a `paper` block answers `404`.
+        Readable by the run's owner, and by anyone if the run is `public` and has reached the `live`
+        stage. A run started without a `paper` block answers `404`.
       parameters:
         - name: runId
           in: path
@@ -2912,7 +2913,8 @@ paths:
         `currency` narrows to one account; without it, every account's points come interleaved by
         time, each carrying its currency.
 
-        Readable by the run's owner, and by anyone if the run is `public`.
+        Readable by the run's owner, and by anyone if the run is `public` and has reached the `live`
+        stage.
       parameters:
         - name: runId
           in: path
@@ -5315,11 +5317,11 @@ components:
           type: string
           enum: [private, public]
           default: private
-          description: A `public` run appears in `GET /live/public` and its signal channel accepts subscriptions from anyone, not only you.
+          description: A `public` run appears in `GET /live/public` and its signal channel accepts subscriptions from anyone, not only you — from the moment it is promoted to `live`. While it is a `sandbox` trial, `public` is only what you asked for, and only you can read it.
         relay:
           type: boolean
           default: false
-          description: Request that this run's signals be relayed over its WebSocket channel once it reaches the `live` stage — see the "Live execution" guide. Has no effect while the run is still in the `sandbox` stage, regardless of this value.
+          description: Request that this run's signals be relayed over its WebSocket channel, from its first signal — in the `sandbox` stage too, where only you can subscribe to it. See the "Live execution" guide.
         name:
           type: string
         description:
@@ -5437,7 +5439,7 @@ components:
           description: Increments on every accepted `PUT .../params` call, including one that resends the current values.
         relay:
           type: boolean
-          description: Whether this run's signals are being relayed over the WebSocket channel described in the "Live execution" guide, right now. This is the effective value — `false` on a `sandbox` run regardless of what was requested at start; matches the requested value once `stage` reaches `live`.
+          description: Whether this run's signals are relayed over the WebSocket channel described in the "Live execution" guide. It is the value requested at start, in either stage.
         startedAtMs:
           type: integer
           format: int64

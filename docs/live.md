@@ -19,9 +19,10 @@ change its parameters without restarting it.
 
 ## Lifecycle: sandbox, then live
 
-Starting a run (`POST /strategy/{strategyId}/live`) never puts it in front of anything that reads
-its signals immediately. It begins in the `sandbox` stage — a short trial, comparing an
-independent second execution against the first for agreement — and is promoted to `live`
+Starting a run (`POST /strategy/{strategyId}/live`) never puts it in front of anyone but you. It
+begins in the `sandbox` stage — a short trial, comparing an independent second execution against
+the first for agreement — where only you can read it: over the WebSocket channel from its first
+signal if you asked for `relay`, and through the read routes either way. It is promoted to `live`
 automatically once it passes. Poll `stage` on `GET`/`PATCH` `.../live` to watch it move from
 `SANDBOX` to `LIVE`; there is no separate "promote" call.
 
@@ -67,6 +68,10 @@ A run is `private` by default — only you can read its state or receive its sig
 - it appears in `GET /live/public`'s catalogue, listed without revealing who owns it or which
   strategy runs it;
 - its signal channel (see below) accepts a WebSocket subscription from anyone, not only you.
+
+`public` is what you ask for, and it takes effect when the run is promoted to `live`. Until then —
+while it is a `sandbox` trial — only you can read it, over the channel and through the read routes,
+and it is not listed in the catalogue; nothing you did needs repeating at promotion.
 
 Switching back to `private` also disconnects anyone else currently subscribed to that channel —
 best-effort, and it does not undo the visibility change if the disconnect itself fails.
@@ -114,10 +119,13 @@ token refresh and reconnection described below. With one, you only supply the UR
 that mints a token, the channel name and the RPC method.
 
 Signals only reach this channel for a run started with `relay: true` (`POST .../live`'s own field,
-default `false`) — and only once it reaches the `live` stage; a run still in `sandbox` never
-relays, whatever was requested at start. `GET`/`PATCH .../live` echo back what was requested as the
-run's own `relay` field, already folded with that stage rule — `true` there means signals are
-reaching the channel right now, not merely that `relay: true` was once passed.
+default `false`). They reach it from the run's first signal, in the `sandbox` stage too, where only
+you can subscribe to it; the same channel carries on unchanged once the run is promoted to `live`,
+on the same subscription: `stage` flips from `sandbox` to `live` and nothing needs redoing. The run
+takes a while to start in the `live` stage, so the channel can stay quiet for a few minutes around
+the promotion; what the run produced meanwhile then arrives in order, with no signal lost or
+repeated.
+`GET`/`PATCH .../live` echo back what was requested as the run's own `relay` field.
 
 1. **Mint a token.** `POST /live/token` (JWT bearer, same as any other endpoint) returns a
    short-lived `token` and its `expiresAtMs`.
@@ -137,8 +145,9 @@ reaching the channel right now, not merely that `relay: true` was once passed.
    {"id": 2, "subscribe": {"channel": "sig:6TzAPiPpsOWwBLdLBZCxwH"}}
    ```
    You may subscribe to any run's channel this way, but the connection is only actually allowed
-   onto it if you own that run or it is `public` — a foreign private run's channel refuses the
-   subscription with `{"id": 2, "error": {"code": 103, "message": "permission denied"}}`. Each
+   onto it if you own that run, or it is `public` **and** has reached the `live` stage — a foreign
+   private run's channel, and a public run that is still in the `sandbox`, refuse the subscription
+   with `{"id": 2, "error": {"code": 103, "message": "permission denied"}}`. Each
    signal then arrives as a `push` frame, with no `id`; the signal itself is its `pub.data`, in the
    shape below:
    ```json
@@ -206,7 +215,7 @@ Each signal pushed on a `sig:<runId>` channel (the `pub.data` of the `push` fram
 | field | meaning |
 |---|---|
 | `signalId` | Stable id for this exact signal — dedupe on it if your connection ever reconnects mid-stream. |
-| `stage` | Always `live` on this channel — a run only relays once `relay` is in effect, which never happens in `sandbox` (see above). |
+| `stage` | `sandbox` or `live`: the stage the run was in when it produced the signal. Only you receive a `sandbox` signal on this channel; everyone allowed onto the channel receives `live` ones. |
 | `paramsVersion` | The parameter set in force when this signal was produced. |
 | `type` | `hint`, `info`, `marker`, or `command` — plus `paper` when reading a `mix` run's history (see [Paper trading](live_paper.md#output-separate-or-mix); paper items are never pushed on this channel). |
 | `kind` | `BUY`/`SELL` for a `hint`; the command name for a `command`; absent otherwise. |

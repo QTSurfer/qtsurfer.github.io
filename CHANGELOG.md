@@ -7,6 +7,22 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.0] — 2026-09-25
+
+### Changed 🔄
+
+- **A run's owner reads it privately from the start of the sandbox.** A run started with `relay: true`
+  now pushes its signals over its WebSocket channel from its first signal, in the `sandbox` stage
+  too, where only its owner can subscribe; the same subscription carries on after the promotion to
+  `live`, with `LiveSignal.stage` flipping from `sandbox` to `live`. The channel can stay quiet for
+  a few minutes around the promotion; what the run produced meanwhile then arrives in order.
+  `LiveRun.relay` reports the requested value in either stage (it was `false` on a `sandbox` run).
+- **`visibility: public` takes effect at the promotion.** While a run is a `sandbox` trial it is read
+  by its owner only, whatever visibility it asked for: the channel subscription (`103` for anyone
+  else), `GET /live/{runId}/signals`, `GET /live/{runId}/paper` and `GET /live/{runId}/paper/equity`
+  answer as they do for a private run, and it is not listed in `GET /live/public`. Nothing needs
+  repeating at the promotion. AsyncAPI `0.2.0`.
+
 ## [0.127.0] — 2026-09-24
 
 ### Added ✨
