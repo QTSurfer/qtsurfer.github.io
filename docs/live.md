@@ -123,8 +123,9 @@ default `false`). They reach it from the run's first signal, in the `sandbox` st
 you can subscribe to it; the same channel carries on unchanged once the run is promoted to `live`,
 on the same subscription: `stage` flips from `sandbox` to `live` and nothing needs redoing. The run
 takes a while to start in the `live` stage, so the channel can stay quiet for a few minutes around
-the promotion; what the run produced meanwhile then arrives in order, with no signal lost or
-repeated.
+the promotion; what the run produced meanwhile then arrives in order. A signal produced right at the
+promotion can reach you twice, once as `sandbox` and once as `live`, with the same `signalId`: dedupe
+on it, as after a reconnection.
 `GET`/`PATCH .../live` echo back what was requested as the run's own `relay` field.
 
 1. **Mint a token.** `POST /live/token` (JWT bearer, same as any other endpoint) returns a

@@ -15,7 +15,8 @@ pre-1.0, its version follows the version in `openapi.yaml`.
   now pushes its signals over its WebSocket channel from its first signal, in the `sandbox` stage
   too, where only its owner can subscribe; the same subscription carries on after the promotion to
   `live`, with `LiveSignal.stage` flipping from `sandbox` to `live`. The channel can stay quiet for
-  a few minutes around the promotion; what the run produced meanwhile then arrives in order.
+  a few minutes around the promotion; what the run produced meanwhile then arrives in order, and a signal
+  produced right at the promotion can arrive twice, once per stage, with the same `signalId`.
   `LiveRun.relay` reports the requested value in either stage (it was `false` on a `sandbox` run).
 - **`visibility: public` takes effect at the promotion.** While a run is a `sandbox` trial it is read
   by its owner only, whatever visibility it asked for: the channel subscription (`103` for anyone
