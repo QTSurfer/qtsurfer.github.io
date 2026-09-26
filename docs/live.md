@@ -20,11 +20,43 @@ change its parameters without restarting it.
 ## Lifecycle: sandbox, then live
 
 Starting a run (`POST /strategy/{strategyId}/live`) never puts it in front of anyone but you. It
-begins in the `sandbox` stage — a short trial, comparing an independent second execution against
-the first for agreement — where only you can read it: over the WebSocket channel from its first
-signal if you asked for `relay`, and through the read routes either way. It is promoted to `live`
-automatically once it passes. Poll `stage` on `GET`/`PATCH` `.../live` to watch it move from
-`SANDBOX` to `LIVE`; there is no separate "promote" call.
+begins in the `sandbox` stage, a trial of **24 hours**. During it the platform runs an independent
+second execution of your strategy beside the first and checks four things: that the run is
+processing market data, that its memory use and per-tick time stay within the platform's allowance,
+that it does not hang or fail repeatedly, and that the two executions produce the same signals.
+Only you can read a sandbox run: over the WebSocket channel from its first signal if you asked for
+`relay`, and through the read routes either way (see [Visibility](#visibility)).
+
+A run that passes is promoted to `live` automatically when the 24 hours are up. There is no
+separate "promote" call and nothing for you to do while you wait. A run that does not pass is not
+promoted, and keeps running in the sandbox.
+
+What you can watch while it waits, on `GET`/`PATCH` `.../live`:
+
+- `stage` is `SANDBOX` until the promotion and `LIVE` after it.
+- `state` is the run's health right now (see [State of a run](#state-of-a-run)).
+- `gate` is **absent for the whole trial** and appears when it ends, holding the verdict. An
+  absent `gate` therefore means "the trial has not finished", never "nobody is evaluating the
+  run". Its `passed` field is the verdict; the rest is diagnostic detail whose shape may change.
+
+## State of a run
+
+`state` says what the run is doing. It is a string that may gain values, so read an unknown one as
+"running, with something to look at".
+
+| `state` | What it means |
+|---|---|
+| `STARTING` | Accepted; no runner has reported on it yet. |
+| `RUNNING` | Running normally. |
+| `LAGGING` | Running, but behind the market data: usual while it catches up after starting or after a platform restart. It clears by itself. |
+| `HUNG` | Your strategy is stuck inside one call for longer than the platform allows. It clears when that call returns. |
+| `DEGRADED` | The run's independent executions produced different signals from the same market data. The run keeps publishing. In the sandbox this counts against the trial: the run is not promoted. |
+| `FAILED` | The platform refused the run or could not start it. |
+| `STOPPED` | Stopped, by you or by the platform (`reason` says so when it was for exceeding its resource allowance). |
+
+`LAGGING`, `HUNG` and `DEGRADED` are flags on a run that is otherwise running: they come and go, and
+the run's signals keep flowing throughout. `desired` is what you last asked for (`RUNNING` or
+`STOPPED`), and `state` can trail it briefly.
 
 Only one run per strategy at a time. Starting again while one is `RUNNING` is `409` — stop it
 first with `DELETE`.
@@ -73,6 +105,19 @@ A run is `private` by default — only you can read its state or receive its sig
 while it is a `sandbox` trial — only you can read it, over the channel and through the read routes,
 and it is not listed in the catalogue; nothing you did needs repeating at promotion.
 
+Who can read what, by run:
+
+| The run | Subscribe to its channel, and read `.../signals`, `.../paper` | Listed in `GET /live/public` |
+|---|---|---|
+| Any run of yours | You, always | — |
+| `private` | Only you | No |
+| `public`, still in the `sandbox` | Only you (`public` takes effect at the promotion) | No |
+| `public`, promoted to `live` | Anyone | Yes, while it is running |
+
+`relay` is separate: it only decides whether a run's signals are *pushed* over the WebSocket
+channel (opt-in, in either stage) and never who may read them. `GET /live/{runId}/signals` serves
+a run's signals whether or not you asked for `relay`.
+
 Switching back to `private` also disconnects anyone else currently subscribed to that channel —
 best-effort, and it does not undo the visibility change if the disconnect itself fails.
 
@@ -83,6 +128,11 @@ change one while the run keeps running, call `PUT /live/{runId}/params` (or the 
 `live.params` WebSocket call below — both go through the same validation and land on the identical
 value at the identical moment). Every key must be one your strategy declares; an undeclared key is
 `400`.
+
+A `409` means this run's compiled strategy has no record of the parameters it declares, so they
+cannot be changed while it runs. A run keeps the compiled version it started with: register the
+strategy again (`POST /strategy` with the same source, which compiles it afresh) and start a new
+run.
 
 The response's `effectiveAtMs` is not "now" — it is a few seconds out, the earliest moment the new
 value is guaranteed to be applied. This margin exists so that if a run has more than one execution

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.1
+  version: 0.128.2
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2527,8 +2527,9 @@ paths:
       operationId: listPublicLive
       summary: Browse public live runs
       description: |
-        Every run whose owner marked it `public` and is currently live and running — anyone's,
-        yours included, and listed without revealing who owns it. Most recently started first.
+        Every run whose owner marked it `public`, that has been promoted to `live` and is running —
+        anyone's, yours included, and listed without revealing who owns it. A `public` run still in
+        its `sandbox` trial is not listed. Most recently started first.
 
         This is the only `Live Execution` endpoint that needs no `Authorization` header.
       parameters:
@@ -2690,7 +2691,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResponseError'
         '409':
-          description: This run's compilation has no declared properties on record — recompile the strategy to enable runtime parameter updates.
+          description: This run's compiled strategy has no record of the parameters it declares. Register the strategy again with `POST /strategy` and start a new run, since a run keeps the compiled version it started with.
           content:
             application/json:
               schema:
@@ -5416,10 +5417,10 @@ components:
         stage:
           type: string
           enum: [SANDBOX, LIVE]
-          description: A new run always starts `SANDBOX` — a trial run compared against a second execution for agreement — and moves to `LIVE` once it passes.
+          description: 'A new run always starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up.'
         state:
           type: string
-          description: '`STARTING` until first observed running; otherwise the runner''s own reported state (e.g. `RUNNING`).'
+          description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused or could not start) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'
         desired:
           type: string
           enum: [RUNNING, STOPPED]
@@ -5447,7 +5448,7 @@ components:
         gate:
           type: object
           additionalProperties: true
-          description: The sandbox trial's promotion verdict, once one exists. Shape is not yet stabilized as public API — treat as opaque diagnostics.
+          description: 'The sandbox trial''s promotion verdict. Absent for the whole 24-hour trial and present once it ends, so an absent `gate` means the trial has not finished. `passed` is the verdict; the rest is diagnostic detail whose shape is not yet stabilized as public API: treat it as opaque.'
         paper:
           allOf:
             - $ref: '#/components/schemas/LivePaperConfig'
@@ -5495,10 +5496,10 @@ components:
         stage:
           type: string
           enum: [SANDBOX, LIVE]
-          description: A new run always starts `SANDBOX` — a trial run compared against a second execution for agreement — and moves to `LIVE` once it passes.
+          description: 'A new run always starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up.'
         state:
           type: string
-          description: '`STARTING` until first observed running; otherwise the runner''s own reported state (e.g. `RUNNING`).'
+          description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused or could not start) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'
         desired:
           type: string
           enum: [RUNNING, STOPPED]

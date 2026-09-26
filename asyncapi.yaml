@@ -1,7 +1,7 @@
 asyncapi: 3.1.0
 info:
   title: QTSurfer Live Execution WebSocket
-  version: 0.2.0
+  version: 0.2.1
   description: |
     The WebSocket side of Live Execution: receive a live run's signals as they happen, and change its
     parameters over the same connection. The REST side (starting, reading and stopping runs, minting
@@ -515,7 +515,7 @@ components:
                 - `103` — `subscribe`: the run is not yours and is not public and live (a private run, a public run still in the sandbox, or one that does not exist).
                 - `400` — `live.params`: malformed call, empty `params`, or a key the strategy does not declare.
                 - `404` — `live.params`: no such run of yours.
-                - `409` — `live.params`: this run's strategy was compiled without the property list runtime updates need; recompile it and start the run again.
+                - `409` — `live.params`: this run's compiled strategy has no record of the parameters it declares; register the strategy again with `POST /strategy` and start a new run.
 
                 Other codes come from the protocol itself; see Centrifugo's client protocol documentation.
             message:

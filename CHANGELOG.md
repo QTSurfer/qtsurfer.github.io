@@ -7,6 +7,20 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.2] — 2026-09-26
+
+### Changed 🔄
+
+- **The `Live execution` guide says how long the sandbox trial lasts and what to watch while it runs.** The trial is 24 hours and
+  what it checks is now listed; `stage`, `state` and `gate` are described as what a caller can poll in the meantime, with `gate`
+  documented as absent until the trial ends. `state` gains its vocabulary (`STARTING`, `RUNNING`, `LAGGING`, `HUNG`, `DEGRADED`,
+  `FAILED`, `STOPPED`) in the guide and in `LiveRun.state`. A table says who can read a run and whether it is listed, by
+  visibility and stage, and that `relay` never decides who may read.
+- `GET /live/public` is described as listing runs that have been promoted to `live` and are running; a `public` run still in the
+  sandbox is not listed.
+- The `409` of `PUT /live/{runId}/params` (and of the `live.params` call) now says what to do: register the strategy again with
+  `POST /strategy` and start a new run. AsyncAPI `0.2.1`.
+
 ## [0.128.1] — 2026-09-26
 
 ### Changed 🔄
