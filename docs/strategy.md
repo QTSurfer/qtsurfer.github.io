@@ -107,6 +107,28 @@ appear here — a name absent from this list may still be valid.
 Errors: `400` not valid — the message carries the diagnostics, nothing is
 registered · `429` too many compilations in flight, retry later.
 
+## Request size limits
+
+Every endpoint that reads a request body caps it, and a strategy's source is the biggest body the
+API takes. A body over the cap is refused with `413` and the API's usual JSON error, before it is
+read or compiled, and the message names the cap:
+
+```json
+{"code": 413, "message": "The request body is larger than this endpoint accepts (32768 bytes at most)."}
+```
+
+| Request | Body cap |
+|---|---|
+| `POST /strategy` — the source | 32 KiB |
+| `POST /backtest/{exchangeId}/{type}/execute`, `POST /backtest/{exchangeId}/{type}/executeSweep/{requestId}` | 8 KiB |
+| `POST /strategy/{strategyId}/live` | 8 KiB |
+| `POST /backtest/{exchangeId}/{type}/prepare`, `PATCH /live/{runId}`, `PUT /live/{runId}/params` | 4 KiB |
+| `POST /datasets`, `POST /datasets/imports` | 1 KiB |
+
+A dataset's data does not travel in a request body: it goes to a presigned URL, see
+[Datasets](datasets.md). The caps are the same for everyone (they are not a plan limit), so a
+strategy source over 32 KiB cannot be registered: shorten it.
+
 ## Checking it actually runs
 
 `POST /strategy/{strategyId}/validate`

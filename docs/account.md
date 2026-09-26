@@ -38,7 +38,7 @@ curl https://api.qtsurfer.net/v1/account \
 | `userId` | your account id — the JWT `sub` claim |
 | `tier` | your current subscription tier |
 | `maxDatasets` | maximum number of active [datasets](datasets.md) your tier allows |
-| `maxDatasetBytes` | maximum size, in bytes, of a single dataset version |
+| `maxDatasetBytes` | maximum size, in bytes, of a single dataset version **as stored** (the `bytes` of its ready version: for a CSV upload, the converted file, not the file you upload). See [Size limits](datasets.md#size-limits) |
 | `maxTotalStorageBytes` | maximum combined storage, in bytes, across every dataset, strategy-execution signal, and registered strategy on your account — see below |
 
 ## Getting your live usage

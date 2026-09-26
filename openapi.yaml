@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.2
+  version: 0.128.3
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -632,6 +632,15 @@ paths:
               example:
                 code: 400
                 message: 'Line 1, Column 18: syntax error'
+        '413':
+          description: The source is larger than 32 KiB (32768 bytes). Every endpoint that reads a request body caps it, and the message names the cap; see the Strategy guide.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 413
+                message: The request body is larger than this endpoint accepts (32768 bytes at most).
         '429':
           description: Too many compilations in flight. Retry later.
           content:
@@ -2043,7 +2052,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ResponseError'
         '413':
-          description: The uploaded file exceeds your tier's size limit for a dataset.
+          description: The uploaded file is many times your tier's size limit for a dataset. The limit itself applies to the stored size, which is known only after conversion, so an upload that passes here can still end `failed` when ingest finishes.
           content:
             application/json:
               schema:
@@ -3148,7 +3157,7 @@ components:
         maxDatasetBytes:
           type: integer
           format: int64
-          description: Maximum size, in bytes, of a single dataset version.
+          description: Maximum size, in bytes, of a single dataset version as stored, that is the `bytes` of its ready version. For a CSV upload that is the converted file, not the file you upload, so estimate from the number of rows. The Datasets guide has the details.
           example: 52428800
         maxTotalStorageBytes:
           type: integer

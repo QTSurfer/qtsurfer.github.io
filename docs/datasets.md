@@ -140,9 +140,28 @@ curl -X POST https://api.qtsurfer.net/v1/datasets/$DATASET_ID/uploads/$UPLOAD_ID
 Errors: `404` no such dataset for this user; `uploadId` wasn't issued for this dataset (never
 minted, or minted for a different one); or nothing was `PUT` to `upload.url` yet — a finalize with
 nothing to finalize · `409` `uploadId` already produced a version (the error message names it) ·
-`413` the uploaded file exceeds your tier's size limit for a dataset · `429` your account's total
+`413` the uploaded file is many times your tier's size limit for a dataset (see [Size limits](#size-limits):
+the limit itself applies to the stored size, which is only known after conversion) · `429` your account's total
 storage limit ([`GET /account`](account.md)'s `maxTotalStorageBytes`) is reached or would be
 exceeded — delete a dataset to free space, or upgrade.
+
+## Size limits
+
+`maxDatasetBytes` ([`GET /account`](account.md)) caps a dataset version's **stored** size: the
+`bytes` its ready version reports, which for a CSV upload is the converted `lastra` file, not the
+file you uploaded. **Estimate from rows, not from the size of the file.** The stored size follows
+the rows and the columns, and a CSV can come out larger or smaller than the file. Measured on
+synthetic one-second data: about 92 bytes per row for a `timestamp,close` CSV, about 55 for
+`timestamp,open,high,low,close,volume`. Real data compresses differently, so take these as an
+order of magnitude and, for a big file, upload a small slice first and scale from its `bytes` and
+`rows`.
+
+The stored size is known only once the file has been converted, so that is where the limit
+decides: `POST .../finalize` answers `202`, and an upload over the limit ends `failed` when you
+[poll it](#polling-ingest), with an error such as `Dataset is 196976000 bytes, exceeds the tier's
+100000000 byte limit`. Poll rather than assume the `202` means it stored. What `finalize` itself
+refuses with `413` is a file many times the limit, well beyond anything conversion could bring
+under it.
 
 ## Polling ingest
 

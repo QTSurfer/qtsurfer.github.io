@@ -7,6 +7,20 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.3] — 2026-09-26
+
+### Changed 🔄
+
+- **A request body over its cap is refused with the API's JSON error, naming the cap.** It was a bare plain-text `413`, with no content
+  type. The Strategy guide has a table of the caps by endpoint (a strategy's source is 32 KiB, the JSON bodies of the others 1 to
+  8 KiB), and `POST /strategy` documents the `413`.
+- **The dataset size limit is described as what it is: a limit on the stored size.** `maxDatasetBytes` (in the guide and in `GET
+  /account`) is the `bytes` of a ready version, the converted file for a CSV upload; a new "Size limits" section in the Datasets guide
+  says how to estimate it from rows, and that an upload over it ends `failed` after a `202`. The `413` of `finalize` is described as
+  the early check for a file many times the limit.
+- **The Backtests guide says where each job's status lives:** `status` for a prepare, `state.status` for an execute and a sweep, with
+  the sweep's own top-level `status` marked as a different vocabulary.
+
 ## [0.128.2] — 2026-09-26
 
 ### Changed 🔄
