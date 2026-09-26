@@ -7,6 +7,15 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.1] — 2026-09-26
+
+### Changed 🔄
+
+- **A signal produced at the promotion from `sandbox` to `live` arrives once.** `0.128.0` said such a signal could reach a
+  subscriber twice, once per stage, with the same `signalId`. The two stages now split a run's signals at one instant, so each
+  arrives on one side of it. The quiet spell around the promotion is unchanged. Deduplicating on `signalId` is still the right
+  thing after a reconnection.
+
 ## [0.128.0] — 2026-09-25
 
 ### Changed 🔄
