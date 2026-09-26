@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.3
+  version: 0.128.4
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -557,6 +557,11 @@ paths:
         `POST /strategy/{strategyId}/validate`, and everything known about a strategy, validation
         included, is read from `GET /strategy/{strategyId}`. One place to ask, so there is no second
         answer to keep in step.
+
+        A `200` means the source parsed and compiled, not that it will run. What only shows once the
+        strategy sets up its indicators is found by `validate`: for QTScript, a window on an indicator
+        name that is not registered (`window nosuch m1 { ... }`) registers, and `validate` ends `failed`
+        on that line.
 
         For **Java**, the `strategyId` is derived from what the code *means*, not from how it is
         written. Adding a comment, inserting a blank line, re-indenting, reordering imports, or

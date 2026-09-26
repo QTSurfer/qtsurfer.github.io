@@ -41,7 +41,9 @@ curl -X POST https://api.qtsurfer.net/v1/strategy \
 ```
 
 **This answers one question: is the source valid.** It compiles, registers, and hands back
-the id — nothing more. Whether the class can actually run is [`validate`](#checking-it-actually-runs);
+the id — nothing more. A `200` means the source parsed and compiled, not that it will run: what only
+shows once the strategy sets up its indicators (for QTScript, a window on an indicator that is not
+registered) is found by `validate`. Whether the class can actually run is [`validate`](#checking-it-actually-runs);
 everything known about a strategy, validation included, is read from [`GET
 /strategy/{strategyId}`](#getting-a-strategy).
 

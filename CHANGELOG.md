@@ -7,6 +7,15 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.4] — 2026-09-26
+
+### Changed 🔄
+
+- **A `200` from `POST /strategy` is said to mean "parsed and compiled", not "will run".** The QTScript guide's "When something is wrong"
+  now marks the line between what registering catches (a `400` with `Line N, Column M:`) and what only `validate` can, with the case
+  to know, a window on an indicator that is not registered. The same sentence is in the Strategy guide and in the `POST /strategy`
+  description.
+
 ## [0.128.3] — 2026-09-26
 
 ### Changed 🔄
