@@ -165,6 +165,10 @@ The marker positions used by the standard visualization are `aboveBar`, `belowBa
 the portable shapes are `circle`, `arrowUp`, `arrowDown`, and `square`. Prefixing a property with
 `_` reserves it as control metadata rather than a normal plotted series, as `_m` does here.
 
+Everything you `set` on a signal is its `data`, and it is published with the signal in a live run: whoever may read the run
+may read it, so on a `public` run it is public. A signal whose `data` is over 8 KiB (8,192 bytes of its JSON) is not pushed
+on the WebSocket channel; `GET /live/{runId}/signals` still returns it whole.
+
 For a single value, `emitInfo` is the shortest form:
 
 ```java

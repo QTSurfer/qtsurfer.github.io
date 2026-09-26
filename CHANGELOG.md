@@ -7,6 +7,16 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.5] — 2026-09-26
+
+### Changed 🔄
+
+- **A signal's `data` is public on a public run, and one over 8 KiB is not pushed.** The Live execution guide, `LiveSignal.data` and the
+  Java strategy guide say that whoever may read a run may read the `data` its strategy sets on a signal, so on a `public` run it is
+  public. A signal whose `data` is over 8 KiB (8,192 bytes of its JSON) is not pushed on the WebSocket channel; `GET
+  /live/{runId}/signals` returns it whole. Before, the size was not bounded, and a payload past the broker's message limit was
+  lost to the channel without a word.
+
 ## [0.128.4] — 2026-09-26
 
 ### Changed 🔄

@@ -271,7 +271,7 @@ Each signal pushed on a `sig:<runId>` channel (the `pub.data` of the `push` fram
 | `eventTsMs` | Market time the signal was produced. |
 | `emittedAtMs` | Time it was published — always ≥ `eventTsMs`. |
 | `order` | Present only for a `hint`. |
-| `data` | The signal's own free-form payload. |
+| `data` | The signal's own free-form payload: what the strategy put there with `signal.set(...)`. Whoever may read the run may read it, so on a `public` run it is public. A signal whose `data` is over 8 KiB (8,192 bytes of its JSON) is not pushed on this channel; [the history route](#reading-signals-a-run-already-produced) returns it whole. |
 | `regenerated` | `true` only for a signal republished to fill a gap in the historical record — always `false` for a signal you are seeing for the first time. |
 | `digest` | Content hash, for verifying two independent deliveries of the same signal agree. |
 
