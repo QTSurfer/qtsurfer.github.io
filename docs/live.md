@@ -122,7 +122,7 @@ Signals only reach this channel for a run started with `relay: true` (`POST .../
 default `false`). They reach it from the run's first signal, in the `sandbox` stage too, where only
 you can subscribe to it; the same channel carries on unchanged once the run is promoted to `live`,
 on the same subscription: `stage` flips from `sandbox` to `live` and nothing needs redoing. The run
-takes a while to start in the `live` stage, so the channel can stay quiet for a few minutes around
+takes a while to start in the `live` stage, so the channel can stay quiet for several minutes around
 the promotion; what the run produced meanwhile then arrives in order. A signal produced right at the
 promotion can reach you twice, once as `sandbox` and once as `live`, with the same `signalId`: dedupe
 on it, as after a reconnection.
