@@ -7,6 +7,19 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.10] — 2026-09-27
+
+### Fixed 🩹
+
+- **A command's `properties` land as top-level entries on the strategy's `CommandRequest`, not nested
+  under their own `properties` key.** `docs/strategy_coding.md`'s "Receiving commands" example read
+  `Map<String, Object> properties = request.get("properties"); properties.get("instrument")` — that
+  was a real design error published earlier today (0.128.9), not just wording: the runner puts every
+  property directly on the request's own map, so the correct read is `request.get("instrument")`.
+  Corrected, along with a note that a value keeps its JSON type (so assigning a non-string one to a
+  `String` throws `ClassCastException`). The command's own text is kept as its own field, separate
+  from `properties` entirely, so no property name is off limits — `cmd` included.
+
 ## [0.128.9] — 2026-09-27
 
 ### Added ➕

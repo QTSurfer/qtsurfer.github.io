@@ -215,10 +215,16 @@ indicators, emit a signal, change internal fields. A `RuntimeException` it throw
 the same as one from `update()`; an `Error` unwinds the run.
 
 A command is always a plain string, and it is transient. It may also carry a `properties` object of your
-own choosing — `request.get("properties")`, a `Map<String, Object>`, or `null` when the command carried
-none — under its own name, not `params`, which stays what a run starts with and `PUT /live/{runId}/params`
-changes. A command, and its properties, are not stored as part of the run: a replica that restarts replays
-only the last stretch of market data, and a command from before that window simply never reaches it.
+own choosing, alongside `command` in the request body — not `params`, which stays what a run starts with
+and `PUT /live/{runId}/params` changes. Each property lands as a top-level entry on `CommandRequest`'s own
+map, so read one straight off `request` by name — `request.get("<key>")` — no key is off limits, since the
+command's own text is kept separately (`getCommand()` reads it, unaffected by any of it). A
+value keeps whatever JSON type it arrived as, so assigning it to a `String` field when the caller sent a
+number or an object throws a `ClassCastException` inside `handle`; a QTScript `onCommand` body reads the
+same value with `$command.<key>` instead, which always widens it to a `String` (`null` for an absent key,
+never a cast failure). A command, and its properties, are not stored as part of the run: a replica that
+restarts replays only the last stretch of market data, and a command from before that window simply never
+reaches it.
 
 A command has no instrument attached the way `update()` does; when its own properties name one, reach that
 instrument's store with `getStateStore(String)`:
@@ -226,8 +232,7 @@ instrument's store with `getStateStore(String)`:
 ```java
 @Override
 public void handle(CommandRequest request) {
-    Map<String, Object> properties = request.get("properties");
-    String instrument = properties != null ? (String) properties.get("instrument") : null;
+    String instrument = request.get("instrument");
     if (instrument != null) {
         getStateStore(instrument).set("flattened");
     }
