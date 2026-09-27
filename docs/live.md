@@ -151,8 +151,9 @@ PUT /live/6TzAPiPpsOWwBLdLBZCxwH/params
 ## Commands
 
 `POST /live/{runId}/commands` tells a running strategy something without restarting it, for a strategy that
-implements the engine's `CommandRequestHandler` — a Java strategy directly (see the Java strategy skill), or a
-QTScript strategy through `onCommand { }` (see [QTScript](qtscript.md#handling-a-command)). It takes
+implements the engine's `CommandRequestHandler` — a Java strategy directly (see [Coding Java
+strategies](strategy_coding.md#receiving-commands)), or a QTScript strategy through `onCommand { }` (see
+[QTScript](qtscript.md#handling-a-command)). It takes
 `{"command": "<text>"}` — a plain string — and an optional `properties` object of your own choosing alongside
 it, which travels unchanged to the strategy's own handler; `command` and `properties` are the only keys the
 body may carry. It answers `202` with `commandId` and `effectiveAtMs`, the market position every execution
