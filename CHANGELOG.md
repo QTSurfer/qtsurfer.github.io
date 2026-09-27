@@ -7,6 +7,23 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.10] — 2026-09-27
+
+### Fixed 🩹
+
+- **A command's `properties` land as top-level entries on the strategy's `CommandRequest`, not nested
+  under their own `properties` key.** `docs/strategy_coding.md`'s "Receiving commands" example read
+  `Map<String, Object> properties = request.get("properties"); properties.get("instrument")` — that
+  was a real design error published earlier today (0.128.9), not just wording: `CommandRequest` is
+  already a map, and the runner puts every property directly on it, so the correct read is
+  `request.get("instrument")`. Corrected, along with a note that a value keeps its JSON type (so
+  assigning a non-string one to a `String` throws `ClassCastException`), and that `cmd` is reserved for
+  the command's own text.
+- **`POST /live/{runId}/commands` rejects a `properties.cmd` key with `400`.** That key is already
+  `CommandRequest`'s own for the command's text; a property with the same name would silently
+  overwrite what `getCommand()` returns. `openapi.yaml`'s `SendLiveCommandRequest` schema, the
+  endpoint description and its `400` cause list all note it.
+
 ## [0.128.9] — 2026-09-27
 
 ### Added ➕
