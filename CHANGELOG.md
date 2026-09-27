@@ -7,6 +7,28 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.7] — 2026-09-27
+
+### Changed 🔄
+
+- **`POST /live/{runId}/commands` is not Java-only.** `docs/live.md` said a command needs a strategy "whose
+  Java implements the engine's `CommandRequestHandler`" — true when 0.128.6 shipped, no longer true now that a
+  QTScript strategy can implement it too, through a new `onCommand { }` section. Reworded to name both routes,
+  and [`docs/qtscript.md`](docs/qtscript.md#handling-a-command) documents `onCommand { }` and `$command`. No
+  change to the endpoint itself — `CommandRequestHandler` was always the actual, language-neutral contract.
+
+## [0.128.6] — 2026-09-27
+
+### Added ✨
+
+- **`POST /live/{runId}/commands` tells a running strategy something without restarting it**, for a strategy
+  that implements the engine's `CommandRequestHandler`: `{"command": "<text>"}`, `202` with a `commandId` and
+  the market position every execution applies it at. A command is transient, unlike a parameter — nothing
+  about it is stored, so a replica that restarts and replays only recent market history never sees one from
+  before that window. `409` for a run that is not running, a compiled strategy with no record of whether it
+  handles commands (register it again), or one that does not implement the handler at all; `503`, nothing
+  sent, when it could not be delivered; `413` at 2 KiB, same convention as every other body-reading route.
+
 ## [0.128.5] — 2026-09-26
 
 ### Changed 🔄
