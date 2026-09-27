@@ -212,9 +212,11 @@ A strategy with no `onCommand { }` does not implement the engine's `CommandReque
 to one of its runs is rejected with `409` (see [Commands](live.md#commands)). `$command` and `$command.<key>`
 are not visible outside `onCommand`'s body, the same way `$indicator` is not visible outside a window's.
 
-Setting a `param` from inside `onCommand` changes the running strategy immediately, but it does not
-survive a restart — only [`PUT /live/{runId}/params`](live.md#runtime-parameters) writes a durable value.
-Anything a command does that must survive a restart belongs in a `StateStore`, not a `param`.
+Setting a `param` or writing to a `StateStore` from inside `onCommand` both take effect immediately, but
+neither survives a restart: a `StateStore` is memory, gone on a restart the same as a field. Only
+[`PUT /live/{runId}/params`](live.md#runtime-parameters) writes something a restarted replica actually
+starts from. `getStateStore(...)` here is not about durability — it is how `onCommand` reaches the
+per-instrument state a window body already reads, since a command carries no instrument of its own.
 
 ## Running it
 
