@@ -2730,8 +2730,8 @@ paths:
 
         The command's text is a plain string; an optional `properties` object of your own choosing travels
         alongside it. Each entry lands as a top-level entry on the `CommandRequest` the handler receives —
-        `request.get("<key>")` in Java, `$command.<key>` sugar in QTScript — so `cmd` is reserved (it is
-        already the key the command's own text is stored under) and rejected with `400`.
+        `request.get("<key>")` in Java, `$command.<key>` sugar in QTScript — no key is off limits, since the
+        command's own text is kept separately.
       parameters:
         - name: runId
           in: path
@@ -2761,9 +2761,8 @@ paths:
                 effectiveAtMs: 1758330015000
         '400':
           description: >-
-            `command` missing, not a string, blank; `properties` given but not an object; `properties`
-            carries a `cmd` key (reserved for the command's own text); or the body carries any key other
-            than `command` and `properties`.
+            `command` missing, not a string, blank; `properties` given but not an object; or the body
+            carries any key other than `command` and `properties`.
           content:
             application/json:
               schema:
@@ -5510,8 +5509,8 @@ components:
           description: >-
             An optional map of your own choosing, alongside command. Absent means none; when given, it
             must be a JSON object, and `command` and `properties` are the only keys the body may carry.
-            Each entry lands as a top-level entry on the strategy's `CommandRequest`, so `cmd` is
-            reserved (it is already the key `getCommand()` reads) and rejected with `400`.
+            Each entry lands as a top-level entry on the strategy's `CommandRequest` — no key is off
+            limits, since the command's own text is kept separately.
     LiveRun:
       type: object
       required: [strategyId, runId, visibility, stage, state, desired, sources, params, paramsVersion, relay, startedAtMs]
