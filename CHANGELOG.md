@@ -7,6 +7,17 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.8] — 2026-09-27
+
+### Added ➕
+
+- **`POST /live/{runId}/commands` admits an optional `properties` object alongside `command`** — a map of
+  your own choosing, forwarded unchanged to the strategy's own handler; `command` and `properties` are the
+  only keys the body may carry, `400` for anything else or a `properties` that is not an object.
+  [`docs/qtscript.md`](docs/qtscript.md#handling-a-command) documents QTScript's own way to read it,
+  `$command.<key>` sugar for a value from the map, and `getStateStore(...)`, now reachable from `onCommand`
+  by a symbol a command's own properties name.
+
 ## [0.128.7] — 2026-09-27
 
 ### Changed 🔄

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.7
+  version: 0.128.8
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2728,7 +2728,8 @@ paths:
         one that was already running when it arrived. Anything the strategy needs to remember across a restart
         belongs in a parameter (`PUT /live/{runId}/params`), which does have a stored value; a command does not.
 
-        The command's text is a plain string for now — a structured payload alongside it is a later addition.
+        The command's text is a plain string; an optional `properties` object of your own choosing travels
+        alongside it, unchanged, for the strategy's own handler to read.
       parameters:
         - name: runId
           in: path
@@ -2743,6 +2744,8 @@ paths:
               $ref: '#/components/schemas/SendLiveCommandRequest'
             example:
               command: flatten
+              properties:
+                instrument: BTC/USDT
       responses:
         '202':
           description: Accepted — on its way to every execution behind the run.
@@ -2755,7 +2758,9 @@ paths:
                 commandId: 0e3f2f1a-9c4b-4d3e-8a2f-6b7c5d4e3f21
                 effectiveAtMs: 1758330015000
         '400':
-          description: '`command` missing, not a string, blank, or the body carries any other key.'
+          description: >-
+            `command` missing, not a string, blank; `properties` given but not an object; or the body
+            carries any key other than `command` and `properties`.
           content:
             application/json:
               schema:
@@ -5495,7 +5500,13 @@ components:
       properties:
         command:
           type: string
-          description: The command's text — non-blank, and the only key the body may carry.
+          description: The command's text — non-blank.
+        properties:
+          type: object
+          additionalProperties: true
+          description: >-
+            An optional map of your own choosing, alongside command. Absent means none; when given, it
+            must be a JSON object. `command` and `properties` are the only keys the body may carry.
     LiveRun:
       type: object
       required: [strategyId, runId, visibility, stage, state, desired, sources, params, paramsVersion, relay, startedAtMs]

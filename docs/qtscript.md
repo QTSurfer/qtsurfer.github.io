@@ -186,25 +186,35 @@ strategy. It has no period and no indicator: it is not a window, it runs once pe
 market event, and a file has at most one of it, the same way it has at most one `init { }`.
 
 Inside its body, `$command` is the command's text, as a `String` — nothing else a window body has (`actual`,
-`$indicator`, `value(...)`, `store`) is in scope, because a command is not tied to a market tick. Every
-`param` is still readable and settable, so `onCommand` is how an already-running strategy changes its own
-behavior on demand:
+`$indicator`, `value(...)`, the ambient `store`) is in scope, because a command is not tied to a market tick
+or, unlike a window, to one instrument already chosen for you. Every `param` is still readable and settable.
+
+A command may carry a `properties` object of your own choosing, alongside `command` in the request body.
+Read a value from it with `$command.<key>` — a `String`, `null` when the command carried no such key.
+`$command.<key>` fires only when `<key>` is not itself a call, so `$command.equals(...)`,
+`$command.startsWith(...)` and the rest still read as ordinary `String` methods on `$command` itself.
+
+A window body gets its instrument's `store` handed to it; `onCommand` does not, since a command names no
+instrument on its own — but `getStateStore("<symbol>")` takes one directly, so a command whose own
+properties name an instrument can still reach that instrument's store:
 
 ```
 strategy "Manual flatten"
 
-param flattened = false "Set by a flatten command"
-
 onCommand {
   if ("flatten".equals($command)) {
-    flattened = true;
+    getStateStore($command.instrument).set("flattened");
   }
 }
 ```
 
 A strategy with no `onCommand { }` does not implement the engine's `CommandRequestHandler`, so a command sent
-to one of its runs is rejected with `409` (see [Commands](live.md#commands)). `$command` is not visible
-outside `onCommand`'s body, the same way `$indicator` is not visible outside a window's.
+to one of its runs is rejected with `409` (see [Commands](live.md#commands)). `$command` and `$command.<key>`
+are not visible outside `onCommand`'s body, the same way `$indicator` is not visible outside a window's.
+
+Setting a `param` from inside `onCommand` changes the running strategy immediately, but it does not
+survive a restart — only [`PUT /live/{runId}/params`](live.md#runtime-parameters) writes a durable value.
+Anything a command does that must survive a restart belongs in a `StateStore`, not a `param`.
 
 ## Running it
 
