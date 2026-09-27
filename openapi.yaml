@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.5
+  version: 0.128.6
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2714,6 +2714,84 @@ paths:
         - bearerAuth: []
       tags:
         - Live Execution
+  '/live/{runId}/commands':
+    post:
+      operationId: sendLiveCommand
+      summary: Tell a running strategy a command
+      description: |
+        Tells a running strategy something **while it stays live**, without restarting it — for a strategy that
+        implements the engine's `CommandRequestHandler`. Owner only.
+
+        A command is an event, not a stored setting: it is delivered once to every execution behind the run, at
+        the same market position, and nothing about it is written to the run's state. **It is transient** — a
+        replica that restarts replays only its recent market history, so a command from before that only reaches
+        one that was already running when it arrived. Anything the strategy needs to remember across a restart
+        belongs in a parameter (`PUT /live/{runId}/params`), which does have a stored value; a command does not.
+
+        The command's text is a plain string for now — a structured payload alongside it is a later addition.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendLiveCommandRequest'
+            example:
+              command: flatten
+      responses:
+        '202':
+          description: Accepted — on its way to every execution behind the run.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveCommandResult'
+              example:
+                runId: 5t5oAmQ4PD0lQRoCU58uE0
+                commandId: 0e3f2f1a-9c4b-4d3e-8a2f-6b7c5d4e3f21
+                effectiveAtMs: 1758330015000
+        '400':
+          description: '`command` missing, not a string, blank, or the body carries any other key.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '404':
+          description: No such run, or you do not own it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '409':
+          description: |
+            One of three reasons, each its own message: the run is not running, so there is nothing to tell;
+            this run's compiled strategy has no record of whether it handles commands — register the strategy
+            again with `POST /strategy` and start a new run, since a run keeps the compiled version it started
+            with; or the strategy does not implement `CommandRequestHandler` at all.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '413':
+          description: The request body is larger than 2 KiB (2048 bytes). Every endpoint that reads a request body caps it, and the message names the cap.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '503':
+          description: The command could not be delivered right now, and it was not sent — unlike a parameter update, a command has no fallback path. Try again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
   '/live/{runId}/signals':
     get:
       operationId: getLiveRunSignals
@@ -5411,6 +5489,13 @@ components:
           type: object
           additionalProperties: true
           description: Must be non-empty; every key must be a property your strategy declares.
+    SendLiveCommandRequest:
+      type: object
+      required: [command]
+      properties:
+        command:
+          type: string
+          description: The command's text — non-blank, and the only key the body may carry.
     LiveRun:
       type: object
       required: [strategyId, runId, visibility, stage, state, desired, sources, params, paramsVersion, relay, startedAtMs]
@@ -5836,6 +5921,19 @@ components:
           type: integer
           format: int64
           description: Epoch milliseconds — the earliest moment the new values are guaranteed to be in effect.
+    LiveCommandResult:
+      type: object
+      required: [runId, commandId, effectiveAtMs]
+      properties:
+        runId:
+          type: string
+        commandId:
+          type: string
+          description: This command's own id, generated fresh for this call. A retried request is a second, distinct command — this endpoint takes no idempotency key.
+        effectiveAtMs:
+          type: integer
+          format: int64
+          description: Epoch milliseconds — the market position every execution applies this command at.
   securitySchemes:
     bearerAuth:
       type: http
