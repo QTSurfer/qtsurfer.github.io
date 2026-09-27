@@ -59,6 +59,7 @@ on a one-minute window, emitting a signal on each threshold.
 | `instruments` | Optional. Which markets: pairs (`BASE/QUOTE`, either side may be `*`), regular expressions (`~"..."`, matched against the whole symbol), or a Java body for full control | `instruments */usdt` · `instruments btc/usdt, eth/*` |
 | `setup:` | The indicators, **one builder call per line** (the same catalogue a Java strategy uses). The lines under `setup:` are indented, and the first line back at column 0 ends the section | `ema(12)` · `bollinger(20, 2)` |
 | Windows | Where the logic goes — see below | `rsi(14) window m1 { ... }` |
+| `onCommand { }` | Optional, at most one per file. Runs when the run receives a [command](live.md#commands) — see below | `onCommand { if ("flatten".equals($command)) ... }` |
 
 ## Windows
 
@@ -176,6 +177,34 @@ setup:
     else              emitSell(close);
   }
 ```
+
+## Handling a command
+
+`onCommand { }` is a special section, at most one per file, that runs when the platform delivers a
+[command](live.md#commands) to a live run — `POST /live/{runId}/commands`, applied without restarting the
+strategy. It has no period and no indicator: it is not a window, it runs once per command, not once per
+market event, and a file has at most one of it, the same way it has at most one `init { }`.
+
+Inside its body, `$command` is the command's text, as a `String` — nothing else a window body has (`actual`,
+`$indicator`, `value(...)`, `store`) is in scope, because a command is not tied to a market tick. Every
+`param` is still readable and settable, so `onCommand` is how an already-running strategy changes its own
+behavior on demand:
+
+```
+strategy "Manual flatten"
+
+param flattened = false "Set by a flatten command"
+
+onCommand {
+  if ("flatten".equals($command)) {
+    flattened = true;
+  }
+}
+```
+
+A strategy with no `onCommand { }` does not implement the engine's `CommandRequestHandler`, so a command sent
+to one of its runs is rejected with `409` (see [Commands](live.md#commands)). `$command` is not visible
+outside `onCommand`'s body, the same way `$indicator` is not visible outside a window's.
 
 ## Running it
 

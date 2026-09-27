@@ -150,10 +150,11 @@ PUT /live/6TzAPiPpsOWwBLdLBZCxwH/params
 
 ## Commands
 
-`POST /live/{runId}/commands` tells a running strategy something without restarting it, for a strategy whose Java
-implements the engine's `CommandRequestHandler` (see the Java strategy skill). It takes `{"command": "<text>"}` — a
-plain string, nothing else in the body — and answers `202` with `commandId` and `effectiveAtMs`, the market position
-every execution behind the run applies it at.
+`POST /live/{runId}/commands` tells a running strategy something without restarting it, for a strategy that
+implements the engine's `CommandRequestHandler` — a Java strategy directly (see the Java strategy skill), or a
+QTScript strategy through `onCommand { }` (see [QTScript](qtscript.md#handling-a-command)). It takes
+`{"command": "<text>"}` — a plain string, nothing else in the body — and answers `202` with `commandId` and
+`effectiveAtMs`, the market position every execution behind the run applies it at.
 
 **A command is transient**, unlike a parameter: it is an event, not a stored value, and nothing about it is written
 to the run. A replica that restarts replays only its recent market history, so a command from before that window
