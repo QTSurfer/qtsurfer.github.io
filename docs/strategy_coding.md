@@ -218,7 +218,7 @@ A command is always a plain string, and it is transient. It may also carry a `pr
 own choosing, alongside `command` in the request body — not `params`, which stays what a run starts with
 and `PUT /live/{runId}/params` changes. Each property lands as a top-level entry on `CommandRequest`'s own
 map, so read one straight off `request` by name — `request.get("<key>")` — no key is off limits, since the
-command's own text is kept separately (`getCommand()` reads it from its own field, not from this map). A
+command's own text is kept separately (`getCommand()` reads it, unaffected by any of it). A
 value keeps whatever JSON type it arrived as, so assigning it to a `String` field when the caller sent a
 number or an object throws a `ClassCastException` inside `handle`; a QTScript `onCommand` body reads the
 same value with `$command.<key>` instead, which always widens it to a `String` (`null` for an absent key,
