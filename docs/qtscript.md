@@ -218,6 +218,9 @@ neither survives a restart: a `StateStore` is memory, gone on a restart the same
 starts from. `getStateStore(...)` here is not about durability — it is how `onCommand` reaches the
 per-instrument state a window body already reads, since a command carries no instrument of its own.
 
+A Java strategy implements the same contract directly, through `CommandRequestHandler` — see [Coding Java
+strategies](strategy_coding.md#receiving-commands).
+
 ## Running it
 
 A registered QTScript strategy is prepared, executed and swept like any other:

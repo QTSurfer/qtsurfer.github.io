@@ -1,8 +1,8 @@
 # Coding Java strategies
 
-A QTSurfer strategy consumes market data, updates indicators and state, and emits signals. This
-guide focuses on signal emission: the point where an observation becomes either an instruction to
-trade or data to inspect later.
+A QTSurfer strategy consumes market data, updates indicators and state, and emits signals. This guide
+covers signal emission — the point where an observation becomes either an instruction to trade or data
+to inspect later — and [receiving a command](#receiving-commands) from outside a live run.
 
 For the complete class API, use the [Engine Javadoc][engine-javadoc], particularly the [strategy
 signal package][signal-javadoc]. For agent-assisted authoring, install the maintained
@@ -188,6 +188,67 @@ chart markers written that way.
 Use the longer `createInfoSignal()` form when one event needs several top-level values or marker
 metadata. Information signals are useful for explaining a decision, but they never replace the
 corresponding `emitBuy` or `emitSell` when the strategy is meant to trade.
+
+## Receiving commands
+
+A live run's owner can tell it a command from outside — `POST /live/{runId}/commands` — while it keeps
+running, without restarting it. To act on one, implement `CommandRequestHandler`:
+
+```java
+import com.wualabs.qtsurfer.engine.strategy.event.request.CommandRequest;
+import com.wualabs.qtsurfer.engine.strategy.event.request.CommandRequestHandler;
+
+public class MyStrategy extends AbstractTickerStrategy implements CommandRequestHandler {
+
+    @Override
+    public void handle(CommandRequest request) {
+        if ("flatten".equals(request.getCommand())) {
+            // close the position, cancel pending orders, whatever "flatten" means for this strategy
+        }
+    }
+}
+```
+
+`handle` runs on the same thread as `update()`, right before the market event the command targets, so it
+sees the strategy's state exactly as it was at that point and can call anything `update()` can — read
+indicators, emit a signal, change internal fields. A `RuntimeException` it throws is caught and counted,
+the same as one from `update()`; an `Error` unwinds the run.
+
+A command is always a plain string, and it is transient. It may also carry a `properties` object of your
+own choosing — `request.get("properties")`, a `Map<String, Object>`, or `null` when the command carried
+none — under its own name, not `params`, which stays what a run starts with and `PUT /live/{runId}/params`
+changes. A command, and its properties, are not stored as part of the run: a replica that restarts replays
+only the last stretch of market data, and a command from before that window simply never reaches it.
+
+A command has no instrument attached the way `update()` does; when its own properties name one, reach that
+instrument's store with `getStateStore(String)`:
+
+```java
+@Override
+public void handle(CommandRequest request) {
+    Map<String, Object> properties = request.get("properties");
+    String instrument = properties != null ? (String) properties.get("instrument") : null;
+    if (instrument != null) {
+        getStateStore(instrument).set("flattened");
+    }
+}
+```
+
+**Neither a `@StrategyProperty` field nor a `StateStore` written from inside `handle` is durable.** Both
+change immediately, in memory, the same as any other assignment, but neither is written to the run's
+stored parameter set — a replica that restarts (or one that starts later, and never ran `handle` for that
+command) starts from whatever `PUT /live/{runId}/params` last set, not from what a command assigned. The
+only durable write is a real `PUT /live/{runId}/params` call, from outside the run — a strategy cannot
+call its own REST API from inside `handle`.
+
+A run whose strategy does not implement `CommandRequestHandler` answers every command with a `409` —
+implementing the interface is what makes `POST /live/{runId}/commands` do anything at all.
+
+A QTScript strategy implements it too, through its own `onCommand { }` section (see
+[QTScript](qtscript.md#handling-a-command)) — the platform recognizes the generated class as
+`CommandRequestHandler` the same way it recognizes this one.
+
+See [Commands](live.md#commands) for the request/response shape and error codes.
 
 ## See also
 

@@ -7,6 +7,18 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.9] — 2026-09-27
+
+### Added ➕
+
+- **[`docs/strategy_coding.md`](docs/strategy_coding.md) documents receiving a command, in Java.** A
+  "Receiving commands" section replicates what [`docs/qtscript.md`](docs/qtscript.md#handling-a-command)
+  already said for QTScript — `CommandRequestHandler`, `request.getCommand()`, a command's `properties`
+  map, `getStateStore(...)` from inside `handle`, and that neither a `@StrategyProperty` field nor a
+  `StateStore` written there survives a restart — so the API's own docs cover the Java side directly
+  instead of pointing only at the external skill. `docs/live.md`'s `Commands` section and
+  `docs/qtscript.md`'s own closing note now cross-reference it.
+
 ## [0.128.8] — 2026-09-27
 
 ### Added ➕
