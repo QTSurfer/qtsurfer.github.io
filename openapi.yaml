@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.10
+  version: 0.128.11
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -512,6 +512,20 @@ paths:
         `requiredSources` — but not its validation state, so listing stays cheap regardless of how
         many strategies you have. Check a specific strategy's validation with `GET
         /strategy/{strategyId}`.
+
+        With `includeDeleted=true`, strategies you have deleted are listed too, each with the
+        `deletedAt` it was deleted at — useful to keep a copy of your list in sync, telling a
+        deleted strategy apart from one that never existed.
+      parameters:
+        - name: includeDeleted
+          in: query
+          required: false
+          description: |
+            `true` also lists the strategies you have deleted, each with its `deletedAt`. Any other
+            value, or leaving it out, lists only the ones you have not deleted.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: |
@@ -1825,6 +1839,20 @@ paths:
       description: |
         Every dataset you have created and not deleted, most recently created first. Never a `404`
         — an empty array if you have none, same convention as `GET /strategies`.
+
+        With `includeDeleted=true`, datasets you have deleted are listed too, each with the
+        `deletedAt` it was deleted at — useful to keep a copy of your list in sync, telling a
+        deleted dataset apart from one that never existed.
+      parameters:
+        - name: includeDeleted
+          in: query
+          required: false
+          description: |
+            `true` also lists the datasets you have deleted, each with its `deletedAt`. Any other
+            value, or leaving it out, lists only the ones you have not deleted.
+          schema:
+            type: boolean
+            default: false
       responses:
         '200':
           description: Your datasets
@@ -4783,6 +4811,12 @@ components:
             not be established without constructing the strategy.
           items:
             type: string
+        deletedAt:
+          type: string
+          format: date-time
+          description: |
+            When you deleted this strategy. Only ever present in `GET /strategies?includeDeleted=true`,
+            and only on strategies you have deleted.
     StrategyState:
       type: object
       description: |
@@ -4915,6 +4949,12 @@ components:
             The id of the most recently finalized, successfully ingested version. Absent until at
             least one upload has finished ingesting.
           example: "dsv_8e2b4f19c6a03d7e"
+        deletedAt:
+          type: string
+          format: date-time
+          description: |
+            When you deleted this dataset. Only ever present in `GET /datasets?includeDeleted=true`,
+            and only on datasets you have deleted.
         updatedAt:
           type: string
           format: date-time
