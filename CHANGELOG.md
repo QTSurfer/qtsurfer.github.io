@@ -7,6 +7,15 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.11] — 2026-09-28
+
+### Added ✨
+
+- **`GET /strategies` and `GET /datasets` take `includeDeleted=true`** to also list what you have
+  deleted, each entry carrying a new `deletedAt`. Without it both listings are unchanged. Useful
+  to keep your own copy of the list in sync: a deleted item shows up as deleted instead of simply
+  disappearing.
+
 ## [0.128.10] — 2026-09-27
 
 ### Fixed 🩹
