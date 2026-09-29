@@ -5588,9 +5588,10 @@ components:
             a `FAILED` run: the strategy cannot consume the source type the run was started with, the run's
             definition was refused, the run could not start after several attempts, the strategy failed while
             processing data, the run lost its data feed, or the generic `The run failed.`. The set may grow:
-            read an unrecognised sentence as a failure and do not parse it. A `FAILED` run stays `desired:
-            RUNNING` until you stop it, and counts as active (`409` on a new start, and toward your live-run
-            limit) until then.
+            read an unrecognised sentence as a failure and do not parse it. A `FAILED` run usually stays
+            `desired: RUNNING` until you stop it, and counts as active (`409` on a new start, and toward your
+            live-run limit) until then; one that can never run because its strategy cannot consume its source
+            type is stopped by the platform itself (`desired: STOPPED`), so it holds no place.
         sources:
           type: array
           items:
@@ -5676,9 +5677,10 @@ components:
             a `FAILED` run: the strategy cannot consume the source type the run was started with, the run's
             definition was refused, the run could not start after several attempts, the strategy failed while
             processing data, the run lost its data feed, or the generic `The run failed.`. The set may grow:
-            read an unrecognised sentence as a failure and do not parse it. A `FAILED` run stays `desired:
-            RUNNING` until you stop it, and counts as active (`409` on a new start, and toward your live-run
-            limit) until then.
+            read an unrecognised sentence as a failure and do not parse it. A `FAILED` run usually stays
+            `desired: RUNNING` until you stop it, and counts as active (`409` on a new start, and toward your
+            live-run limit) until then; one that can never run because its strategy cannot consume its source
+            type is stopped by the platform itself (`desired: STOPPED`), so it holds no place.
         sources:
           type: array
           items:

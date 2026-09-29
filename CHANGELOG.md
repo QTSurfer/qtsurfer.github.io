@@ -21,8 +21,10 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ### Documented 📝
 
-- A `FAILED` run is final, but stays `desired: RUNNING` and counts as active (`409` on a new start,
-  and toward the live-run limit) until you stop it with `DELETE`.
+- A `FAILED` run is final, but usually stays `desired: RUNNING` and counts as active (`409` on a new
+  start, and toward the live-run limit) until you stop it with `DELETE`. One that can never run
+  because its strategy cannot consume its source type is stopped by the platform itself
+  (`desired: STOPPED`, `state: FAILED`) and holds no place.
 
 ## [0.128.11] — 2026-09-28
 

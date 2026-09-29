@@ -69,10 +69,14 @@ an already-stopped run is not an error.
 ### A failed run is final, and still holds its place
 
 `FAILED` is final for that run: it is not processing data and nothing restarts it. To try again,
-fix what `reason` names and start a new run. But `desired` stays `RUNNING` until you stop the run
-yourself, and a run counts as active by its `desired`, not its `state`: a `FAILED` run still
+fix what `reason` names and start a new run. Usually `desired` stays `RUNNING` until you stop the
+run yourself, and a run counts as active by its `desired`, not its `state`: a `FAILED` run still
 answers `409` to a new start of the same strategy and still counts toward your plan's live-run
 limit. Call `DELETE` on it, then start again.
+
+The exception is a run that can never run because of what it was started with: when its strategy
+cannot consume its source type, the platform stops it itself (`desired` becomes `STOPPED`, `state`
+stays `FAILED`, `reason` says why), so it does not hold a place.
 
 ### Why a run failed or stopped
 
