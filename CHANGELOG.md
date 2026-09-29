@@ -7,6 +7,23 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.12] — 2026-09-29
+
+### Changed 🔧
+
+- **`POST /strategy/{strategyId}/live` refuses a source `type` the strategy cannot consume** with a
+  `400` that names both sides (a ticker strategy with a `kline` source, or the reverse), instead of
+  answering `201` and leaving a run that ends `FAILED`. A QTScript strategy is a ticker strategy
+  unless its header says `kline`.
+- **`reason` says why a run `FAILED`**, on `GET /strategy/{strategyId}/live` and now on each entry of
+  `GET /live` (until now it appeared only for a resource stop, and only on the first). It is one of a
+  fixed set of sentences, never an internal message.
+
+### Documented 📝
+
+- A `FAILED` run is final, but stays `desired: RUNNING` and counts as active (`409` on a new start,
+  and toward the live-run limit) until you stop it with `DELETE`.
+
 ## [0.128.11] — 2026-09-28
 
 ### Added ✨
