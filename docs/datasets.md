@@ -377,6 +377,10 @@ every dataset on a screen that renders no chart isn't worth the exposure.
 curl https://api.qtsurfer.net/v1/datasets -H "Authorization: Bearer $TOKEN"
 ```
 
+`GET /datasets?includeDeleted=true` also lists the datasets you've deleted, each with the
+`deletedAt` it was deleted at — handy when keeping your own copy of the list in sync, so a
+deleted dataset shows up as deleted instead of just disappearing.
+
 ## Getting a dataset
 
 `GET /datasets/{datasetId}` — a [`Dataset`](#dataset-shape) plus a `_links.self`.
