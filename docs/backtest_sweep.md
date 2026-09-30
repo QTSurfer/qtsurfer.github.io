@@ -41,7 +41,7 @@ swept yet:
 | Field | Type | Default | Notes |
 |---|---|---|---|
 | `params` | map of string → [`SweepAxis`](#params--map-of-sweepaxis) | — | required, ≥ 1 entry — one axis per swept parameter |
-| `sampler` | `grid` \| `random` \| `lhs` | `grid` | |
+| `sampler` | `grid` \| `random` \| `lhs` | `grid` | `grid` runs every combination and is held to your plan's grid limit, see [How large a grid may be](#how-large-a-grid-may-be) |
 | `objective` | `sharpe` \| `sortino` \| `pnl` \| `maxdd` | `sharpe` | |
 | `samples` | integer ≥ 1 | — | sample count for `random`/`lhs`; ignored by `grid` |
 | `seed` | int64 | — | reproducibility seed. Omitted → the server generates one (Java's `L64X128MixRandom`) and returns the effective value in `ExecuteSweepAccepted.seed` |
@@ -58,6 +58,21 @@ explicit list:
 
 - **range** — `from`, `to`, `step` (all required, `step` > 0)
 - **enumerated** — `values` (≥ 1 item, each `number` or `boolean`)
+
+##### How large a grid may be
+
+A sweep with the `grid` sampler runs every combination of its axes, and the number of combinations is
+the product of the axes' sizes. Your plan sets the largest full grid it may run: `maxSweepCartesian`
+in [`GET /account`](account.md), 100 on the free plan and larger on the paid ones. A grid over that
+number is refused with `400`, and the message asks for the `random` or `lhs` sampler. Those two run
+only `samples` combinations, whatever the size of the space they draw from, and are not held to the
+plan's grid limit. A platform-wide ceiling on the number of combinations of one sweep applies to every
+plan and every sampler.
+
+```json
+"sweep": {"sampler": "random", "samples": 200, "params": {"rsiPeriod": {"from": 2, "to": 40, "step": 1},
+                                                       "atrMultiplier": {"from": 0.5, "to": 5, "step": 0.1}}}
+```
 
 #### `baseConfig` — `SweepBaseConfig`
 
