@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.15] — 2026-09-30
+
+### Added
+
+- `GET /live/{runId}` reads one of your runs by its own id (`getLiveRun`): the state `GET /strategy/{strategyId}/live` returns, plus `updatedAtMs`, when the run last changed. Until now a run could only be read as its strategy's most recent one, or from the `GET /live` listing, which omits most of its fields. A run that is not yours answers `404`. Documented in the live execution guide.
+
 ## [0.128.14] — 2026-09-30
 
 ### Documented 📝

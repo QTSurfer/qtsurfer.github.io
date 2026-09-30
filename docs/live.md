@@ -9,6 +9,7 @@ change its parameters without restarting it.
 | `GET` | `/strategy/{strategyId}/live` | Read this strategy's current (or last) run |
 | `DELETE` | `/strategy/{strategyId}/live` | Stop it |
 | `GET` | `/live` | List your own runs |
+| `GET` | `/live/{runId}` | Read one of your runs by its id |
 | `GET` | `/live/public` | Browse runs other users made public |
 | `PATCH` | `/live/{runId}` | Change visibility, name, or description |
 | `PUT` | `/live/{runId}/params` | Change parameters while it stays live |
@@ -128,6 +129,15 @@ instrument-count limit.
 run you have already stopped still shows up, unlike `GET /live/public`, which needs no
 `Authorization` header but only ever lists other runs — anyone's, yours included — that are
 `public` and currently `RUNNING`.
+
+## Reading one run
+
+`GET /live/{runId}` (needs a Bearer token) returns one of your runs by its own id, whatever its
+`stage`, `desired` state or `visibility` and however long ago you stopped it: the same state
+`GET /strategy/{strategyId}/live` gives, plus `updatedAtMs`, when the run last changed. That value
+only moves forward, so when you keep your own copy of a run, apply a read only if its `updatedAtMs`
+is larger than the one you hold. A run that is not yours, or does not exist, answers `404`; a run
+someone made public is found through `GET /live/public`, not here.
 
 ## Visibility
 
