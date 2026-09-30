@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.16] — 2026-09-30
+
+### Added
+
+- A live run carries `stats` when you read it (`GET /strategy/{strategyId}/live` and `GET /live/{runId}`): its latest counters, refreshed about once a minute while it is being executed — updates processed (`processed`), rate (`opsPerSecond`), instruments seen (`instrumentsSeen`), when they were written (`asOfMs`), the last time `processed` grew (`progressedAtMs`) and `stale`, which says only that the platform stopped updating them. A run whose `processed` is flat is not stale: a source that updates rarely, a funding rate for example, can stay flat for hours. Absent until the first snapshot exists; starting and stopping a run do not return it. A refresh of `stats` does not move `updatedAtMs`. New schema `LiveRunStats`; documented in the live execution guide.
+
 ## [0.128.15] — 2026-09-30
 
 ### Added
