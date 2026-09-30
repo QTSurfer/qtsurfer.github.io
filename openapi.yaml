@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.13
+  version: 0.128.14
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1074,7 +1074,9 @@ paths:
         '400':
           description: |
             Invalid sweep specification, a `type` that cannot be swept yet (`funding`), or the
-            expanded grid exceeds the server limit.
+            expanded grid exceeds the server limit. A full `grid` with more combinations than your
+            plan allows (`maxSweepCartesian` in `GET /account`) is refused with a message that asks
+            for the `random` or `lhs` sampler.
           content:
             application/json:
               schema:
@@ -3258,7 +3260,7 @@ components:
         page load. Live usage against these limits is a separate resource, `GET /account/usage`,
         deliberately: usage changes on every upload/execution and costs a query to compute, this
         one doesn't.
-      required: [userId, tier, maxExecute, maxRangeDays, maxImportRangeHours, maxDatasets, maxDatasetBytes, maxTotalStorageBytes, _links]
+      required: [userId, tier, maxExecute, maxRangeDays, maxSweepCartesian, maxImportRangeHours, maxDatasets, maxDatasetBytes, maxTotalStorageBytes, _links]
       properties:
         userId:
           type: string
@@ -3279,6 +3281,13 @@ components:
           type: integer
           description: Maximum length, in days, of the time range of a backtest on one of your own datasets.
           example: 7
+        maxSweepCartesian:
+          type: integer
+          description: |
+            Largest full grid, in parameter combinations, a sweep may run with the `grid` sampler.
+            A grid with more combinations is refused with `400`; the `random` and `lhs` samplers run
+            only their `samples` and are not held to it.
+          example: 100
         maxImportRangeHours:
           type: integer
           description: Maximum length, in hours, of the time range of one dataset import from an exchange.
@@ -3747,6 +3756,9 @@ components:
           type: string
           enum: [grid, random, lhs]
           default: grid
+          description: |
+            `grid` runs every combination of the axes and is held to your plan's
+            `maxSweepCartesian` (`GET /account`); `random` and `lhs` run `samples` combinations and are not.
         seed:
           type: integer
           format: int64
