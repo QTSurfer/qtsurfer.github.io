@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.14] — 2026-09-30
+
+### Documented 📝
+
+- The account guide lists `maxExecute`, `maxRangeDays` and `maxImportRangeHours`, the three limits `GET /account` has returned since 0.128.12, in its example and its field table.
+
 ## [0.128.13] — 2026-09-29
 
 ### Changed 🔧
