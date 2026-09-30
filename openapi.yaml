@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.14
+  version: 0.128.15
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2621,6 +2621,63 @@ paths:
       tags:
         - Live Execution
   '/live/{runId}':
+    get:
+      operationId: getLiveRun
+      summary: Read one of your runs by its id
+      description: |
+        Owner only, addressed by `runId` directly rather than through its strategy: the run's own
+        canonical identity, which is what `POST`/`GET`/`DELETE` `.../live`, `GET /live` and
+        `GET /live/public` all hand out. Use it to re-read one specific run — including one you
+        stopped long ago or that is no longer your strategy's most recent — without paging through
+        `GET /live`.
+
+        Returns the same state as `GET /strategy/{strategyId}/live` (`strategyId` is the strategy's
+        id), plus `updatedAtMs`: when the run last changed, from any cause — a state change, a
+        promotion, a parameter update, a stop. A run that is public is reachable by others through
+        `GET /live/public`, never through this route.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          description: The `runId` from `POST`/`GET`/`DELETE` `.../live`, from `GET /live` or from `GET /live/public`
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveRunDetail'
+              example:
+                strategyId: 0dyfzg599rfwngikrosiw2
+                runId: 5t5oAmQ4PD0lQRoCU58uE0
+                name: EMA cross
+                visibility: private
+                stage: SANDBOX
+                state: RUNNING
+                desired: RUNNING
+                sources:
+                  - venueType: cx
+                    exchange: binance
+                    segment: spot
+                    type: ticker
+                    instruments: [BTC/USDT]
+                params: {}
+                paramsVersion: 1
+                relay: false
+                startedAtMs: 1790790087954
+                updatedAtMs: 1790790092722
+        '404':
+          description: No such run, or you do not own it — the two look identical on purpose.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
     patch:
       operationId: updateLive
       summary: Change a run's visibility, name, or description
@@ -5644,6 +5701,17 @@ components:
           allOf:
             - $ref: '#/components/schemas/LivePaperConfig'
           description: The run's paper trading configuration as accepted at start, normalised. Absent when the run has no paper trading.
+    LiveRunDetail:
+      description: A run as returned by `GET /live/{runId}`, the full state of `LiveRun` plus when it last changed.
+      allOf:
+        - $ref: '#/components/schemas/LiveRun'
+        - type: object
+          required: [updatedAtMs]
+          properties:
+            updatedAtMs:
+              type: integer
+              format: int64
+              description: Epoch milliseconds of the run's last change, from any cause. It only moves forward, so of two reads of the same run the one with the larger value is the newer.
     LiveRunCompact:
       type: object
       required: [runId, visibility, stage, state, sources]
