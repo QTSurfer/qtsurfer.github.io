@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.11
+  version: 0.128.12
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3258,7 +3258,7 @@ components:
         page load. Live usage against these limits is a separate resource, `GET /account/usage`,
         deliberately: usage changes on every upload/execution and costs a query to compute, this
         one doesn't.
-      required: [userId, tier, maxDatasets, maxDatasetBytes, maxTotalStorageBytes, _links]
+      required: [userId, tier, maxExecute, maxRangeDays, maxImportRangeHours, maxDatasets, maxDatasetBytes, maxTotalStorageBytes, _links]
       properties:
         userId:
           type: string
@@ -3268,6 +3268,21 @@ components:
           type: string
           description: Your current subscription tier.
           example: "free"
+        maxExecute:
+          type: integer
+          description: |
+            Maximum number of strategy executions (and sweeps) you can have running at the same time
+            through the API. Starting one past this number is answered with `429`, whose message
+            carries the same number. The value already includes any API allowance your plan has.
+          example: 10
+        maxRangeDays:
+          type: integer
+          description: Maximum length, in days, of the time range of a backtest on one of your own datasets.
+          example: 7
+        maxImportRangeHours:
+          type: integer
+          description: Maximum length, in hours, of the time range of one dataset import from an exchange.
+          example: 6
         maxDatasets:
           type: integer
           description: Maximum number of active datasets your tier allows.

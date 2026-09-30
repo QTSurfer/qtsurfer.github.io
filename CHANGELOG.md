@@ -7,6 +7,13 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.12] — 2026-09-29
+
+### Added
+
+- `GET /account` returns `maxExecute`, `maxRangeDays` and `maxImportRangeHours` next to the dataset and storage
+  limits, so every limit your account is held to can be read from one place.
+
 ## [0.128.11] — 2026-09-28
 
 ### Added ✨
