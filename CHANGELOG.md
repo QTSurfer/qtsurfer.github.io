@@ -7,7 +7,7 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
-## [0.128.12] — 2026-09-29
+## [0.128.13] — 2026-09-29
 
 ### Changed 🔧
 
@@ -25,6 +25,13 @@ pre-1.0, its version follows the version in `openapi.yaml`.
   start, and toward the live-run limit) until you stop it with `DELETE`. One that can never run
   because its strategy cannot consume its source type is stopped by the platform itself
   (`desired: STOPPED`, `state: FAILED`) and holds no place.
+
+## [0.128.12] — 2026-09-29
+
+### Added
+
+- `GET /account` returns `maxExecute`, `maxRangeDays` and `maxImportRangeHours` next to the dataset and storage
+  limits, so every limit your account is held to can be read from one place.
 
 ## [0.128.11] — 2026-09-28
 
