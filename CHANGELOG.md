@@ -13,6 +13,10 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 - The account guide lists `maxExecute`, `maxRangeDays` and `maxImportRangeHours`, the three limits `GET /account` has returned since 0.128.12, in its example and its field table.
 
+### Added
+
+- `GET /account` returns `maxSweepCartesian`, the largest full grid a sweep may run with the `grid` sampler. A larger grid is refused with `400`, asking for the `random` or `lhs` sampler, which are not held to it. Documented in the account and sweep guides and on `executeSweep`.
+
 ## [0.128.13] — 2026-09-29
 
 ### Changed 🔧
