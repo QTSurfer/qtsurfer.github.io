@@ -52,7 +52,7 @@ What you can watch while it waits, on `GET`/`PATCH` `.../live`:
 | `LAGGING` | Running, but behind the market data: usual while it catches up after starting or after a platform restart. It clears by itself. |
 | `HUNG` | Your strategy is stuck inside one call for longer than the platform allows. It clears when that call returns. |
 | `DEGRADED` | The run's independent executions produced different signals from the same market data. The run keeps publishing. In the sandbox this counts against the trial: the run is not promoted. |
-| `FAILED` | The platform refused the run or could not start it. |
+| `FAILED` | The platform refused the run, could not start it, or the run failed while running. `reason` says why (see [Why a run failed or stopped](#why-a-run-failed-or-stopped)). |
 | `STOPPED` | Stopped, by you or by the platform (`reason` says so when it was for exceeding its resource allowance). |
 
 `LAGGING`, `HUNG` and `DEGRADED` are flags on a run that is otherwise running: they come and go, and
@@ -66,6 +66,37 @@ A stop (`DELETE`) is a request, not an instant kill: `desired` flips to `STOPPED
 `state` can stay `RUNNING` for a short window while the run winds down. Calling `DELETE` again on
 an already-stopped run is not an error.
 
+### A failed run is final, and still holds its place
+
+`FAILED` is final for that run: it is not processing data and nothing restarts it. To try again,
+fix what `reason` names and start a new run. Usually `desired` stays `RUNNING` until you stop the
+run yourself, and a run counts as active by its `desired`, not its `state`: a `FAILED` run still
+answers `409` to a new start of the same strategy and still counts toward your plan's live-run
+limit. Call `DELETE` on it, then start again.
+
+The exception is a run that can never run because of what it was started with: when its strategy
+cannot consume its source type, the platform stops it itself (`desired` becomes `STOPPED`, `state`
+stays `FAILED`, `reason` says why), so it does not hold a place.
+
+### Why a run failed or stopped
+
+`GET /strategy/{strategyId}/live`, and each entry of `GET /live`, carry a `reason` when there is
+one to give. It is absent otherwise, and it is never a stack trace or an internal message: it is
+one of a fixed set of sentences, so a client can match on it.
+
+| `reason` | When |
+|---|---|
+| `resource: ...` | The platform stopped the run for exceeding its resource allowance; the text says which limit. |
+| `The run could not start: its strategy cannot consume the source type it was started with.` | A ticker strategy started with a `kline` source, or the reverse. Start refuses this with a `400` (see [Sources](#sources)); it can only show up on a run created before that check existed. |
+| `The run could not start: its definition was refused.` | The run's definition is not one the platform can run. |
+| `The run could not start after several attempts.` | A start that kept failing for a reason that was not yours. Start again. |
+| `The run stopped because its strategy failed while processing data.` | Your strategy's own code brought the run down. |
+| `The run stopped because it lost its data feed.` | The run's market data stream broke and the run stalled. |
+| `The run failed.` | Anything else. |
+
+The set may grow. Read an unrecognised sentence as "the run failed", and do not parse it for
+detail: the text is for people.
+
 ## Sources
 
 `sources` takes exactly one entry (multi-source strategies are not supported yet):
@@ -77,6 +108,11 @@ an already-stopped run is not an error.
   ]
 }
 ```
+
+`type` has to match the kind of strategy: a ticker strategy runs on a `ticker` source and a kline
+strategy on a `kline` one, and a start with the other one is refused with `400`, naming both. A
+QTScript strategy is a ticker strategy unless its header says otherwise (`strategy "Name" kline`);
+a Java one is whichever base class it extends (`AbstractTickerStrategy` or `AbstractKlineStrategy`).
 
 `type` is `ticker` or `kline`. Both connect to the lightest (fastest) cadence available for the
 exchange — today that is 1 tick/second on every supported exchange; choosing among several

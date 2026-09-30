@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.12
+  version: 0.128.13
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2404,7 +2404,7 @@ paths:
                 relay: false
                 startedAtMs: 1758330000000
         '400':
-          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events.
+          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events.
           content:
             application/json:
               schema:
@@ -5589,14 +5589,24 @@ components:
           description: 'A new run always starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up.'
         state:
           type: string
-          description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused or could not start) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'
+          description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused, could not start or failed while running; `reason` says why) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'
         desired:
           type: string
           enum: [RUNNING, STOPPED]
           description: What you last asked for. `state` can lag this briefly after `DELETE`.
         reason:
           type: string
-          description: Present only when the run stopped because it exceeded its resource allowance.
+          description: |
+            Why the run stopped or failed, when there is something to say; absent otherwise. It is never a
+            stack trace or an internal message. Either `resource: ...` (the platform stopped the run for
+            exceeding its resource allowance; the text says which limit) or one of a fixed set of sentences for
+            a `FAILED` run: the strategy cannot consume the source type the run was started with, the run's
+            definition was refused, the run could not start after several attempts, the strategy failed while
+            processing data, the run lost its data feed, or the generic `The run failed.`. The set may grow:
+            read an unrecognised sentence as a failure and do not parse it. A `FAILED` run usually stays
+            `desired: RUNNING` until you stop it, and counts as active (`409` on a new start, and toward your
+            live-run limit) until then; one that can never run because its strategy cannot consume its source
+            type is stopped by the platform itself (`desired: STOPPED`), so it holds no place.
         sources:
           type: array
           items:
@@ -5668,11 +5678,24 @@ components:
           description: 'A new run always starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up.'
         state:
           type: string
-          description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused or could not start) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'
+          description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused, could not start or failed while running; `reason` says why) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'
         desired:
           type: string
           enum: [RUNNING, STOPPED]
           description: What you last asked for. `state` can lag this briefly after `DELETE`.
+        reason:
+          type: string
+          description: |
+            Why the run stopped or failed, when there is something to say; absent otherwise. It is never a
+            stack trace or an internal message. Either `resource: ...` (the platform stopped the run for
+            exceeding its resource allowance; the text says which limit) or one of a fixed set of sentences for
+            a `FAILED` run: the strategy cannot consume the source type the run was started with, the run's
+            definition was refused, the run could not start after several attempts, the strategy failed while
+            processing data, the run lost its data feed, or the generic `The run failed.`. The set may grow:
+            read an unrecognised sentence as a failure and do not parse it. A `FAILED` run usually stays
+            `desired: RUNNING` until you stop it, and counts as active (`409` on a new start, and toward your
+            live-run limit) until then; one that can never run because its strategy cannot consume its source
+            type is stopped by the platform itself (`desired: STOPPED`), so it holds no place.
         sources:
           type: array
           items:
