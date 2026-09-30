@@ -7,6 +7,41 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.13] — 2026-09-29
+
+### Changed 🔧
+
+- **`POST /strategy/{strategyId}/live` refuses a source `type` the strategy cannot consume** with a
+  `400` that names both sides (a ticker strategy with a `kline` source, or the reverse), instead of
+  answering `201` and leaving a run that ends `FAILED`. A QTScript strategy is a ticker strategy
+  unless its header says `kline`.
+- **`reason` says why a run `FAILED`**, on `GET /strategy/{strategyId}/live` and now on each entry of
+  `GET /live` (until now it appeared only for a resource stop, and only on the first). It is one of a
+  fixed set of sentences, never an internal message.
+
+### Documented 📝
+
+- A `FAILED` run is final, but usually stays `desired: RUNNING` and counts as active (`409` on a new
+  start, and toward the live-run limit) until you stop it with `DELETE`. One that can never run
+  because its strategy cannot consume its source type is stopped by the platform itself
+  (`desired: STOPPED`, `state: FAILED`) and holds no place.
+
+## [0.128.12] — 2026-09-29
+
+### Added
+
+- `GET /account` returns `maxExecute`, `maxRangeDays` and `maxImportRangeHours` next to the dataset and storage
+  limits, so every limit your account is held to can be read from one place.
+
+## [0.128.11] — 2026-09-28
+
+### Added ✨
+
+- **`GET /strategies` and `GET /datasets` take `includeDeleted=true`** to also list what you have
+  deleted, each entry carrying a new `deletedAt`. Without it both listings are unchanged. Useful
+  to keep your own copy of the list in sync: a deleted item shows up as deleted instead of simply
+  disappearing.
+
 ## [0.128.10] — 2026-09-27
 
 ### Fixed 🩹

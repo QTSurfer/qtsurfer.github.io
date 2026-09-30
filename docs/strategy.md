@@ -207,6 +207,10 @@ Each entry (`StrategySummary`) carries the same `compiledAt`/`requiredSources` p
 `StrategyState`, but **not** validation state, so listing stays cheap regardless of how many
 strategies you have. Check a specific one's validation with `GET /strategy/{strategyId}`.
 
+`GET /strategies?includeDeleted=true` also lists the strategies you've deleted, each with the
+`deletedAt` it was deleted at — handy when keeping your own copy of the list in sync, so a
+deleted strategy shows up as deleted instead of just disappearing.
+
 ```bash
 curl https://api.qtsurfer.net/v1/strategies -H "Authorization: Bearer $TOKEN"
 ```
