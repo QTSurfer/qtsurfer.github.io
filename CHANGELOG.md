@@ -17,6 +17,7 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ### Changed
 
+- `POST /strategy/{strategyId}/live` answers `400`, not `500`, for a `relay` that is not `true` or `false`, and the same for `stream`; a `stream` where streams are not available yet is also `400` ("stream is not available").
 - `429` on `POST /strategy/{strategyId}/live`: a refusal for your **plan** (no live runs, a limit reached, no stream) no longer says to retry: it carries no `Retry-After`, since retrying will not help until something changes. A refusal because the platform is at capacity keeps it.
 
 ## [0.128.15] — 2026-09-30
