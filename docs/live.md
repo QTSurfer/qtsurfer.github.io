@@ -27,7 +27,9 @@ second execution of your strategy beside the first and checks four things: that 
 processing market data, that its memory use and per-tick time stay within the platform's allowance,
 that it does not hang or fail repeatedly, and that the two executions produce the same signals.
 Only you can read a sandbox run: over the WebSocket channel from its first signal if you asked for
-`relay`, and through the read routes either way (see [Visibility](#visibility)).
+`relay`, and through the read routes either way (see [Visibility](#visibility)) — and through a
+[stream URL](#a-plain-websocket-stream-of-a-run) if you create one for it, which lets whoever you give it
+to read the run's signals from the sandbox on.
 
 A run that passes is promoted to `live` automatically when the 24 hours are up. There is no
 separate "promote" call and nothing for you to do while you wait. A run that does not pass is not
@@ -160,6 +162,10 @@ Who can read what, by run:
 | `private` | Only you | No |
 | `public`, still in the `sandbox` | Only you (`public` takes effect at the promotion) | No |
 | `public`, promoted to `live` | Anyone | Yes, while it is running |
+
+A [stream URL](#a-plain-websocket-stream-of-a-run) is separate from all of this: it is a secret you
+create for one run, and whoever holds it can read that run's signals in either stage, whatever its
+`visibility` says. You decide who holds it.
 
 `relay` is separate: it only decides whether a run's signals are *pushed* over the WebSocket
 channel (opt-in, in either stage) and never who may read them. `GET /live/{runId}/signals` serves
@@ -355,6 +361,97 @@ Each signal pushed on a `sig:<runId>` channel (the `pub.data` of the `push` fram
 
 Who owns the run, which strategy or compilation produced a signal, and the exact market-data
 position behind it are never included on this channel, whether the run is public or private.
+
+## A plain WebSocket stream of a run
+
+The connection above is a protocol: a token, a subscription, frames of its own. A **stream URL** is the
+simple alternative. It is one address that you open as an ordinary WebSocket — from a script, a command-line
+tool such as [`websocat`](https://github.com/vi/websocat), or a service of your own that passes your signals on
+to others — and each signal of the run arrives as **one JSON text frame**. There is no token to mint, nothing
+to subscribe to and nothing to send.
+
+It is meant for your own tests, for simple clients, and for services that pass your signals on to many
+connections themselves: this address is limited in how many connections it accepts (see below), so a service
+that serves many readers holds one connection and fans the signals out itself.
+
+It is available from the `sandbox` stage on, so you can try it before the run is promoted, on the plans that
+may broadcast (the Pro and Elite plans: your plan is the `tier` that [`GET /account`](account.md) returns).
+Any other plan is refused with `429`, naming the plan.
+
+### Getting one
+
+Ask for it **when you start the run**, with `stream: true` in `POST /strategy/{strategyId}/live`. It turns
+`relay` on, and it cannot be added to a run later. The response carries the address as `streamUrl`:
+
+```json
+{
+  "runId": "5t5oAmQ4PD0lQRoCU58uE0",
+  "stage": "SANDBOX",
+  "relay": true,
+  "streamUrl": "wss://…"
+}
+```
+
+`GET /strategy/{strategyId}/live` returns the same `streamUrl` for as long as the run is running and your plan
+allows it. It is in no other response: not when the run is stopped, not in `GET /live/{runId}`, and not in the
+public catalogue. Use the address exactly as it is returned; it is opaque.
+
+**Treat it like a password.** Anyone who holds it can read the run's signals, sandbox ones included. Do not put
+it in a repository, a log, a screenshot or a shared chat. If it may have leaked, [rotate it](#rotating-and-revoking-it).
+You are responsible for who you give it to and for what is done with the signals you pass on.
+
+### What arrives
+
+Each text frame is exactly one signal, the same object as the `pub.data` of a `sig:<runId>` channel push (see
+[Signal shape](#signal-shape)), `stage` included, so a receiver can tell a sandbox trial from the real thing.
+There is no connect message and no wrapper around it, and nothing to answer: your WebSocket library answers
+the pings the service sends. A signal whose `data` is over 8 KiB is not sent, as on the channel.
+
+```bash
+websocat "$STREAM_URL"
+```
+
+Anything you send is ignored, and a frame from you over 1 KiB closes the connection.
+
+### Reconnecting
+
+Connections do end (a restart of the service, a network blip), so a client reconnects. To resume without
+gaps, add the `signalId` of the last signal you received as a query parameter, `?after=<signalId>`: the service
+sends the signals that came after that one, then carries on live, each signal once.
+
+It keeps only the most recent signals of a run, **about the last few minutes** and fewer for a run whose
+signals are large. If the signal you name is no longer held, the connection is closed with `4001` before any
+frame is sent: read what you missed with [`GET /live/{runId}/signals`](#reading-signals-a-run-already-produced),
+then connect again without `after`. Whatever you do, de-duplicate by `signalId`.
+
+### Limits, and why a connection closes
+
+- At most **2** connections open at once on one URL (the second covers the overlap while you reconnect), and
+  **10** from one client address.
+- A reader that does not keep up is disconnected; it never slows anyone else down.
+- A client address that keeps presenting URLs that do not work is refused for a while (`429`).
+
+An address that is not a valid stream URL, or one that has stopped working, answers `404` to the connection
+attempt, never saying which; `503` means try again in a moment. Once open, a connection can be closed with:
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `1008` | The URL no longer works: it was rotated or revoked, the run stopped, or your plan no longer lets you broadcast. | Do not retry the same URL. Read `GET /strategy/{strategyId}/live` for the current one. |
+| `1013` | Too many connections on this URL or from this address, the connection could not keep up, or the service could not confirm the URL for a moment. | Wait and reconnect, with `after`. |
+| `4001` | The signal in `after` is no longer held. | Read the history, then connect without `after`. |
+| `1001` | The service is restarting. | Reconnect right away, with `after`. |
+| `1009` | You sent a frame over 1 KiB. | Do not send frames. |
+
+If your plan stops letting you broadcast, the URL is no longer shown and open connections are closed with
+`1008`, typically within a minute; if the plan lets you broadcast again, the same URL works again.
+
+### Rotating and revoking it
+
+- `POST /live/{runId}/stream` gives the run a **new** address and retires the old one: connections on the old
+  address close with `1008` within about 15 seconds. Only for a running run that was started with a stream.
+- `DELETE /live/{runId}/stream` revokes it **for good**: connections close and the address answers `404`. The
+  run itself keeps running, and a stream cannot be added to it again: start the run again with `stream: true`
+  for a new one. It is always allowed, whatever your plan, and repeating it is not an error.
 
 ## Reading signals a run already produced
 
