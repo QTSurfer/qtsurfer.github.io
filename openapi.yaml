@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.14
+  version: 0.128.16
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2355,6 +2355,11 @@ paths:
         back with `GET /live/{runId}/paper`. A strategy that listens to its own execution events
         (it overrides `getExecutionCallback()`) has no other execution venue, so it cannot start
         without a `paper` block.
+
+        **A plain WebSocket stream.** Pass `stream: true` to get a secret URL for this run's signals that a simple
+        client, or a service that passes them on to others, can open as an ordinary WebSocket, from the sandbox stage
+        on. The URL is in the response (`streamUrl`) and in `GET /strategy/{strategyId}/live`; treat it like a
+        password. See the "Live execution" guide.
       parameters:
         - name: strategyId
           in: path
@@ -2383,11 +2388,11 @@ paths:
                 percentAmountToLock: 20
       responses:
         '201':
-          description: Started — the run's own state, in the sandbox stage
+          description: Started — the run's own state, in the sandbox stage, with its `streamUrl` when you asked for a stream
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LiveRun'
+                $ref: '#/components/schemas/LiveRunWithStream'
               example:
                 strategyId: 6bsh31ikwkuivhtgcoa6s4
                 runId: 5t5oAmQ4PD0lQRoCU58uE0
@@ -2406,7 +2411,7 @@ paths:
                 relay: false
                 startedAtMs: 1758330000000
         '400':
-          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events.
+          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events. A `relay` or `stream` that is not `true` or `false`, or a `stream` where streams are not available yet.
           content:
             application/json:
               schema:
@@ -2428,14 +2433,15 @@ paths:
                 message: A live run is already active for strategy 6bsh31ikwkuivhtgcoa6s4 -- stop it before starting another
         '429':
           description: |
-            Your plan does not include live runs, would exceed your concurrent-run or
-            instrument-count limit, or the platform is at capacity right now. Carries a
-            `Retry-After` header.
+            One of two kinds. **Your plan** does not include live runs, would exceed your concurrent-run or
+            instrument-count limit, or does not let you ask for a `stream`: the message names your plan, and
+            retrying will not help until something changes, so there is no `Retry-After`. Or **the platform is at
+            capacity** right now: a `Retry-After` header says when to try again.
           headers:
             Retry-After:
               schema:
                 type: integer
-              description: Seconds to wait before retrying.
+              description: Seconds to wait before retrying. Only on the capacity kind.
           content:
             application/json:
               schema:
@@ -2450,7 +2456,8 @@ paths:
       description: |
         The run you last started for this strategy — its most complete state, including `params`
         and the promotion `gate` once the sandbox trial has one to report. Returns the run's last
-        known state even after it has stopped; this endpoint never disappears history.
+        known state even after it has stopped; this endpoint never disappears history. When the run was started
+        with a `stream`, `streamUrl` is here too while the run is running and your plan allows it.
       parameters:
         - name: strategyId
           in: path
@@ -2460,11 +2467,11 @@ paths:
             $ref: '#/components/schemas/strategyId'
       responses:
         '200':
-          description: The run's current state
+          description: The run's current state, with its `streamUrl` when it has one
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LiveRun'
+                $ref: '#/components/schemas/LiveRunWithStream'
         '404':
           description: You have never started a live run for this strategy.
           content:
@@ -2482,7 +2489,8 @@ paths:
         Requests a stop. The run winds down at its own next check-in rather than instantly —
         poll `GET`/`PATCH` `.../live` and expect `state` to remain `RUNNING` for a short window
         after `desired` flips to `STOPPED`. Calling this again on an already-stopped run is not an
-        error; it returns the same (unchanged) state.
+        error; it returns the same (unchanged) state. A stopped run has no stream: its `streamUrl`, if it had one,
+        stops working and is not in this response.
       parameters:
         - name: strategyId
           in: path
@@ -2621,6 +2629,63 @@ paths:
       tags:
         - Live Execution
   '/live/{runId}':
+    get:
+      operationId: getLiveRun
+      summary: Read one of your runs by its id
+      description: |
+        Owner only, addressed by `runId` directly rather than through its strategy: the run's own
+        canonical identity, which is what `POST`/`GET`/`DELETE` `.../live`, `GET /live` and
+        `GET /live/public` all hand out. Use it to re-read one specific run — including one you
+        stopped long ago or that is no longer your strategy's most recent — without paging through
+        `GET /live`.
+
+        Returns the same state as `GET /strategy/{strategyId}/live` (`strategyId` is the strategy's
+        id), plus `updatedAtMs`: when the run last changed, from any cause — a state change, a
+        promotion, a parameter update, a stop. A run that is public is reachable by others through
+        `GET /live/public`, never through this route.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          description: The `runId` from `POST`/`GET`/`DELETE` `.../live`, from `GET /live` or from `GET /live/public`
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The run
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveRunDetail'
+              example:
+                strategyId: 0dyfzg599rfwngikrosiw2
+                runId: 5t5oAmQ4PD0lQRoCU58uE0
+                name: EMA cross
+                visibility: private
+                stage: SANDBOX
+                state: RUNNING
+                desired: RUNNING
+                sources:
+                  - venueType: cx
+                    exchange: binance
+                    segment: spot
+                    type: ticker
+                    instruments: [BTC/USDT]
+                params: {}
+                paramsVersion: 1
+                relay: false
+                startedAtMs: 1790790087954
+                updatedAtMs: 1790790092722
+        '404':
+          description: No such run, or you do not own it — the two look identical on purpose.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
     patch:
       operationId: updateLive
       summary: Change a run's visibility, name, or description
@@ -2821,6 +2886,92 @@ paths:
                 $ref: '#/components/schemas/ResponseError'
         '503':
           description: The command could not be delivered right now, and it was not sent — unlike a parameter update, a command has no fallback path. Try again.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+  '/live/{runId}/stream':
+    post:
+      operationId: rotateLiveStream
+      summary: Rotate a run's stream URL
+      description: |
+        Gives a run a **new** stream URL and retires the old one: connections open on the old URL are closed
+        within about 15 seconds and the old URL answers `404` from then on. Use it when the URL may have leaked.
+        Owner only, and only for a run that is running and was started with `stream: true` (the URL cannot be added
+        to a run later, and a revoked one cannot be brought back). The plan is checked again: a plan that may not
+        broadcast gets `429`.
+
+        See the "Live execution" guide, "A plain WebSocket stream of a run".
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The new URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveStreamUrl'
+        '404':
+          description: No such run, or you do not own it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '409':
+          description: |
+            One of three reasons, each its own message: the run was started without a stream; its stream was
+            revoked (a revoked stream cannot be restored: start the run again with a stream); or the run is stopped.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '429':
+          description: Your plan does not let you broadcast a run's signals. The message names your plan; retrying will not help until it changes, so there is no `Retry-After`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+      security:
+        - bearerAuth: []
+      tags:
+        - Live Execution
+    delete:
+      operationId: revokeLiveStream
+      summary: Revoke a run's stream URL
+      description: |
+        Revokes a run's stream URL **for good**: connections open on it are closed within about 15 seconds and it
+        answers `404` from then on. The run itself is not touched, and a stream cannot be added to it again; start
+        the run again with `stream: true` for a new URL. Owner only, and always allowed, whatever your plan or the
+        run's state. Repeating it is not an error.
+      parameters:
+        - name: runId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Revoked (or already revoked).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LiveStreamRevoked'
+        '404':
+          description: No such run, or you do not own it.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+        '409':
+          description: The run was started without a stream, so there is nothing to revoke.
           content:
             application/json:
               schema:
@@ -5489,6 +5640,16 @@ components:
           type: boolean
           default: false
           description: Request that this run's signals be relayed over its WebSocket channel, from its first signal — in the `sandbox` stage too, where only you can subscribe to it. See the "Live execution" guide.
+        stream:
+          type: boolean
+          default: false
+          description: |
+            Ask for a **stream URL**: a secret address that a simple client, or a service that passes your signals
+            on to others, can open as a plain WebSocket to receive this run's signals as they are produced, one JSON
+            text frame per signal, with none of the live-execution protocol around it. The URL comes back as
+            `streamUrl` in the response to this call. Available from the `sandbox` stage on, on the plans that may
+            broadcast; any other plan gets `429`. It can be asked for **only when the run is started** (not added
+            later), and it also turns `relay` on. See the "Live execution" guide, "A plain WebSocket stream of a run".
         name:
           type: string
         description:
@@ -5644,6 +5805,54 @@ components:
           allOf:
             - $ref: '#/components/schemas/LivePaperConfig'
           description: The run's paper trading configuration as accepted at start, normalised. Absent when the run has no paper trading.
+    LiveRunDetail:
+      description: A run as returned by `GET /live/{runId}`, the full state of `LiveRun` plus when it last changed.
+      allOf:
+        - $ref: '#/components/schemas/LiveRun'
+        - type: object
+          required: [updatedAtMs]
+          properties:
+            updatedAtMs:
+              type: integer
+              format: int64
+              description: Epoch milliseconds of the run's last change, from any cause. It only moves forward, so of two reads of the same run the one with the larger value is the newer.
+    LiveRunWithStream:
+      description: |
+        A run as `LiveRun` describes it, plus its `streamUrl` when it has one. It is what **starting a run** and
+        `GET /strategy/{strategyId}/live` return: your own run, read with your own credentials. Stopping a run
+        and `GET /live/{runId}` return `LiveRun`, which never carries the URL.
+      allOf:
+        - $ref: '#/components/schemas/LiveRun'
+        - type: object
+          properties:
+            streamUrl:
+              type: string
+              format: uri
+              description: |
+                The run's secret stream URL (`wss://…`). **Treat it like a password**: anyone who holds it can read
+                this run's signals, from the sandbox stage on. Present only when the run was started with
+                `stream: true`, is wanted running, has not had its stream revoked, and your plan still lets you
+                broadcast; absent otherwise (a plan that lets you broadcast again gets the same URL back). Rotate
+                it with `POST /live/{runId}/stream` if it leaks, revoke it with `DELETE /live/{runId}/stream`.
+    LiveStreamUrl:
+      type: object
+      required: [streamUrl]
+      description: A run's new stream URL, as returned by `POST /live/{runId}/stream`.
+      properties:
+        streamUrl:
+          type: string
+          format: uri
+          description: The run's new secret stream URL. The previous one has stopped working.
+    LiveStreamRevoked:
+      type: object
+      required: [runId, revoked]
+      description: What `DELETE /live/{runId}/stream` returns.
+      properties:
+        runId:
+          type: string
+        revoked:
+          type: boolean
+          description: Always `true`.
     LiveRunCompact:
       type: object
       required: [runId, visibility, stage, state, sources]
