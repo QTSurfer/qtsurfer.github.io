@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.16
+  version: 0.128.17
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2458,6 +2458,10 @@ paths:
         and the promotion `gate` once the sandbox trial has one to report. Returns the run's last
         known state even after it has stopped; this endpoint never disappears history. When the run was started
         with a `stream`, `streamUrl` is here too while the run is running and your plan allows it.
+
+        While the run is being executed it also carries `stats`, the run's latest counters (updates
+        processed, rate, instruments seen), refreshed about once a minute. Starting or stopping a run
+        does not return them; read them here.
       parameters:
         - name: strategyId
           in: path
@@ -2640,8 +2644,9 @@ paths:
         `GET /live`.
 
         Returns the same state as `GET /strategy/{strategyId}/live` (`strategyId` is the strategy's
-        id), plus `updatedAtMs`: when the run last changed, from any cause — a state change, a
-        promotion, a parameter update, a stop. A run that is public is reachable by others through
+        id, and `stats` is there too), plus `updatedAtMs`: when the run last changed, from any cause — a
+        state change, a promotion, a parameter update, a stop. A refresh of `stats` is not a change of
+        the run and does not move `updatedAtMs`. A run that is public is reachable by others through
         `GET /live/public`, never through this route.
       parameters:
         - name: runId
@@ -5805,6 +5810,49 @@ components:
           allOf:
             - $ref: '#/components/schemas/LivePaperConfig'
           description: The run's paper trading configuration as accepted at start, normalised. Absent when the run has no paper trading.
+        stats:
+          allOf:
+            - $ref: '#/components/schemas/LiveRunStats'
+          description: |
+            The run's latest counters. Returned by the two reads, `GET /strategy/{strategyId}/live` and
+            `GET /live/{runId}`; never by starting or stopping a run. Absent until the first snapshot exists
+            (a run that has just started), and absent is not zero.
+    LiveRunStats:
+      type: object
+      required: [processed, opsPerSecond, instrumentsSeen, asOfMs, stale]
+      description: |
+        What a run has been doing, as of its last snapshot. The platform refreshes it about once a minute
+        while the run is being executed, so `opsPerSecond` is an average over that interval, not an
+        instantaneous rate.
+      properties:
+        processed:
+          type: integer
+          format: int64
+          description: Updates of instruments the run has accepted since it started executing. It can start again from zero if the run is restarted.
+        opsPerSecond:
+          type: number
+          description: Updates accepted per second over the last refresh interval. `0` when none arrived.
+        instrumentsSeen:
+          type: integer
+          description: How many distinct instruments the run has received an update for.
+        asOfMs:
+          type: integer
+          format: int64
+          description: Epoch milliseconds when these counters were last written.
+        progressedAtMs:
+          type: integer
+          format: int64
+          description: |
+            Epoch milliseconds of the last snapshot in which `processed` had grown. Absent until the run has
+            processed anything. A run fed by a source that updates rarely (a funding rate, for example) can
+            stay flat for hours: that is how such a run behaves, not a fault.
+        stale:
+          type: boolean
+          description: |
+            `true` when the run is meant to be running (`desired` is `RUNNING`) and its counters have not
+            been refreshed for several refresh intervals: the platform has stopped updating them, which is
+            worth checking against `state`. `false` otherwise. A run whose `processed` is flat is not stale;
+            `progressedAtMs` is how to tell it apart.
     LiveRunDetail:
       description: A run as returned by `GET /live/{runId}`, the full state of `LiveRun` plus when it last changed.
       allOf:

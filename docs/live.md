@@ -100,6 +100,42 @@ one of a fixed set of sentences, so a client can match on it.
 The set may grow. Read an unrecognised sentence as "the run failed", and do not parse it for
 detail: the text is for people.
 
+## What a run is doing: `stats`
+
+While a run is being executed the platform keeps its latest counters and refreshes them about once a
+minute. `GET /strategy/{strategyId}/live` and `GET /live/{runId}` return them as `stats`:
+
+```json
+"stats": {
+  "processed": 18233,
+  "opsPerSecond": 4.2,
+  "instrumentsSeen": 12,
+  "asOfMs": 1758330060000,
+  "progressedAtMs": 1758330060000,
+  "stale": false
+}
+```
+
+| Field | What it means |
+|---|---|
+| `processed` | Updates of instruments the run has accepted since it started executing. It can start again from zero if the run is restarted. |
+| `opsPerSecond` | Updates accepted per second over the last refresh. An average over about a minute, so it does not jump from one update to the next. `0` when none arrived. |
+| `instrumentsSeen` | Distinct instruments the run has received an update for. |
+| `asOfMs` | When these counters were last written. |
+| `progressedAtMs` | The last refresh in which `processed` had grown. Absent until the run has processed anything. |
+| `stale` | `true` when the run is meant to be running and its counters have not been refreshed for several refresh intervals. |
+
+Three things to know:
+
+- **`stats` is absent, not zero, when there is nothing yet**: a run that has just started has no
+  snapshot. Starting (`POST`) and stopping (`DELETE`) a run do not return it; read it with one of the
+  two `GET`s above.
+- **`stale` only says the platform stopped updating the counters.** Check it against `state`. A run
+  whose `processed` stays flat is *not* stale and is not broken: one fed by a source that updates rarely
+  (a funding rate, for example) can stay flat for hours. `progressedAtMs` is how to tell such a run from
+  one that has stopped.
+- **A refresh of `stats` is not a change of the run.** It does not move `updatedAtMs`.
+
 ## Sources
 
 `sources` takes exactly one entry (multi-source strategies are not supported yet):
