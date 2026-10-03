@@ -13,7 +13,7 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 - A **stream URL** for a run: pass `stream: true` to `POST /strategy/{strategyId}/live` and the response carries `streamUrl`, a secret `wss://` address a simple client, or a service that passes your signals on to others, opens as an ordinary WebSocket to receive the run's signals as plain JSON text frames, from the `sandbox` stage on. It turns `relay` on, can only be asked for when the run is started, and is available on the plans that may broadcast (any other plan gets `429`). `GET /strategy/{strategyId}/live` returns the same `streamUrl` while the run is running and the plan allows it; stopping a run and `GET /live/{runId}` never carry it (they keep returning `LiveRun`; starting a run and `GET .../live` return the new `LiveRunWithStream`).
 - `POST /live/{runId}/stream` (`rotateLiveStream`) gives the run a new address and retires the old one; `DELETE /live/{runId}/stream` (`revokeLiveStream`) revokes it for good. Owner only.
-- The "Live execution" guide has a section on the stream: what a frame is, `?after=<signalId>` to resume, the limits (2 connections per URL, 10 per client address), why a connection closes (`1008`, `1013`, `4001`, `1001`, `1009`), and how to keep the URL secret. The sentences that said only you can read a sandbox run now say "except through a stream URL you create".
+- The "Live execution" guide has a section on the stream: what a frame is, `?after=<signalId>` to resume, the limits (plan on 2 connections per URL and 10 per client address), why a connection closes (`1008`, `1013`, `4001`, `1001`, `1009`), and how to keep the URL secret. The sentences that said only you can read a sandbox run now say "except through a stream URL you create".
 
 ### Changed
 

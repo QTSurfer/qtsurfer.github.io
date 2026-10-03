@@ -426,8 +426,9 @@ then connect again without `after`. Whatever you do, de-duplicate by `signalId`.
 
 ### Limits, and why a connection closes
 
-- At most **2** connections open at once on one URL (the second covers the overlap while you reconnect), and
-  **10** from one client address.
+- Plan on **2** connections open at once on one URL (the second covers the overlap while you reconnect), and
+  **10** from one client address. They are the numbers to design for, not exact walls: the service counts connections
+  in more than one place, so one past them is sometimes accepted. A connection that is refused is closed with `1013`.
 - A reader that does not keep up is disconnected; it never slows anyone else down.
 - A client address that keeps presenting URLs that do not work is refused for a while (`429`).
 
