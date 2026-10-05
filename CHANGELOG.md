@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.19] — 2026-10-06
+
+### Changed
+
+- `warmFrom` is now a required property, an integer or `null`, of the run returned by starting a run, by `GET /strategy/{strategyId}/live` and by `GET /live/{runId}` (`LiveRunWithStream` and `LiveRunDetail`). It was declared as an optional property of `LiveRun`, so a generated client could treat "absent" and `null` as different values although the API always sends it there; `null` still means only a run started before the field existed. `LiveRun` itself, which is what stopping a run returns, no longer declares `warmFrom` and the response never carried it.
+
 ## [0.128.18] — 2026-10-05
 
 ### Added
