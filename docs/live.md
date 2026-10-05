@@ -195,9 +195,9 @@ replay from. Set it in the body of `POST /strategy/{strategyId}/live`, next to `
 - It can be set **only when the run is started**. It is not one of the parameters `PUT /live/{runId}/params`
   accepts, and it cannot be added later: to change it, stop the run and start it again.
 - The run reports the value in effect back as `warmFrom` when you read it (the start response,
-  `GET /strategy/{strategyId}/live` and `GET /live/{runId}`): the one you asked for or, if you left it out, the
-  one the platform chose. Send that number to get the same amount of warm-up in another run. It is `null`
-  only for a run started before this field existed.
+  `GET /strategy/{strategyId}/live` and `GET /live/{runId}`; the response to stopping a run does not carry it): the one you asked for or, if you left it out, the
+  one the platform chose. Send that number to get the same amount of warm-up in another run. A run started
+  before this field existed has no `warmFrom` at all; it is never `null`.
 
 ## Listing your runs
 
