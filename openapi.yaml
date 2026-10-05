@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.20
+  version: 0.128.21
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -5629,7 +5629,10 @@ components:
           items:
             type: string
           example: [BTC/USDT]
-          description: Instrument symbols, or `["*"]` for every instrument the exchange/segment offers (tier-gated).
+          description: >-
+            Instrument symbols written as `BASE/QUOTE`, or `["*"]` for every instrument the exchange/segment offers
+            (tier-gated). Symbols are not case-sensitive and spaces around them are ignored, so `btc/usdt` and
+            `BTC/USDT` are the same instrument. An entry that is not of the form `BASE/QUOTE` makes the run fail when it starts.
     StartLiveRequest:
       type: object
       required: [sources]

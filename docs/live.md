@@ -159,6 +159,10 @@ cadences is not offered yet. `instruments`
 can be `["*"]` for every instrument the exchange/segment offers, subject to your plan's
 instrument-count limit.
 
+Write instruments as `BASE/QUOTE`. They are not case-sensitive and spaces around them are ignored, so
+`btc/usdt`, `BTC/USDT` and `" btc / usdt "` are the same instrument. An entry that is not of that form (no
+`/`, an empty side, or a `.`, `*` or space inside a side) makes the run fail when it starts.
+
 ## Warming up: `warmFrom`
 
 A strategy that reads an average, a window or any other indicator needs some history before its values
