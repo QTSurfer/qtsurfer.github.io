@@ -159,6 +159,43 @@ cadences is not offered yet. `instruments`
 can be `["*"]` for every instrument the exchange/segment offers, subject to your plan's
 instrument-count limit.
 
+## Warming up: `warmFrom`
+
+A strategy that reads an average, a window or any other indicator needs some history before its values
+mean anything: the average of the last 50 prices has nothing to average on its first tick. So a run is
+started **warm**. Before its first live tick it replays the market feed from a moment shortly before the
+run's start, and the strategy sees that stretch first, as if it had been running. While it catches up, the
+run can show `LAGGING`, and its first signal reaches the channel and the stream only once it has caught up.
+Signals about the replayed time describe events from before the run started, so they are not pushed.
+
+`warmFrom` is how you choose how much to replay: the number of **seconds before the run's start** to
+replay from. Set it in the body of `POST /strategy/{strategyId}/live`, next to `sources`:
+
+```json
+{
+  "sources": [
+    {"venueType": "cx", "exchange": "binance", "segment": "spot", "type": "ticker", "instruments": ["BTC/USDT"]}
+  ],
+  "warmFrom": 300
+}
+```
+
+| `warmFrom` | What happens |
+|---|---|
+| omitted | The platform replays a short period of its own choosing. |
+| `0` | No replay. The run starts at its start: it delivers its first signal as soon as it is running, with indicators that start empty and a first bar of a window that can be partial. |
+| `1` to `3600` | The strategy sees that many seconds of the feed before the start, then carries on live. |
+
+- It is an integer number of seconds from `0` to `3600` (one hour). Anything else (a negative number, one
+  above `3600`, a fraction, text) is refused with `400`.
+- Choose it for what the strategy needs. A strategy with long indicator periods should leave it out, or ask
+  for at least the time its slowest indicator takes to fill: with `0`, its first values are computed on
+  whatever has arrived since the start.
+- It can be set **only when the run is started**. It is not one of the parameters `PUT /live/{runId}/params`
+  accepts, and it cannot be added later: to change it, stop the run and start it again.
+- The run reports it back as `warmFrom` when you read it (the start response, `GET /strategy/{strategyId}/live`
+  and `GET /live/{runId}`), and as `null` when you did not ask for one.
+
 ## Listing your runs
 
 `GET /live` (needs a Bearer token) returns every run you have started — any `stage`, any

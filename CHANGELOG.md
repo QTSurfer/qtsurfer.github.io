@@ -7,6 +7,14 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.18] — 2026-10-05
+
+### Added
+
+- `warmFrom` on `POST /strategy/{strategyId}/live`: how many seconds before its start a run replays the market feed from, so its indicators and windows have history when the first live tick arrives. An integer from `0` to `3600`; `0` replays nothing, so the run delivers its first signal as soon as it is running, with indicators that start empty and a first bar that can be partial; omitted, the platform replays a short period of its own choosing, as before. It can be set only when the run is started (it is not a parameter of `PUT /live/{runId}/params`), and any other value is `400`.
+- A live run reports the `warmFrom` it was started with (an integer, or `null` when none was asked for) wherever the rest of its state is returned: the start response, `GET /strategy/{strategyId}/live`, `GET /live/{runId}` and the stop response.
+- The "Live execution" guide has a section on it, "Warming up".
+
 ## [0.128.17] — 2026-10-03
 
 ### Added
