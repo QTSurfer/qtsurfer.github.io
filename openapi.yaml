@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.17
+  version: 0.128.18
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2356,6 +2356,14 @@ paths:
         (it overrides `getExecutionCallback()`) has no other execution venue, so it cannot start
         without a `paper` block.
 
+        **Warming up.** Pass `warmFrom` to choose how many seconds before its start the run replays the market
+        feed from, so that its indicators and windows have history when the first live tick arrives. `0` replays
+        nothing: the run delivers its first signal as soon as it is running, but its indicators start empty and the
+        first bar of a window can be partial. Omitted, the platform replays from the start of the current 15-minute
+        block, which is between 0 and 900 seconds before the run's start, so the first bar of a 15-minute window is
+        complete. The value in effect, yours or the platform's, comes back as `warmFrom`. It can be set only here,
+        when the run is started. See the "Live execution" guide, "Warming up".
+
         **A plain WebSocket stream.** Pass `stream: true` to get a secret URL for this run's signals that a simple
         client, or a service that passes them on to others, can open as an ordinary WebSocket, from the sandbox stage
         on. The URL is in the response (`streamUrl`) and in `GET /strategy/{strategyId}/live`; treat it like a
@@ -2411,7 +2419,7 @@ paths:
                 relay: false
                 startedAtMs: 1758330000000
         '400':
-          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events. A `relay` or `stream` that is not `true` or `false`, or a `stream` where streams are not available yet.
+          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events. A `relay` or `stream` that is not `true` or `false`, or a `stream` where streams are not available yet. A `warmFrom` that is not an integer from 0 to 3600.
           content:
             application/json:
               schema:
@@ -5655,6 +5663,22 @@ components:
             `streamUrl` in the response to this call. Available from the `sandbox` stage on, on the plans that may
             broadcast; any other plan gets `429`. It can be asked for **only when the run is started** (not added
             later), and it also turns `relay` on. See the "Live execution" guide, "A plain WebSocket stream of a run".
+        warmFrom:
+          type: integer
+          minimum: 0
+          maximum: 3600
+          description: |
+            How many seconds before the run's start to replay the market feed from, so the strategy's indicators and
+            windows have history when its first live tick arrives. `0` replays nothing: the run delivers its first
+            signal as soon as it is running, but its indicators start empty and the first bar of a window can be
+            partial. Omitted, the platform replays from the start of the current 15-minute block: between 0 and 900
+            seconds before the run's start, depending on when it starts (0 if it starts exactly on a quarter hour),
+            so the first bar of a 15-minute window is complete. The value in effect, the one you sent or the one the
+            platform chose, is reported back as `warmFrom` on the run. Signals about the replayed time
+            are not pushed on the run's channel or stream: they describe events from before the run started.
+            It can be set **only when the run is started**: it is not a parameter of `PUT /live/{runId}/params`, and
+            changing it means stopping the run and starting it again. Anything that is not an integer from 0 to 3600
+            is `400`. See the "Live execution" guide, "Warming up".
         name:
           type: string
         description:
@@ -5798,6 +5822,11 @@ components:
         relay:
           type: boolean
           description: Whether this run's signals are relayed over the WebSocket channel described in the "Live execution" guide. It is the value requested at start, in either stage.
+        warmFrom:
+          type: ['integer', 'null']
+          minimum: 0
+          maximum: 3600
+          description: The `warmFrom` in effect for this run, in seconds. It is the one requested when the run was started or, when none was, the one the platform chose (the distance from the run's start back to the start of the current 15-minute block, 0 to 900). It is `null` only for a run started before the field existed. It never changes while the run exists.
         startedAtMs:
           type: integer
           format: int64
