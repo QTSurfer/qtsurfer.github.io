@@ -182,19 +182,22 @@ replay from. Set it in the body of `POST /strategy/{strategyId}/live`, next to `
 
 | `warmFrom` | What happens |
 |---|---|
-| omitted | The platform replays a short period of its own choosing. |
+| omitted | The platform replays from the start of the current 15-minute block: between 0 and 900 seconds before the run's start, depending on when it starts (0 if it starts exactly on a quarter hour). The first bar of a 15-minute window is then complete. |
 | `0` | No replay. The run starts at its start: it delivers its first signal as soon as it is running, with indicators that start empty and a first bar of a window that can be partial. |
 | `1` to `3600` | The strategy sees that many seconds of the feed before the start, then carries on live. |
 
 - It is an integer number of seconds from `0` to `3600` (one hour). Anything else (a negative number, one
   above `3600`, a fraction, text) is refused with `400`.
-- Choose it for what the strategy needs. A strategy with long indicator periods should leave it out, or ask
-  for at least the time its slowest indicator takes to fill: with `0`, its first values are computed on
-  whatever has arrived since the start.
+- Choose it for what the strategy needs. A strategy with long indicator periods should ask for at least the
+  time its slowest indicator takes to fill: with `0`, its first values are computed on whatever has arrived
+  since the start, and left out, the replay can be as short as `0` seconds (a run that starts exactly on a
+  quarter hour) and never longer than `900`.
 - It can be set **only when the run is started**. It is not one of the parameters `PUT /live/{runId}/params`
   accepts, and it cannot be added later: to change it, stop the run and start it again.
-- The run reports it back as `warmFrom` when you read it (the start response, `GET /strategy/{strategyId}/live`
-  and `GET /live/{runId}`), and as `null` when you did not ask for one.
+- The run reports the value in effect back as `warmFrom` when you read it (the start response,
+  `GET /strategy/{strategyId}/live` and `GET /live/{runId}`): the one you asked for or, if you left it out, the
+  one the platform chose. Send that number to get the same amount of warm-up in another run. It is `null`
+  only for a run started before this field existed.
 
 ## Listing your runs
 
