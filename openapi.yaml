@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.18
+  version: 0.128.19
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -5771,7 +5771,10 @@ components:
     LiveRun:
       type: object
       required: [strategyId, runId, visibility, stage, state, desired, sources, params, paramsVersion, relay, startedAtMs]
-      description: A live run's full state, as returned by starting, reading, or stopping it through its strategy.
+      description: >-
+        A live run's full state, as returned by stopping it through its strategy, and the base of the representations
+        returned by starting and by reading it. `warmFrom` is declared by those two (`LiveRunWithStream` and
+        `LiveRunDetail`) and not here, because the response to stopping a run does not carry it.
       properties:
         strategyId:
           $ref: '#/components/schemas/strategyId'
@@ -5822,11 +5825,6 @@ components:
         relay:
           type: boolean
           description: Whether this run's signals are relayed over the WebSocket channel described in the "Live execution" guide. It is the value requested at start, in either stage.
-        warmFrom:
-          type: ['integer', 'null']
-          minimum: 0
-          maximum: 3600
-          description: The `warmFrom` in effect for this run, in seconds. It is the one requested when the run was started or, when none was, the one the platform chose (the distance from the run's start back to the start of the current 15-minute block, 0 to 900). It is `null` only for a run started before the field existed. It never changes while the run exists.
         startedAtMs:
           type: integer
           format: int64
@@ -5882,26 +5880,40 @@ components:
             been refreshed for several refresh intervals: the platform has stopped updating them, which is
             worth checking against `state`. `false` otherwise. A run whose `processed` is flat is not stale;
             `progressedAtMs` is how to tell it apart.
+    WarmFrom:
+      type: ['integer', 'null']
+      minimum: 0
+      maximum: 3600
+      description: >-
+        The `warmFrom` in effect for this run, in seconds: the one requested when the run was started or, when none was,
+        the one the platform chose (the distance from the run's start back to the start of the current 15-minute block,
+        0 to 900). It is always present where a run carries it, and `null` only for a run started before the field
+        existed. It never changes while the run exists.
     LiveRunDetail:
       description: A run as returned by `GET /live/{runId}`, the full state of `LiveRun` plus when it last changed.
       allOf:
         - $ref: '#/components/schemas/LiveRun'
         - type: object
-          required: [updatedAtMs]
+          required: [updatedAtMs, warmFrom]
           properties:
+            warmFrom:
+              $ref: '#/components/schemas/WarmFrom'
             updatedAtMs:
               type: integer
               format: int64
               description: Epoch milliseconds of the run's last change, from any cause. It only moves forward, so of two reads of the same run the one with the larger value is the newer.
     LiveRunWithStream:
       description: |
-        A run as `LiveRun` describes it, plus its `streamUrl` when it has one. It is what **starting a run** and
+        A run as `LiveRun` describes it, plus its `warmFrom` (always present) and its `streamUrl` when it has one. It is what **starting a run** and
         `GET /strategy/{strategyId}/live` return: your own run, read with your own credentials. Stopping a run
-        and `GET /live/{runId}` return `LiveRun`, which never carries the URL.
+        returns `LiveRun`, which carries neither `warmFrom` nor the URL, and `GET /live/{runId}` returns `LiveRunDetail`, which carries `warmFrom` and never the URL.
       allOf:
         - $ref: '#/components/schemas/LiveRun'
         - type: object
+          required: [warmFrom]
           properties:
+            warmFrom:
+              $ref: '#/components/schemas/WarmFrom'
             streamUrl:
               type: string
               format: uri
