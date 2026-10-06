@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.24] — 2026-10-07
+
+### Changed
+
+- A cancelled sweep reports `CANCELLED` as soon as the request is accepted, before runs that were already in flight have finished: `progress.pendingShards` is above `0` and the leaderboard can still grow. A client that needs the final rows reads until `pendingShards` is `0`. Described on `DELETE .../executeSweep/{requestId}/{sweepId}`, on `pendingShards`, and in the sweep guide.
+
 ## [0.128.23] — 2026-10-06
 
 ### Added

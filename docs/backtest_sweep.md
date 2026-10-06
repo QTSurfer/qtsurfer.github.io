@@ -184,7 +184,7 @@ retrying, or not yet started.
 |---|---|
 | `done`, `total` | rows/units completed vs. total |
 | `aborted` | individual **runs** that executed and aborted (row-level) |
-| `shardCount`, `pendingShards` | total and still-pending shards |
+| `shardCount`, `pendingShards` | total and still-pending shards. On a cancelled sweep, `pendingShards: 0` is what says the in-flight runs have finished — see [`CANCELLED` comes before the sweep has drained](#cancelled-comes-before-the-sweep-has-drained) |
 | `failedShards` | whole shards/folds that failed and will **not** be retried — distinct from `aborted`, which counts bad runs, not missing units |
 | `retrying` | units whose last attempt hit a transient error and are queued to retry — not a failure yet |
 | `notStarted` | units that haven't reported anything; persistent alongside a rising `stalledSeconds` is worth investigating |
@@ -394,6 +394,21 @@ Requests cancellation between parameter vectors — already-completed rows remai
 ```
 
 Errors: `404` sweep not found.
+
+### `CANCELLED` comes before the sweep has drained
+
+Cancelling is a request, not a stop. The sweep reports `status: CANCELLED` (and `state.status:
+Aborted`) as soon as the request is accepted, while runs that were already in flight keep going
+until they finish. In that window:
+
+- `progress.pendingShards` is above `0`;
+- `progress.done` and the leaderboard can still grow after you first read `CANCELLED`;
+- the rows that arrive late are real, finished runs, not partial ones.
+
+So `CANCELLED` alone does not mean the leaderboard is complete. If you store the rows, or treat
+every run you do not have as "not run", keep reading until `progress.pendingShards` is `0`. The wait
+is bounded by how long a single run takes, so give it a generous limit rather than waiting forever.
+A sweep that ends `PARTIAL` is already terminal when it reports it; this applies to `CANCELLED`.
 
 ## Visualizing a winner: equity curve
 
