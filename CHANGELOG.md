@@ -7,6 +7,19 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.22] — 2026-10-06
+
+### Added
+
+- `instruments` can be left out of the `sources` of a live run, and the request has its own schema for it (`LiveSourceRequest`). A QTScript strategy can declare which instruments it accepts with an `instruments` line in its source: when the compilation of the strategy records that selection as a list of pairs, a start that leaves `instruments` out, or sends `["*"]`, takes that list; otherwise the run reads every instrument the exchange and segment offer. A list you send is taken as sent.
+- An entry of `instruments` can have a `*` on one side: `*/USDT` is every pair quoted in USDT and `BTC/*` is BTC against every quote.
+
+### Changed
+
+- The `instruments` of the run (`LiveSource`) are the instruments it actually reads, so a run started without them shows the list it got.
+- Against a plan's limit, a list with an entry that has a `*` on a side counts like `["*"]`; the other entries are counted one by one.
+- `[]` and `null` for `instruments` are refused with `400`.
+
 ## [0.128.21] — 2026-10-06
 
 ### Changed

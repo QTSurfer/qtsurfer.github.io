@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.21
+  version: 0.128.22
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2338,6 +2338,12 @@ paths:
         (fastest) cadence available for the exchange — today that is 1 tick/second on every
         supported exchange; choosing among several cadences is not offered yet.
 
+        `instruments` can be left out. A QTScript strategy can declare which instruments it accepts with an `instruments`
+        line in its source; when the compilation of the strategy records that selection as a list of pairs, a
+        start that leaves `instruments` out, or sends `["*"]`, takes that list, and otherwise the run reads every
+        instrument the exchange/segment offers. A list you send is taken as sent. Either side of an entry can be `*`
+        (`*/USDT`). The instruments the run reads come back in `sources`. See the "Live execution" guide, "Sources".
+
         `params` is passed straight through to the strategy at start — the same free-form object
         `POST /strategy/{strategyId}/validate` and the backtest endpoints already accept. To change
         a parameter **while the run is live**, use `PUT /live/{runId}/params` instead; this endpoint
@@ -2419,7 +2425,7 @@ paths:
                 relay: false
                 startedAtMs: 1758330000000
         '400':
-          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events. A `relay` or `stream` that is not `true` or `false`, or a `stream` where streams are not available yet. A `warmFrom` that is not an integer from 0 to 3600.
+          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events. A `relay` or `stream` that is not `true` or `false`, or a `stream` where streams are not available yet. A `warmFrom` that is not an integer from 0 to 3600. An `instruments` that is empty or `null`.
           content:
             application/json:
               schema:
@@ -5630,9 +5636,50 @@ components:
             type: string
           example: [BTC/USDT]
           description: >-
-            Instrument symbols written as `BASE/QUOTE`, or `["*"]` for every instrument the exchange/segment offers
-            (tier-gated). Symbols are not case-sensitive and spaces around them are ignored, so `btc/usdt` and
-            `BTC/USDT` are the same instrument. An entry that is not of the form `BASE/QUOTE` makes the run fail when it starts.
+            The instruments the run reads. For a run started with a list, that list as sent; for one started without
+            `instruments`, or with `["*"]`, what the start resolved: the list of pairs the compilation of the strategy
+            records as the instruments it accepts, when it records one, or `["*"]` for every instrument the
+            exchange/segment offers (tier-gated). An entry is written `BASE/QUOTE` and either side can be `*` to mean
+            any, as in `*/USDT`. Symbols are not case-sensitive and spaces around them are ignored, so `btc/usdt` and
+            `BTC/USDT` are the same instrument.
+    LiveSourceRequest:
+      type: object
+      required: [venueType, exchange, segment, type]
+      description: >-
+        One market feed to start a live run on. Exactly one entry per run today. It is `LiveSource` as you ask for it:
+        the only difference is that `instruments` can be left out.
+      properties:
+        venueType:
+          type: string
+          example: cx
+          description: Venue category. `cx` (centralized exchange) is the only one live runs support today.
+        exchange:
+          type: string
+          example: binance
+        segment:
+          type: string
+          example: spot
+        type:
+          type: string
+          enum: [ticker, kline]
+          description: 'Both `ticker` and `kline` connect to the lightest (fastest) cadence available for the exchange — today, 1 tick/second on every supported exchange. Choosing a specific cadence is not offered yet.'
+        instruments:
+          type: array
+          items:
+            type: string
+          example: [BTC/USDT]
+          description: >-
+            Which instruments the run reads. A QTScript strategy can declare which instruments it accepts with an `instruments`
+            line in its source. When the compilation of the strategy records that selection as a list of pairs,
+            leaving `instruments` out, or sending `["*"]`, takes that list; otherwise the run reads every instrument the
+            exchange/segment offers. A list of instruments is taken as sent, and `[]` and `null` are refused with `400`.
+            An entry is written `BASE/QUOTE`; either side can be `*` to mean any, so `*/USDT` is every pair quoted in USDT
+            and `BTC/*` is BTC against every quote. Entries are not case-sensitive and spaces around them are ignored, so
+            `btc/usdt` and `BTC/USDT` are the same instrument. An entry that is not of that form (no `/`, an empty side,
+            a `.` or a space inside a side, or a `*` mixed with other characters of a side) makes the run fail when it
+            starts. Plan limits: a list with an entry that has a `*` on a side counts like `["*"]` and only plans that
+            include the wildcard accept it; the other entries are counted one by one. The instruments the run actually
+            reads come back in the run's `sources`.
     StartLiveRequest:
       type: object
       required: [sources]
@@ -5642,7 +5689,7 @@ components:
           minItems: 1
           maxItems: 1
           items:
-            $ref: '#/components/schemas/LiveSource'
+            $ref: '#/components/schemas/LiveSourceRequest'
         params:
           type: object
           description: Strategy parameters to start with. Opaque key/value pairs — see this strategy's own `declaredProperties` (from `POST /strategy`) for the keys it accepts.
