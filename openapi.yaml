@@ -561,7 +561,7 @@ paths:
 
         The source is either **Java** — a class extending a strategy base class — or **QTScript**
         (beta), a compact strategy language whose braced bodies are plain Java. QTScript source
-        begins with the `strategy` keyword — whitespace and comments (`//` or `/* */`) before it
+        begins with the `strategy` keyword — whitespace and line or block comments before it
         are ignored — and that is how the two are told apart: there is no separate endpoint and
         no header to set. Once registered, a strategy is used the same way
         whichever language it was written in.
@@ -2342,7 +2342,7 @@ paths:
         line in its source; when the compilation of the strategy records that selection as a list of pairs, a
         start that leaves `instruments` out, or sends `["*"]`, takes that list, and otherwise the run reads every
         instrument the exchange/segment offers. A list you send is taken as sent. Either side of an entry can be `*`
-        (`*/USDT`). The instruments the run reads come back in `sources`. See the "Live execution" guide, "Sources".
+        (any base paired with USDT). The instruments the run reads come back in `sources`. See the "Live execution" guide, "Sources".
 
         `params` is passed straight through to the strategy at start — the same free-form object
         `POST /strategy/{strategyId}/validate` and the backtest endpoints already accept. To change
@@ -3049,8 +3049,8 @@ paths:
             type: string
           description: |
             Narrow to one or more instruments. Omitted, or `*`, returns every instrument the run
-            covers. Accepts a single pair (`BTC/USDT`), either half as a wildcard (`*/USDT` for any
-            base against that quote, `BTC/*` for that base against any quote), or a comma-separated
+            covers. Accepts a single pair (`BTC/USDT`), either half as a wildcard (any base paired
+            with that quote, or BTC paired with any quote), or a comma-separated
             list of pairs (`BTC/USDT,ETH/EUR`). Symbols are matched exactly, case included — pass
             them as this API reports them.
         - name: type
@@ -5640,7 +5640,7 @@ components:
             `instruments`, or with `["*"]`, what the start resolved: the list of pairs the compilation of the strategy
             records as the instruments it accepts, when it records one, or `["*"]` for every instrument the
             exchange/segment offers (tier-gated). An entry is written `BASE/QUOTE` and either side can be `*` to mean
-            any, as in `*/USDT`. Symbols are not case-sensitive and spaces around them are ignored, so `btc/usdt` and
+            any, such as any base paired with USDT. Symbols are not case-sensitive and spaces around them are ignored, so `btc/usdt` and
             `BTC/USDT` are the same instrument.
     LiveSourceRequest:
       type: object
@@ -5673,8 +5673,8 @@ components:
             line in its source. When the compilation of the strategy records that selection as a list of pairs,
             leaving `instruments` out, or sending `["*"]`, takes that list; otherwise the run reads every instrument the
             exchange/segment offers. A list of instruments is taken as sent, and `[]` and `null` are refused with `400`.
-            An entry is written `BASE/QUOTE`; either side can be `*` to mean any, so `*/USDT` is every pair quoted in USDT
-            and `BTC/*` is BTC against every quote. Entries are not case-sensitive and spaces around them are ignored, so
+            An entry is written `BASE/QUOTE`; either side can be `*` to mean any: any base can be paired with USDT,
+            and BTC can be paired with any quote. Entries are not case-sensitive and spaces around them are ignored, so
             `btc/usdt` and `BTC/USDT` are the same instrument. An entry that is not of that form (no `/`, an empty side,
             a `.` or a space inside a side, or a `*` mixed with other characters of a side) makes the run fail when it
             starts. Plan limits: a list with an entry that has a `*` on a side counts like `["*"]` and only plans that
