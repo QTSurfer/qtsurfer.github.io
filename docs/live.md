@@ -418,8 +418,46 @@ WebSocket frame may hold several replies, one JSON object per line. A browser pa
 another site's origin is refused at the WebSocket upgrade (`403`); a client that sends no `Origin`
 header, such as a server-side program or an SDK, is not affected.
 
-After a disconnect, the channel does not replay what you missed: read it back with
-`GET /live/{runId}/signals` (below), deduplicating on `signalId`.
+After a disconnect, the channel does not replay what you missed on its own: read it back with `history`
+while the run is in the `sandbox` stage ([next section](#reading-earlier-signals-over-the-connection)), or
+with `GET /live/{runId}/signals` (below) in either stage, deduplicating on `signalId`.
+
+### Reading earlier signals over the connection
+
+A client that connects late, or that was disconnected for a moment, can read the signals a run in the
+`sandbox` stage has just produced from the same connection, without a REST call. Send `history` on a
+channel you are subscribed to:
+```json
+{"id": 5, "history": {"channel": "sig:6TzAPiPpsOWwBLdLBZCxwH", "limit": 300}}
+```
+It answers with the signals, oldest first, each with the `offset` it was pushed with, and the `epoch` and
+the newest `offset` the channel holds:
+```json
+{"id": 5, "history": {"publications": [{"data": {"v": 1, "signalId": "…", …}, "offset": 41}, {"data": {"v": 1, "signalId": "…", …}, "offset": 42}], "epoch": "SQRGfEAq", "offset": 42}}
+```
+
+- **What it holds.** The signals of the `sandbox` stage only: the 300 most recent, whatever their age,
+  until 5 minutes after the run's last `sandbox` signal, when it empties. Nothing from the `live` stage is
+  kept: once a run is promoted the history stops growing, and it empties 5 minutes after the last
+  `sandbox` signal. To read further back, or any `live` signal, use `GET /live/{runId}/signals` (below).
+- **Nothing is replayed on its own.** Subscribing, and resubscribing after a disconnect, never delivers
+  past signals; `history` is the only way to read them.
+- **Who can read it.** A connection that is subscribed to the channel; while a run is in the `sandbox`
+  stage that is its owner. A connection that is not subscribed gets error `103`.
+- **How to use it.** Subscribe first, so that nothing is missed, then call `history` with `limit` `300`.
+  The signals pushed meanwhile and the ones in the reply overlap: keep one copy per `signalId`.
+- **After a disconnect.** Resubscribe, then call `history` with `since`: the `offset` of the last signal
+  you have and the `epoch` of a previous `history` reply:
+  ```json
+  {"id": 6, "history": {"channel": "sig:6TzAPiPpsOWwBLdLBZCxwH", "limit": 300, "since": {"offset": 42, "epoch": "SQRGfEAq"}}}
+  ```
+  The reply holds only the signals after that position. A client that has not called `history` yet has
+  no `epoch`: call it once without `since`.
+- **When the history is lost.** If the platform loses the channel's history (for example when the
+  real-time service restarts) its `epoch` changes, and a `since` with the old one answers
+  `{"id": 6, "error": {"code": 112, "message": "unrecoverable position"}}`. Call `history` again without
+  `since`; what was produced before the loss is only available from `GET /live/{runId}/signals`.
+- `limit` `0` returns no signals, only the position (`epoch` and `offset`).
 
 ### Signal shape
 
