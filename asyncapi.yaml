@@ -1,7 +1,7 @@
 asyncapi: 3.1.0
 info:
   title: QTSurfer Live Execution WebSocket
-  version: 0.2.1
+  version: 0.3.0
   description: |
     The WebSocket side of Live Execution: receive a live run's signals as they happen, and change its
     parameters over the same connection. The REST side (starting, reading and stopping runs, minting
@@ -30,8 +30,9 @@ info:
     1. `POST /v1/live/token` on the REST API (JWT bearer) returns a short-lived `token`.
     2. Open the socket and send `connect` with that token, as the first frame.
     3. `subscribe` to `sig:<runId>` to receive the run's signals as `push` frames.
-    4. `rpc` with method `live.params` to change the run's parameters (owner only).
-    5. Answer every server ping (`{}`) with a pong (`{}`), and `refresh` the token before `ttl` runs out.
+    4. `history` to read the signals the channel of a run in the `sandbox` stage still holds, from before you subscribed or from while you were disconnected.
+    5. `rpc` with method `live.params` to change the run's parameters (owner only).
+    6. Answer every server ping (`{}`) with a pong (`{}`), and `refresh` the token before `ttl` runs out.
 
     ## Origins
 
@@ -70,6 +71,10 @@ channels:
         $ref: '#/components/messages/Subscribe'
       subscribeReply:
         $ref: '#/components/messages/SubscribeReply'
+      history:
+        $ref: '#/components/messages/History'
+      historyReply:
+        $ref: '#/components/messages/HistoryReply'
       liveParams:
         $ref: '#/components/messages/LiveParamsCall'
       liveParamsReply:
@@ -117,6 +122,23 @@ operations:
         $ref: '#/channels/connection'
       messages:
         - $ref: '#/channels/connection/messages/subscribeReply'
+        - $ref: '#/channels/connection/messages/errorReply'
+  history:
+    action: send
+    title: Read the signals a run's channel still holds
+    summary: >-
+      Allowed on a channel you are subscribed to; otherwise error 103. The channel keeps the most
+      recent signals of the run's `sandbox` stage for a few minutes and nothing of its `live`
+      stage. A position (`since`) from a sequence the channel no longer has is error 112.
+    channel:
+      $ref: '#/channels/connection'
+    messages:
+      - $ref: '#/channels/connection/messages/history'
+    reply:
+      channel:
+        $ref: '#/channels/connection'
+      messages:
+        - $ref: '#/channels/connection/messages/historyReply'
         - $ref: '#/channels/connection/messages/errorReply'
   liveParams:
     action: send
@@ -226,6 +248,85 @@ components:
         - payload:
             id: 2
             subscribe: {}
+    History:
+      name: history
+      title: history command
+      payload:
+        $ref: '#/components/schemas/HistoryCommand'
+      examples:
+        - payload:
+            id: 5
+            history:
+              channel: 'sig:6TzAPiPpsOWwBLdLBZCxwH'
+              limit: 300
+        - payload:
+            id: 6
+            history:
+              channel: 'sig:6TzAPiPpsOWwBLdLBZCxwH'
+              limit: 300
+              since:
+                offset: 42
+                epoch: 'SQRGfEAq'
+    HistoryReply:
+      name: historyReply
+      title: history reply
+      payload:
+        $ref: '#/components/schemas/HistoryReplyFrame'
+      examples:
+        - payload:
+            id: 5
+            history:
+              publications:
+                - data:
+                    v: 1
+                    signalId: '01J8Z6Y3N6QK2B7Q9W4E5R6T7X'
+                    runId: 6TzAPiPpsOWwBLdLBZCxwH
+                    stage: sandbox
+                    paramsVersion: 2
+                    type: hint
+                    kind: BUY
+                    eventTsMs: 1758330010000
+                    emittedAtMs: 1758330010040
+                    instrument:
+                      exchange: binance
+                      segment: spot
+                      symbol: BTC/USDT
+                    order:
+                      orderKind: MARKET
+                      price: null
+                      amount: null
+                      stopPrice: null
+                      trailPct: null
+                    data: {}
+                    regenerated: false
+                    digest: '4b1d…'
+                  offset: 41
+                - data:
+                    v: 1
+                    signalId: '01J8Z6Y3N6QK2B7Q9W4E5R6T7Y'
+                    runId: 6TzAPiPpsOWwBLdLBZCxwH
+                    stage: sandbox
+                    paramsVersion: 2
+                    type: hint
+                    kind: SELL
+                    eventTsMs: 1758330012000
+                    emittedAtMs: 1758330012040
+                    instrument:
+                      exchange: binance
+                      segment: spot
+                      symbol: BTC/USDT
+                    order:
+                      orderKind: MARKET
+                      price: null
+                      amount: null
+                      stopPrice: null
+                      trailPct: null
+                    data: {}
+                    regenerated: false
+                    digest: '9f2c…'
+                  offset: 42
+              epoch: 'SQRGfEAq'
+              offset: 42
     LiveParamsCall:
       name: liveParams
       title: live.params call
@@ -295,6 +396,20 @@ components:
             error:
               code: 404
               message: no such run
+        - name: historyNotSubscribed
+          summary: history on a channel this connection is not subscribed to.
+          payload:
+            id: 5
+            error:
+              code: 103
+              message: permission denied
+        - name: historyPositionLost
+          summary: history with a since whose epoch the channel no longer has.
+          payload:
+            id: 6
+            error:
+              code: 112
+              message: unrecoverable position
     SignalPush:
       name: signalPush
       title: signal
@@ -433,7 +548,70 @@ components:
           type: object
           description: >-
             Success. It may carry protocol fields about stream position; missed signals are not
-            replayed on this channel — read them with `GET /v1/live/{runId}/signals`.
+            replayed on this channel — read them with `history` while the run is in the `sandbox`
+            stage, or with `GET /v1/live/{runId}/signals` in either stage.
+    HistoryCommand:
+      type: object
+      required: [id, history]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        history:
+          type: object
+          required: [channel]
+          properties:
+            channel:
+              $ref: '#/components/schemas/SignalChannel'
+            limit:
+              type: integer
+              minimum: 0
+              description: >-
+                How many signals to return, oldest first. The channel keeps at most 300, so `300`
+                reads everything it holds. With `0` the reply carries no signals, only the position
+                (`epoch` and `offset`).
+            since:
+              type: object
+              required: [offset, epoch]
+              description: >-
+                Return only the signals after this position: the `offset` of the last signal you
+                have and the `epoch` of an earlier `history` reply. Without `since` the reply starts
+                at the oldest signal the channel holds.
+              properties:
+                offset:
+                  type: integer
+                epoch:
+                  type: string
+    HistoryReplyFrame:
+      type: object
+      required: [id, history]
+      properties:
+        id:
+          $ref: '#/components/schemas/CommandId'
+        history:
+          type: object
+          required: [publications, epoch, offset]
+          properties:
+            publications:
+              type: array
+              description: The signals, oldest first. Empty when the channel holds none after `since`, or when `limit` is `0`.
+              items:
+                type: object
+                required: [data, offset]
+                properties:
+                  data:
+                    $ref: './openapi.yaml#/components/schemas/LiveSignal'
+                  offset:
+                    type: integer
+                    description: The same `offset` the signal carried when it was pushed.
+            epoch:
+              type: string
+              description: >-
+                Identifies the sequence the offsets belong to. It changes if the platform loses the
+                channel's history, for example when the real-time service restarts; a `since` that
+                carries another epoch is error 112.
+            offset:
+              type: integer
+              description: The `offset` of the newest signal the channel holds. Informational.
     LiveParamsRequest:
       type: object
       required: [runId, params]
@@ -512,7 +690,8 @@ components:
             code:
               type: integer
               description: |
-                - `103` — `subscribe`: the run is not yours and is not public and live (a private run, a public run still in the sandbox, or one that does not exist).
+                - `103` — `subscribe`: the run is not yours and is not public and live (a private run, a public run still in the sandbox, or one that does not exist). `history`: you are not subscribed to the channel.
+                - `112` — `history`: `since` carries an `epoch` the channel no longer has; call `history` again without `since`.
                 - `400` — `live.params`: malformed call, empty `params`, or a key the strategy does not declare.
                 - `404` — `live.params`: no such run of yours.
                 - `409` — `live.params`: this run's compiled strategy has no record of the parameters it declares; register the strategy again with `POST /strategy` and start a new run.
@@ -541,7 +720,9 @@ components:
                   $ref: './openapi.yaml#/components/schemas/LiveSignal'
                 offset:
                   type: integer
-                  description: Position in the channel's stream. Informational; dedupe on `data.signalId`.
+                  description: >-
+                    Position in the channel's stream; the signal carries the same `offset` in a `history` reply.
+                    To drop a signal you already have, dedupe on `data.signalId`.
     UnsubscribePushFrame:
       type: object
       required: [push]

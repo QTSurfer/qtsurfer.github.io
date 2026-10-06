@@ -7,6 +7,16 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.23] — 2026-10-06
+
+### Added
+
+- `history` on the WebSocket connection: while a run is in the `sandbox` stage, a client subscribed to its `sig:<runId>` channel can read the signals the channel still holds, oldest first, each with the `offset` it was pushed with, and carry on from a position (`since`: `offset` and `epoch`). The channel keeps the 300 most recent signals of the `sandbox` stage, until 5 minutes after the last one, and nothing of the `live` stage. A connection that is not subscribed gets error `103`, and a `since` with an `epoch` the channel no longer has gets `112`. Described in `asyncapi.yaml` (operation `history`, `HistoryCommand`, `HistoryReplyFrame`) and in the new section of `docs/live.md`, "Reading earlier signals over the connection".
+
+### Changed
+
+- The `subscribe` reply, the `offset` of a pushed signal and the `103` code of `asyncapi.yaml` say how they relate to `history`; subscribing still never delivers past signals on its own.
+
 ## [0.128.22] — 2026-10-06
 
 ### Added
