@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.21] — 2026-10-06
+
+### Changed
+
+- `sources[].instruments` says how symbols are read: they are not case-sensitive and spaces around them are ignored (`btc/usdt` and `BTC/USDT` are the same instrument); an entry that is not of the form `BASE/QUOTE` makes the run fail when it starts. The guide's *Sources* section says the same. No schema change.
+
 ## [0.128.20] — 2026-10-06
 
 ### Changed
