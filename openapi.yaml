@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.23
+  version: 0.128.24
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1197,7 +1197,16 @@ paths:
     delete:
       operationId: cancelSweep
       summary: Cancel a running parameter sweep
-      description: Requests cancellation between parameter vectors. Completed rows remain readable.
+      description: |
+        Requests cancellation between parameter vectors. Completed rows remain readable.
+
+        Cancelling is a request, not a stop: the sweep reports `status: CANCELLED` (and
+        `state.status: Aborted`) as soon as the request is accepted, while runs that were already
+        in flight are still finishing. Until they have, `progress.pendingShards` is above `0`, and
+        `progress.done` and the leaderboard can still grow after `CANCELLED` is first seen. A client
+        that needs the final set of rows, to store them or to mark the rest as not run, keeps
+        reading until `progress.pendingShards` is `0`; the wait is bounded by how long one run
+        takes.
       parameters:
         - name: exchangeId
           in: path
@@ -4181,6 +4190,10 @@ components:
           type: integer
         pendingShards:
           type: integer
+          description: >-
+            Shards (or folds) that have not finished yet. On a cancelled sweep, `0` is what says
+            every run that was in flight has finished and the leaderboard is complete: `CANCELLED`
+            is reported before that.
         failedShards:
           type: integer
           format: int64
