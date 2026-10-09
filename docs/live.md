@@ -35,13 +35,41 @@ A run that passes is promoted to `live` automatically when the 24 hours are up. 
 separate "promote" call and nothing for you to do while you wait. A run that does not pass is not
 promoted, and keeps running in the sandbox.
 
+### Starting again does not repeat the trial
+
+A strategy that has been through the trial once does not go through it again. When you stop a run
+that was promoted and start the strategy again, the new run begins in `live` at once, with no
+24-hour wait. That holds when an earlier run of yours of **the same compiled strategy** was
+promoted, and none of that compilation's runs was stopped for using more resources than allowed.
+The parameters, sources and instruments of the new run may differ from the earlier one. If you submit
+the strategy again (`POST /strategy`) it is compiled anew, and the new compilation goes through the
+sandbox like a first run.
+
+What changes for such a run:
+
+- `stage` is `LIVE` in the response to the start, and `gate` is there from the start: the verdict of
+  the earlier run it relies on, with `inheritedFrom` naming that run.
+- Nothing compares a second execution against it, because there is no trial. The platform stops a
+  live run that uses more resources than allowed, as it does any other (see
+  [State of a run](#state-of-a-run)).
+- If it is `public`, it is in the catalogue and open to anyone from its first signal.
+- It has no history on the connection: that is kept for the `sandbox` stage only (see
+  [Reading earlier signals over the connection](#reading-earlier-signals-over-the-connection)). Its
+  signals are still readable through `GET /live/{runId}/signals`.
+
+To get the sandbox anyway — to debug a strategy, or to read its signals back over the connection —
+start it with `"sandbox": true`. For a strategy that has not been through the trial the field changes
+nothing: it always starts in the sandbox.
+
 What you can watch while it waits, on `GET`/`PATCH` `.../live`:
 
-- `stage` is `SANDBOX` until the promotion and `LIVE` after it.
+- `stage` is `SANDBOX` until the promotion and `LIVE` after it (`LIVE` from the start for a strategy
+  that has already been through the trial, see above).
 - `state` is the run's health right now (see [State of a run](#state-of-a-run)).
 - `gate` is **absent for the whole trial** and appears when it ends, holding the verdict. An
   absent `gate` therefore means "the trial has not finished", never "nobody is evaluating the
   run". Its `passed` field is the verdict; the rest is diagnostic detail whose shape may change.
+  A run that started in `live` has it from the start (see above).
 
 ## State of a run
 
@@ -249,7 +277,7 @@ A run is `private` by default — only you can read its state or receive its sig
   strategy runs it;
 - its signal channel (see below) accepts a WebSocket subscription from anyone, not only you.
 
-`public` is what you ask for, and it takes effect when the run is promoted to `live`. Until then —
+`public` is what you ask for, and it takes effect when the run is in the `live` stage: when it is promoted, or at once for a run that starts there. Until then —
 while it is a `sandbox` trial — only you can read it, over the channel and through the read routes,
 and it is not listed in the catalogue; nothing you did needs repeating at promotion.
 
@@ -440,6 +468,8 @@ the newest `offset` the channel holds:
   until 5 minutes after the run's last `sandbox` signal, when it empties. Nothing from the `live` stage is
   kept: once a run is promoted the history stops growing, and it empties 5 minutes after the last
   `sandbox` signal. To read further back, or any `live` signal, use `GET /live/{runId}/signals` (below).
+  A run that starts in `live` (see [Starting again does not repeat the trial](#starting-again-does-not-repeat-the-trial))
+  never has a history here; start it with `"sandbox": true` if you need one.
 - **Nothing is replayed on its own.** Subscribing, and resubscribing after a disconnect, never delivers
   past signals; `history` is the only way to read them.
 - **Who can read it.** A connection that is subscribed to the channel; while a run is in the `sandbox`

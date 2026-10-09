@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.24
+  version: 0.128.25
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2332,12 +2332,22 @@ paths:
       operationId: startLive
       summary: Start a strategy on a live market feed
       description: |
-        Starts your strategy against a live market feed. A new run always begins in the **sandbox**
+        Starts your strategy against a live market feed. A new run begins in the **sandbox**
         stage — a short trial that compares an independent second execution against the first for
         agreement — before it is eligible for promotion to the live stage where it actually
         publishes signals other systems can act on. Poll `GET /strategy/{strategyId}/live` (or
         `PATCH`/`DELETE` `/live/{runId}` once you have the `runId`) to watch `stage` move from
         `SANDBOX` to `LIVE`.
+
+        A strategy that has already been through that trial does not go through it again. When an
+        earlier run of yours of the same compiled strategy was promoted to `LIVE`, and none of that
+        compilation's runs was stopped for using more resources than allowed, the new run starts in
+        `LIVE` at once: the response says `stage: LIVE` and carries the earlier verdict in `gate`.
+        The parameters, sources and instruments may differ from the earlier run. Submitting the
+        strategy again (`POST /strategy`) compiles it anew, and a new compilation goes through the
+        sandbox like a first run. Send `sandbox: true` to start in the sandbox anyway — for
+        example to read the run's signals back over the connection while you debug it, which the
+        live stage does not keep.
 
         Only one run per strategy at a time — starting again while one is already running is `409`;
         stop the current one first.
@@ -2411,7 +2421,7 @@ paths:
                 percentAmountToLock: 20
       responses:
         '201':
-          description: Started — the run's own state, in the sandbox stage, with its `streamUrl` when you asked for a stream
+          description: Started — the run's own state, in the sandbox stage (in the live stage for a strategy that has already been through the sandbox), with its `streamUrl` when you asked for a stream
           content:
             application/json:
               schema:
@@ -5711,11 +5721,20 @@ components:
           type: string
           enum: [private, public]
           default: private
-          description: A `public` run appears in `GET /live/public` and its signal channel accepts subscriptions from anyone, not only you — from the moment it is promoted to `live`. While it is a `sandbox` trial, `public` is only what you asked for, and only you can read it.
+          description: A `public` run appears in `GET /live/public` and its signal channel accepts subscriptions from anyone, not only you — from the moment it is in the `live` stage, which is when it is promoted or, for a run that starts there, at once. While it is a `sandbox` trial, `public` is only what you asked for, and only you can read it.
         relay:
           type: boolean
           default: false
           description: Request that this run's signals be relayed over its WebSocket channel, from its first signal — in the `sandbox` stage too, where only you can subscribe to it. See the "Live execution" guide.
+        sandbox:
+          type: boolean
+          default: false
+          description: |
+            Start in the `sandbox` stage even though an earlier run of yours already took this compiled strategy
+            through it. Without it, such a strategy starts in `LIVE` at once; with `true` it starts in `SANDBOX` like
+            a first run, which is how to read its signals back over the connection (`history`, kept for the
+            `sandbox` stage only) while you debug it. For a strategy that has not been through the sandbox it
+            changes nothing: it always starts there. Anything other than `true` or `false` is `400`.
         stream:
           type: boolean
           default: false
@@ -5854,7 +5873,7 @@ components:
         stage:
           type: string
           enum: [SANDBOX, LIVE]
-          description: 'A new run always starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up.'
+          description: 'A new run starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up. A run of a strategy that an earlier run of yours already took through the trial starts `LIVE`, unless you started it with `sandbox: true`.'
         state:
           type: string
           description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused, could not start or failed while running; `reason` says why) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'
@@ -5895,7 +5914,7 @@ components:
         gate:
           type: object
           additionalProperties: true
-          description: 'The sandbox trial''s promotion verdict. Absent for the whole 24-hour trial and present once it ends, so an absent `gate` means the trial has not finished. `passed` is the verdict; the rest is diagnostic detail whose shape is not yet stabilized as public API: treat it as opaque.'
+          description: 'The sandbox trial''s promotion verdict. Absent for the whole 24-hour trial and present once it ends, so an absent `gate` means the trial has not finished. A run that started in `LIVE` without a trial has it from the start: the verdict of the earlier run it relies on, with `inheritedFrom` naming that run. `passed` is the verdict; the rest is diagnostic detail whose shape is not yet stabilized as public API: treat it as opaque.'
         paper:
           allOf:
             - $ref: '#/components/schemas/LivePaperConfig'
@@ -6047,7 +6066,7 @@ components:
         stage:
           type: string
           enum: [SANDBOX, LIVE]
-          description: 'A new run always starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up.'
+          description: 'A new run starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up. A run of a strategy that an earlier run of yours already took through the trial starts `LIVE`, unless you started it with `sandbox: true`.'
         state:
           type: string
           description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused, could not start or failed while running; `reason` says why) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'
@@ -6481,7 +6500,8 @@ tags:
     description: |-
       The **live execution** endpoints run your strategy continuously against a live market feed
       instead of a fixed historical window, publishing its signals as they happen. A run always
-      starts in a short sandbox trial before promotion to live.
+      starts in a short sandbox trial before promotion to live, unless an earlier run of the same
+      compiled strategy has already been through it.
 
       These endpoints cover the run's lifecycle (start, inspect, stop, change visibility) and its
       runtime parameters. Consuming the run's own signal stream and updating parameters over a live

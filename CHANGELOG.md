@@ -7,6 +7,16 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.25] — 2026-10-09
+
+### Changed
+
+- A strategy that has already been through the sandbox trial does not repeat it: when an earlier run of yours of the same compiled strategy was promoted to `LIVE`, and none of that compilation's runs was stopped for using more resources than allowed, a new run of it starts in `LIVE` at once, with `gate` present from the start (the earlier verdict, with `inheritedFrom` naming the run it relies on). A recompiled strategy still starts in the sandbox, like a first run. Described on `POST /strategy/{strategyId}/live`, on `stage` and `gate`, and in the live execution guide.
+
+### Added
+
+- `sandbox` in the body of `POST /strategy/{strategyId}/live`: `true` starts the run in the `SANDBOX` stage even though the strategy has been through it, for example to read its signals back over the connection while debugging, which the `LIVE` stage does not keep. Anything but a boolean is `400`.
+
 ## [0.128.24] — 2026-10-07
 
 ### Changed
