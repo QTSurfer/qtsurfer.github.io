@@ -20,7 +20,7 @@ run is `public`. A run started without a `paper` block answers `404` on both.
 ```
 POST /v1/strategy/6bsh31ikwkuivhtgcoa6s4/live
 {
-  "sources": [{"venueType": "cx", "exchange": "binance", "segment": "spot", "type": "ticker",
+  "sources": [{"venueType": "cex", "exchange": "binance", "segment": "spot", "type": "ticker",
                "instruments": ["BTC/USDT", "ETH/USDT"]}],
   "paper": {"initialFunding": 1000, "feeRate": 0.001, "percentAmountToLock": 20}
 }

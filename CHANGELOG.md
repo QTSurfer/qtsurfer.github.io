@@ -7,6 +7,15 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.26] — 2026-10-14
+
+### Added
+
+- A live run can read one pool on a decentralized exchange: `venueType` `dex`, with the chain in `exchange` (`robinhood`), the protocol in `segment` (`uniswap-v3`), `type` `kline` and the pool's address as its single instrument. `LiveSource` and `LiveSourceRequest` list `cex` and `dex` as the values of `venueType`, and the Live execution guide has a "DEX pools" section under "Sources": what the strategy receives (one candle per second, flat candles for a second without trades), how the pair is named in the signals, how warming up behaves on a pool nobody else is reading, and how a source that cannot be run fails.
+- Two more sentences for the `reason` of a `FAILED` run, both for a `dex` run and both ending it within seconds (`desired: STOPPED`, so it holds no place): its pool address is not a pool of its protocol on its chain, and the platform has no room to follow its pool. They are in the guide's table, in "DEX pools" and in the description of `reason`.
+- `GET /exchanges` names, for every exchange, its `venueType` (`cex` for a centralized exchange, `dex` for a decentralized one) and its `segments`, and lists the Robinhood Chain next to Binance and Bybit. The segments of a `cex` exchange are the ones its instrument catalogues are served under (`spot`, `futures`); those of a `dex` exchange are the protocols whose pools a run can read. A `dex` exchange has no instrument catalogue, so its id is answered `400` by the routes that take an `exchangeId`, which the two instrument routes now list as a response. Ids, venue types and segments are lower-case, as everywhere else in the API; the guide's "Sources" and the market-data guide point to the list for the values of `exchange`, `venueType` and `segment`. Each exchange also names its `liveSegments`, the segments among `segments` for which live data is published (`spot` for the centralized exchanges today, the protocols for the decentralized one): `Exchange` has the three new fields, all required. The venue type is spelled `cex` and `dex`; `cx` (the spelling of 0.128.25 and before) is still read as `cex`, and the run reports the new one.
+- The `venueType`, `exchange` and `segment` of a live run's source have to be ones `GET /exchanges` lists together: the start answers `400`, naming what the list has, for a venue type that is not `cex` or `dex`, an exchange the list does not have under that venue type, or a segment the exchange does not offer. Case and the spaces around a value do not matter, and the run reports them back (and `type`) in lower case. The 400 description of `POST /strategy/{strategyId}/live` and the "Sources" and "DEX pools" sections of the guide say so; an unsupported chain or protocol of a `dex` source, which failed within seconds, is now refused at the start. A segment the exchange offers but has no live data for (`futures`, the instrument catalogue's) is refused too, saying which ones a live run reads, since a run on it started and received nothing.
+
 ## [0.128.25] — 2026-10-09
 
 ### Changed

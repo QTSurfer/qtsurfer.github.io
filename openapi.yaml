@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.25
+  version: 0.128.26
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -131,6 +131,18 @@ paths:
     get:
       operationId: listExchanges
       summary: List the available exchanges
+      description: |
+        The exchanges the platform knows, centralized and decentralized, each with its `venueType` and the
+        `segments` it offers. Ids, venue types and segments are lower-case, and are written the same way
+        wherever the API takes them: `/exchange/binance/spot/instruments`, and the `exchange`, `venueType`
+        and `segment` of a live run's source.
+
+        `venueType` is `cex` for a centralized exchange and `dex` for a decentralized one. The `segments` of a
+        `cex` exchange are the market segments its instrument catalogues are served under (`spot`, `futures`);
+        its `liveSegments`, among them, are those a live run can read, because live data is published for them.
+        A `dex` exchange has no instrument catalogue: its `segments`
+        are the protocols whose pools a run can read, the instrument of a run is a pool's address, and its id
+        is not valid in the routes that take an `exchangeId` (`400`).
       responses:
         '200':
           description: A JSON array of Exchanges
@@ -144,6 +156,21 @@ paths:
                 - id: binance
                   name: Binance
                   description: Binance cryptocurrency exchange
+                  venueType: cex
+                  segments: [spot, futures]
+                  liveSegments: [spot]
+                - id: bybit
+                  name: Bybit
+                  description: Bybit cryptocurrency exchange
+                  venueType: cex
+                  segments: [spot, futures]
+                  liveSegments: [spot]
+                - id: robinhood
+                  name: Robinhood Chain
+                  description: Robinhood Chain decentralized exchange pools
+                  venueType: dex
+                  segments: [uniswap-v3]
+                  liveSegments: [uniswap-v3]
       tags:
         - Exchange
   '/exchange/{exchangeId}/instruments':
@@ -195,8 +222,14 @@ paths:
                     href: /v1/exchange/binance/spot/instruments
                   futures:
                     href: /v1/exchange/binance/futures/instruments
+        '400':
+          description: The exchange is not one with instrument catalogues (an id `GET /exchanges` does not list, or a `dex` exchange)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
         '404':
-          description: Exchange not found or instrument catalog not available
+          description: The instrument catalog is not available
           content:
             application/json:
               schema:
@@ -274,8 +307,14 @@ paths:
                     href: /v1/exchange/binance/spot/instruments
                   futures:
                     href: /v1/exchange/binance/futures/instruments
+        '400':
+          description: The exchange is not one with instrument catalogues (an id `GET /exchanges` does not list, or a `dex` exchange), or the segment is not `spot` or `futures`
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
         '404':
-          description: Exchange, segment, or instrument catalog not found
+          description: The instrument catalog is not available
           content:
             application/json:
               schema:
@@ -2357,7 +2396,16 @@ paths:
         (fastest) cadence available for the exchange — today that is 1 tick/second on every
         supported exchange; choosing among several cadences is not offered yet.
 
-        `instruments` can be left out. A QTScript strategy can declare which instruments it accepts with an `instruments`
+        `venueType` is `cex` (a centralized exchange) or `dex` (one pool on a decentralized exchange). A `dex` source reads one
+        pool, takes only `kline`, and needs the pool's address as its single instrument. See the "Live execution" guide,
+        "Sources".
+
+        `venueType`, `exchange` and `segment` have to be ones `GET /exchanges` lists together: the exchange under that
+        venue type, and the segment among its `liveSegments`. Case and the spaces around a value do not matter, and the
+        run reports them back in lower case (`cx`, the older spelling of `cex`, is still read). Anything else is refused
+        with `400`, naming what the list has.
+
+        `instruments` can be left out, except for a `dex` source. A QTScript strategy can declare which instruments it accepts with an `instruments`
         line in its source; when the compilation of the strategy records that selection as a list of pairs, a
         start that leaves `instruments` out, or sends `["*"]`, takes that list, and otherwise the run reads every
         instrument the exchange/segment offers. A list you send is taken as sent. Either side of an entry can be `*`
@@ -2408,7 +2456,7 @@ paths:
               $ref: '#/components/schemas/StartLiveRequest'
             example:
               sources:
-                - venueType: cx
+                - venueType: cex
                   exchange: binance
                   segment: spot
                   type: ticker
@@ -2434,7 +2482,7 @@ paths:
                 state: STARTING
                 desired: RUNNING
                 sources:
-                  - venueType: cx
+                  - venueType: cex
                     exchange: binance
                     segment: spot
                     type: ticker
@@ -2444,7 +2492,7 @@ paths:
                 relay: false
                 startedAtMs: 1758330000000
         '400':
-          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events. A `relay` or `stream` that is not `true` or `false`, or a `stream` where streams are not available yet. A `warmFrom` that is not an integer from 0 to 3600. An `instruments` that is empty or `null`.
+          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `venueType`, `exchange` and `segment` that `GET /exchanges` does not list together, or a segment with no live data (the message names what it lists), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events. A `relay` or `stream` that is not `true` or `false`, or a `stream` where streams are not available yet. A `warmFrom` that is not an integer from 0 to 3600. An `instruments` that is empty or `null`.
           content:
             application/json:
               schema:
@@ -2591,7 +2639,7 @@ paths:
                     state: RUNNING
                     desired: RUNNING
                     sources:
-                      - venueType: cx
+                      - venueType: cex
                         exchange: binance
                         segment: spot
                         type: ticker
@@ -2647,7 +2695,7 @@ paths:
                   - runId: 5t5oAmQ4PD0lQRoCU58uE0
                     name: EMA cross
                     sources:
-                      - venueType: cx
+                      - venueType: cex
                         exchange: binance
                         segment: spot
                         type: ticker
@@ -2704,7 +2752,7 @@ paths:
                 state: RUNNING
                 desired: RUNNING
                 sources:
-                  - venueType: cx
+                  - venueType: cex
                     exchange: binance
                     segment: spot
                     type: ticker
@@ -2762,7 +2810,7 @@ paths:
                 stage: LIVE
                 state: RUNNING
                 sources:
-                  - venueType: cx
+                  - venueType: cex
                     exchange: binance
                     segment: spot
                     type: ticker
@@ -3650,6 +3698,9 @@ components:
       required:
         - id
         - name
+        - venueType
+        - segments
+        - liveSegments
       properties:
         id:
           description: Unique identifier for the exchange
@@ -3663,6 +3714,36 @@ components:
           description: Description of the exchange
           type: string
           example: Binance cryptocurrency exchange
+        venueType:
+          description: >-
+            Venue category, written as the `venueType` of a live run's source: `cex` is a centralized exchange and
+            `dex` a decentralized one. A `dex` exchange has no instrument catalogue (the instrument of a run on it is
+            a pool's address), so its id is not valid in the routes that take an `exchangeId`.
+          type: string
+          enum: [cex, dex]
+          example: cex
+        segments:
+          description: >-
+            The segments the exchange offers, written as in the path of `GET /exchange/{exchangeId}/{segment}/instruments`
+            and as the `segment` of a live run's source. For a `cex` exchange, its market segments (`spot`,
+            `futures`: the ones its instrument catalogues are served under); for a `dex` exchange, the protocols
+            whose pools a run can read.
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: string
+          example: [spot, futures]
+        liveSegments:
+          description: >-
+            The segments among `segments` for which live data is published, so the ones a live run can read: a
+            live run on any other segment of the exchange is refused with `400`. It can be empty (an exchange
+            whose live data is not published yet).
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+          example: [spot]
     DataSourceType:
       type: string
       description: |
@@ -5641,18 +5722,21 @@ components:
       properties:
         venueType:
           type: string
-          example: cx
-          description: Venue category. `cx` (centralized exchange) is the only one live runs support today.
+          enum: [cex, dex]
+          example: cex
+          description: Venue category. `cex` is a centralized exchange and `dex` is one pool on a decentralized exchange, which takes its own `exchange`, `segment`, `type` and `instruments` (see "Sources" in the Live execution guide). `cx` and `dx`, the spellings used before, are still read as `cex` and `dex`; the run always reports the new ones.
         exchange:
           type: string
           example: binance
+          description: The exchange id, as `GET /exchanges` lists it. For a `dex` source, the chain the pool is on; `robinhood` is the only one today.
         segment:
           type: string
           example: spot
+          description: The segment, as `GET /exchanges` lists it for that exchange, among its `liveSegments` (a segment with no live data is refused with `400`). For a `cex` source, the market segment (`spot` today); for a `dex` source, the protocol of the pool, `uniswap-v3` the only one today.
         type:
           type: string
           enum: [ticker, kline]
-          description: 'Both `ticker` and `kline` connect to the lightest (fastest) cadence available for the exchange — today, 1 tick/second on every supported exchange. Choosing a specific cadence is not offered yet.'
+          description: 'Both `ticker` and `kline` connect to the lightest (fastest) cadence available for the exchange — today, 1 tick/second on every supported exchange. Choosing a specific cadence is not offered yet. A `dex` source supports only `kline`: one candle per second of the pool''s trades.'
         instruments:
           type: array
           items:
@@ -5664,7 +5748,7 @@ components:
             records as the instruments it accepts, when it records one, or `["*"]` for every instrument the
             exchange/segment offers (tier-gated). An entry is written `BASE/QUOTE` and either side can be `*` to mean
             any, such as any base paired with USDT. Symbols are not case-sensitive and spaces around them are ignored, so `btc/usdt` and
-            `BTC/USDT` are the same instrument.
+            `BTC/USDT` are the same instrument. A `dex` source holds exactly one entry, the address of its pool.
     LiveSourceRequest:
       type: object
       required: [venueType, exchange, segment, type]
@@ -5674,18 +5758,21 @@ components:
       properties:
         venueType:
           type: string
-          example: cx
-          description: Venue category. `cx` (centralized exchange) is the only one live runs support today.
+          enum: [cex, dex]
+          example: cex
+          description: Venue category. `cex` is a centralized exchange and `dex` is one pool on a decentralized exchange, which takes its own `exchange`, `segment`, `type` and `instruments` (see "Sources" in the Live execution guide). `cx` and `dx`, the spellings used before, are still read as `cex` and `dex`; the run always reports the new ones.
         exchange:
           type: string
           example: binance
+          description: The exchange id, as `GET /exchanges` lists it. For a `dex` source, the chain the pool is on; `robinhood` is the only one today.
         segment:
           type: string
           example: spot
+          description: The segment, as `GET /exchanges` lists it for that exchange, among its `liveSegments` (a segment with no live data is refused with `400`). For a `cex` source, the market segment (`spot` today); for a `dex` source, the protocol of the pool, `uniswap-v3` the only one today.
         type:
           type: string
           enum: [ticker, kline]
-          description: 'Both `ticker` and `kline` connect to the lightest (fastest) cadence available for the exchange — today, 1 tick/second on every supported exchange. Choosing a specific cadence is not offered yet.'
+          description: 'Both `ticker` and `kline` connect to the lightest (fastest) cadence available for the exchange — today, 1 tick/second on every supported exchange. Choosing a specific cadence is not offered yet. A `dex` source supports only `kline`: one candle per second of the pool''s trades.'
         instruments:
           type: array
           items:
@@ -5702,7 +5789,8 @@ components:
             a `.` or a space inside a side, or a `*` mixed with other characters of a side) makes the run fail when it
             starts. Plan limits: a list with an entry that has a `*` on a side counts like `["*"]` and only plans that
             include the wildcard accept it; the other entries are counted one by one. The instruments the run actually
-            reads come back in the run's `sources`.
+            reads come back in the run's `sources`. A `dex` source needs exactly one entry, the address of its pool (`0x` and 40
+            hexadecimal digits, not case-sensitive): it cannot be left out and `*` is not accepted.
     StartLiveRequest:
       type: object
       required: [sources]
@@ -5888,12 +5976,15 @@ components:
             stack trace or an internal message. Either `resource: ...` (the platform stopped the run for
             exceeding its resource allowance; the text says which limit) or one of a fixed set of sentences for
             a `FAILED` run: the strategy cannot consume the source type the run was started with, the run's
-            definition was refused, the run could not start after several attempts, the strategy failed while
-            processing data, the run lost its data feed, or the generic `The run failed.`. The set may grow:
+            definition was refused, the pool address of a `dex` run is not a pool of its protocol on its chain,
+            the platform has no room to follow the pool of a `dex` run, the run could not start after several
+            attempts, the strategy failed while processing data, the run lost its data feed, or the generic
+            `The run failed.`. The set may grow:
             read an unrecognised sentence as a failure and do not parse it. A `FAILED` run usually stays
             `desired: RUNNING` until you stop it, and counts as active (`409` on a new start, and toward your
-            live-run limit) until then; one that can never run because its strategy cannot consume its source
-            type is stopped by the platform itself (`desired: STOPPED`), so it holds no place.
+            live-run limit) until then; one that cannot run, and will not by waiting, because its strategy cannot
+            consume its source type or because the pool of a `dex` run is not a pool or has no room to be followed,
+            is stopped by the platform itself (`desired: STOPPED`), so it holds no place.
         sources:
           type: array
           items:
@@ -6081,12 +6172,15 @@ components:
             stack trace or an internal message. Either `resource: ...` (the platform stopped the run for
             exceeding its resource allowance; the text says which limit) or one of a fixed set of sentences for
             a `FAILED` run: the strategy cannot consume the source type the run was started with, the run's
-            definition was refused, the run could not start after several attempts, the strategy failed while
-            processing data, the run lost its data feed, or the generic `The run failed.`. The set may grow:
+            definition was refused, the pool address of a `dex` run is not a pool of its protocol on its chain,
+            the platform has no room to follow the pool of a `dex` run, the run could not start after several
+            attempts, the strategy failed while processing data, the run lost its data feed, or the generic
+            `The run failed.`. The set may grow:
             read an unrecognised sentence as a failure and do not parse it. A `FAILED` run usually stays
             `desired: RUNNING` until you stop it, and counts as active (`409` on a new start, and toward your
-            live-run limit) until then; one that can never run because its strategy cannot consume its source
-            type is stopped by the platform itself (`desired: STOPPED`), so it holds no place.
+            live-run limit) until then; one that cannot run, and will not by waiting, because its strategy cannot
+            consume its source type or because the pool of a `dex` run is not a pool or has no room to be followed,
+            is stopped by the platform itself (`desired: STOPPED`), so it holds no place.
         sources:
           type: array
           items:
