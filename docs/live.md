@@ -249,6 +249,13 @@ to `dex`:
 | `type` | `kline` only. A `ticker` source is not available for a pool, and a ticker strategy cannot run on one. |
 | `instruments` | Exactly one entry: the pool's address, `0x` and 40 hexadecimal digits, not case-sensitive. It cannot be left out and `*` is not accepted. |
 
+To find pools to run, list the exchange's instruments: `GET /exchange/robinhood/uniswap-v3/instruments` returns
+the 50 pools with the most volume over the last 24 hours among those with at least 10,000 US dollars of
+liquidity, refreshed every hour. Each has its `id` (the address to put in `instruments`), its pair named the
+way the signals name it, its fee tier, liquidity and volume (see
+[Pools of a decentralized exchange](market_data.md#pools-of-a-decentralized-exchange)). The list is a place to
+start, not the whole market: a run can read any Uniswap V3 pool of the chain, listed or not.
+
 What the strategy receives:
 
 - One candle per second of the pool's trades, with the usual `open`, `high`, `low`, `close` and `volume`. A

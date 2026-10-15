@@ -7,6 +7,17 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.27] — 2026-10-14
+
+### Added
+
+- `GET /exchange/{exchangeId}/instruments` and `GET /exchange/{exchangeId}/{segment}/instruments` also list the pools of a decentralized exchange: `GET /exchange/robinhood/uniswap-v3/instruments` returns the 50 pools of that protocol with the most volume over the last 24 hours among those with at least 10,000 US dollars of liquidity, refreshed every hour, in the same `data` / `meta` / `_links` envelope. A new schema `PoolDetail` describes a pool (`id`, its address and the value to put in `instruments` of a live run; `symbol`, the pair as the signals name it; the two tokens; `feePercent`; `tvlUsd`; `volume24hUsd`; `createdAt`), `PoolListResponse`, `PoolListMeta` and `PoolLinks` the envelope, and the `200` of both routes is one of `InstrumentListResponse` or `PoolListResponse`. The market-data guide has a section for it and "DEX pools" in the Live execution guide says where to find a pool.
+
+### Changed
+
+- `segment` of `GET /exchange/{exchangeId}/{segment}/instruments` is no longer limited to `spot` and `futures` in the schema: it is one of the `segments` that `GET /exchanges` lists for the exchange, a protocol for a decentralized one. A decentralized exchange's id is still `400` in every other route that takes an `exchangeId`.
+- The `404` of both instruments routes says what it is, that the catalogue of that exchange and segment is not available. An `exchangeId` that `GET /exchanges` does not list and a segment the exchange does not have are a `400`, as they have been; the `404` description used to say they were not found.
+
 ## [0.128.26] — 2026-10-14
 
 ### Added

@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.26
+  version: 0.128.27
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -140,9 +140,9 @@ paths:
         `venueType` is `cex` for a centralized exchange and `dex` for a decentralized one. The `segments` of a
         `cex` exchange are the market segments its instrument catalogues are served under (`spot`, `futures`);
         its `liveSegments`, among them, are those a live run can read, because live data is published for them.
-        A `dex` exchange has no instrument catalogue: its `segments`
-        are the protocols whose pools a run can read, the instrument of a run is a pool's address, and its id
-        is not valid in the routes that take an `exchangeId` (`400`).
+        A `dex` exchange has no market data to prepare or backtest, so its id is `400` in the routes that take an
+        `exchangeId`, except the two instruments routes: its `segments` are the protocols whose pools a run can
+        read, and those routes list the pools, since the instrument of a run on it is a pool's address.
       responses:
         '200':
           description: A JSON array of Exchanges
@@ -182,6 +182,10 @@ paths:
         in `data`, each instrument with per-data-type coverage and market info. `meta`
         confirms the served `segment` (`spot`); HAL `_links` carry `self` plus the
         `spot` / `futures` segment-discovery links.
+
+        For a decentralized exchange (`venueType` `dex` in `GET /exchanges`) the instruments are its pools,
+        each a `PoolDetail`, and the default segment is the first one the exchange lists (`uniswap-v3` for
+        `robinhood`).
       parameters:
         - name: exchangeId
           in: path
@@ -192,11 +196,13 @@ paths:
             example: binance
       responses:
         '200':
-          description: The default (spot) segment's instruments in `data`, `meta`, and HAL `_links` (self + spot/futures segment discovery)
+          description: The default (spot) segment's instruments in `data`, `meta`, and HAL `_links` (self + spot/futures segment discovery); for a decentralized exchange, its pools
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstrumentListResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/InstrumentListResponse'
+                  - $ref: '#/components/schemas/PoolListResponse'
               example:
                 data:
                   - id: BTC/USDT
@@ -223,7 +229,7 @@ paths:
                   futures:
                     href: /v1/exchange/binance/futures/instruments
         '400':
-          description: The exchange is not one with instrument catalogues (an id `GET /exchanges` does not list, or a `dex` exchange)
+          description: The exchange is not one `GET /exchanges` lists
           content:
             application/json:
               schema:
@@ -245,6 +251,11 @@ paths:
         per-data-type coverage and market info. HAL `_links` carry `self` plus the
         `spot` / `futures` segment-discovery links; the default-segment shortcut is
         `GET /exchange/{exchangeId}/instruments` (spot).
+
+        For a decentralized exchange the segments are its protocols (`uniswap-v3` for `robinhood`) and the
+        instruments are its pools, each a `PoolDetail`: the 50 with most volume in the last 24 hours among
+        those with at least 10,000 US dollars of liquidity, refreshed every hour. The list is a place to
+        start, not the whole market: a live run can read any pool of the protocol, listed or not.
       parameters:
         - name: exchangeId
           in: path
@@ -255,11 +266,10 @@ paths:
             example: binance
         - name: segment
           in: path
-          description: Market segment to list instruments for
+          description: The segment to list instruments for, one of the exchange's `segments` in `GET /exchanges`; `spot` or `futures` for a centralized exchange, a protocol (`uniswap-v3`) for a decentralized one
           required: true
           schema:
             type: string
-            enum: [spot, futures]
             example: spot
       responses:
         '200':
@@ -267,7 +277,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/InstrumentListResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/InstrumentListResponse'
+                  - $ref: '#/components/schemas/PoolListResponse'
               example:
                 data:
                   - id: BTC/USDT
@@ -308,7 +320,7 @@ paths:
                   futures:
                     href: /v1/exchange/binance/futures/instruments
         '400':
-          description: The exchange is not one with instrument catalogues (an id `GET /exchanges` does not list, or a `dex` exchange), or the segment is not `spot` or `futures`
+          description: The exchange is not one `GET /exchanges` lists, or the segment is not one the exchange has (`spot` or `futures` for a centralized exchange, a protocol for a decentralized one)
           content:
             application/json:
               schema:
@@ -3458,6 +3470,151 @@ components:
           allOf:
             - $ref: '#/components/schemas/HalLink'
           description: Link to the futures instruments listing. Present only when the exchange has a futures segment.
+    PoolListResponse:
+      description: HAL-style response envelope for the instruments listing of a decentralized exchange, whose instruments are pools
+      type: object
+      required:
+        - data
+        - meta
+        - _links
+      properties:
+        data:
+          type: array
+          description: The pools worth running, the most traded in the last 24 hours first
+          items:
+            $ref: '#/components/schemas/PoolDetail'
+        meta:
+          $ref: '#/components/schemas/PoolListMeta'
+        _links:
+          $ref: '#/components/schemas/PoolLinks'
+      example:
+        data:
+          - id: "0x52e65b17fb6e5ba00ed806f37afcd2daa50271ca"
+            symbol: WETH/USDG
+            base: WETH
+            quote: USDG
+            baseAddress: "0x0bd7d308f8e1639fab988df18a8011f41eacad73"
+            quoteAddress: "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
+            feePercent: 0.01
+            tvlUsd: 19857902.02
+            volume24hUsd: 273876056.45
+            createdAt: "2026-07-02T20:51:08Z"
+        meta:
+          updatedAt: "2026-10-14T22:32:34Z"
+          exchange: robinhood
+          segment: uniswap-v3
+          minTvlUsd: 10000
+          limit: 50
+        _links:
+          self:
+            href: /v1/exchange/robinhood/uniswap-v3/instruments
+          uniswap-v3:
+            href: /v1/exchange/robinhood/uniswap-v3/instruments
+    PoolListMeta:
+      description: Metadata describing the pools listing of a decentralized exchange
+      type: object
+      required:
+        - updatedAt
+        - exchange
+        - segment
+        - minTvlUsd
+        - limit
+      properties:
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this listing was last refreshed. It is refreshed every hour.
+          example: "2026-10-14T22:32:34Z"
+        exchange:
+          type: string
+          description: The exchange the pools belong to
+          example: robinhood
+        segment:
+          type: string
+          description: The protocol served in `data`, one of the exchange's `segments`
+          example: uniswap-v3
+        minTvlUsd:
+          type: number
+          description: A pool with less liquidity than this (in US dollars) is not listed
+          example: 10000
+        limit:
+          type: integer
+          description: The most pools the listing has
+          example: 50
+    PoolLinks:
+      description: HAL `_links` — protocol discovery for the pools listing of a decentralized exchange
+      type: object
+      required:
+        - self
+      properties:
+        self:
+          allOf:
+            - $ref: '#/components/schemas/HalLink'
+          description: Link to this listing
+      additionalProperties:
+        allOf:
+          - $ref: '#/components/schemas/HalLink'
+        description: Link to the pools listing of one of the exchange's protocols, keyed by its name. Present when that listing exists.
+    PoolDetail:
+      description: |
+        A pool of a decentralized exchange that a live run can read. The listing is a place to start, not the
+        whole market: a live run can read any pool of the protocol, listed or not.
+      type: object
+      required:
+        - id
+        - symbol
+        - base
+        - quote
+        - baseAddress
+        - quoteAddress
+        - feePercent
+        - tvlUsd
+        - volume24hUsd
+      properties:
+        id:
+          type: string
+          pattern: '^0x[0-9a-f]{40}$'
+          description: The pool's address, in lower case. It is the value to put in `instruments` of a live run's source.
+          example: "0x52e65b17fb6e5ba00ed806f37afcd2daa50271ca"
+        symbol:
+          type: string
+          description: The pair written `BASE/QUOTE`, the way the signals of a run on this pool name it (`instrument`)
+          example: WETH/USDG
+        base:
+          type: string
+          description: Symbol of the base token
+          example: WETH
+        quote:
+          type: string
+          description: Symbol of the quote token
+          example: USDG
+        baseAddress:
+          type: string
+          description: Address of the base token, in lower case
+          example: "0x0bd7d308f8e1639fab988df18a8011f41eacad73"
+        quoteAddress:
+          type: string
+          description: Address of the quote token, in lower case
+          example: "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
+        feePercent:
+          type: number
+          description: The pool's fee tier, in percent (`0.05` is a 0.05 % fee). A protocol can have several pools of the same pair, one per fee tier.
+          example: 0.01
+        tvlUsd:
+          type: number
+          description: The liquidity held by the pool, in US dollars
+          example: 19857902.02
+        volume24hUsd:
+          type: number
+          description: What traded in the pool over the last 24 hours, in US dollars
+          example: 273876056.45
+        createdAt:
+          type:
+            - string
+            - 'null'
+          format: date-time
+          description: When the pool was created, if known
+          example: "2026-07-02T20:51:08Z"
     StrategyLinks:
       description: |
         HAL `_links` for a strategy — present on a full `StrategyState` body (`GET
@@ -3717,8 +3874,9 @@ components:
         venueType:
           description: >-
             Venue category, written as the `venueType` of a live run's source: `cex` is a centralized exchange and
-            `dex` a decentralized one. A `dex` exchange has no instrument catalogue (the instrument of a run on it is
-            a pool's address), so its id is not valid in the routes that take an `exchangeId`.
+            `dex` a decentralized one. A `dex` exchange has no market data to prepare or backtest, so its id is not
+            valid in the routes that take an `exchangeId`, except the two instruments routes, which list its pools
+            (the instrument of a run on it is a pool's address).
           type: string
           enum: [cex, dex]
           example: cex
