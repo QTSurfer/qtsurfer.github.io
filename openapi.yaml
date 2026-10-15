@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.28
+  version: 0.128.29
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3621,18 +3621,14 @@ components:
           description: The pool's fee tier, in percent (`0.05` is a 0.05 % fee). A protocol can have several pools of the same pair, one per fee tier.
           example: 0.01
         lastPrice:
-          type:
-            - number
-            - 'null'
+          type: number
           format: double
-          description: The price of one base token in the quote token, as the signals of a run on this pool name the pair. It is as of `meta.updatedAt`, so up to one hour old. `null` when there is no price for the pool.
+          description: The price of one base token in the quote token, as the signals of a run on this pool name the pair. It is as of `meta.updatedAt`, so up to one hour old. Absent when there is no price for the pool.
           example: 2411.285967
         volume24h:
-          type:
-            - number
-            - 'null'
+          type: number
           format: double
-          description: What traded in the pool over the last 24 hours, in the quote token, the same meaning as `volume24h` of an instrument of a centralized exchange. `null` when the quote token has no dollar price to convert from.
+          description: What traded in the pool over the last 24 hours, in the quote token, the same meaning as `volume24h` of an instrument of a centralized exchange. Absent when the quote token has no dollar price to convert from.
           example: 274033077.4
         tvlUsd:
           type: number
@@ -3643,11 +3639,9 @@ components:
           description: What traded in the pool over the last 24 hours, in US dollars
           example: 273876056.45
         createdAt:
-          type:
-            - string
-            - 'null'
+          type: string
           format: date-time
-          description: When the pool was created, if known
+          description: When the pool was created. Absent when it is not known
           example: "2026-07-02T20:51:08Z"
     StrategyLinks:
       description: |
@@ -3852,18 +3846,14 @@ components:
         coverage:
           $ref: '#/components/schemas/InstrumentCoverage'
         lastPrice:
-          type:
-            - number
-            - 'null'
+          type: number
           format: double
-          description: Last traded price. `null` for an instrument with no recent price.
+          description: Last traded price. Absent for an instrument with no recent price.
           example: 84250.50
         volume24h:
-          type:
-            - number
-            - 'null'
+          type: number
           format: double
-          description: Trading volume in the last 24 hours (in quote currency). `null` for an instrument with no recent volume.
+          description: Trading volume in the last 24 hours (in quote currency). Absent for an instrument with no recent volume.
           example: 1234567.89
     InstrumentCoverage:
       description: Time coverage of available data for this instrument, per data type

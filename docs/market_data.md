@@ -47,14 +47,17 @@ the fields below mean the same in each, and the rest belong to one kind only.
 | `id` | Identifier to use in the other routes: the pair of an instrument (`BTC/USDT`), the address of a pool | both |
 | `symbol` | The name of the instrument or pair, the way the signals of a run name it. The same as `id` for an instrument | both |
 | `base`, `quote` | Symbol of each side | both |
-| `lastPrice` | Price of one base in the quote currency; `null` when there is none | both |
-| `volume24h` | Volume over the last 24 hours, in the quote currency; `null` when there is none | both |
+| `lastPrice` | Price of one base in the quote currency; absent when there is none | both |
+| `volume24h` | Volume over the last 24 hours, in the quote currency; absent when there is none | both |
 | `coverage` | Time range of the data held, per data type | instruments only |
 | `settle` | Settlement currency of a futures instrument | futures instruments only |
 | `baseAddress`, `quoteAddress`, `feePercent`, `tvlUsd`, `volume24hUsd`, `createdAt` | Token addresses, fee tier, liquidity and volume in US dollars, creation date | pools only |
 
 `lastPrice` and `volume24h` of an instrument are refreshed every few minutes; those of a pool are as of
 `meta.updatedAt`, which is refreshed every hour, so a pool's price can be up to one hour old.
+
+A field with no data is left out of the entry, never sent as `null`: read an absent `lastPrice`,
+`volume24h` or `createdAt` as "not known".
 
 ```bash
 curl https://api.qtsurfer.net/v1/exchange/binance/spot/instruments \
@@ -94,7 +97,7 @@ pool by its address. A protocol can have several pools of one pair, one per fee 
 
 `lastPrice` is the price of one base in the quote token (`2411.285967` USDG for one WETH above) and
 `volume24h` is what traded over the last 24 hours in that quote token; `volume24hUsd` is the same volume in
-US dollars, and the listing is ranked by it. Both can be `null`. They are as of `meta.updatedAt`, up to one
+US dollars, and the listing is ranked by it. Either can be absent. They are as of `meta.updatedAt`, up to one
 hour old.
 
 The listing has the 50 pools with the most volume over the last 24 hours (`volume24hUsd`) among those with at

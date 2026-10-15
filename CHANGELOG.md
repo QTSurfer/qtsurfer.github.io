@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.29] — 2026-10-15
+
+### Changed
+
+- A field with no data is left out of an entry of the instruments listings instead of being sent as `null`. `lastPrice` and `volume24h` of `InstrumentDetail` and of `PoolDetail`, and `createdAt` of `PoolDetail`, are optional and no longer `null`: when the price, the volume or the date is not known the field is absent, so a client reads "absent" as "no data" and never meets a `null`. These were the only fields of the contract that admitted `null`. A client that read one of them expecting `null` has to treat it as optional. The market-data guide says so.
+
 ## [0.128.28] — 2026-10-15
 
 ### Added
