@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.27
+  version: 0.128.28
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -206,6 +206,7 @@ paths:
               example:
                 data:
                   - id: BTC/USDT
+                    symbol: BTC/USDT
                     base: BTC
                     quote: USDT
                     coverage:
@@ -221,6 +222,7 @@ paths:
                   updatedAt: "2026-07-09T19:09:07Z"
                   exchange: binance
                   segment: spot
+                  venueType: cex
                 _links:
                   self:
                     href: /v1/exchange/binance/instruments
@@ -283,6 +285,7 @@ paths:
               example:
                 data:
                   - id: BTC/USDT
+                    symbol: BTC/USDT
                     base: BTC
                     quote: USDT
                     coverage:
@@ -295,6 +298,7 @@ paths:
                     lastPrice: 84250.50
                     volume24h: 1234567.89
                   - id: ETH/USDT
+                    symbol: ETH/USDT
                     base: ETH
                     quote: USDT
                     coverage:
@@ -312,6 +316,7 @@ paths:
                   updatedAt: "2026-07-09T19:09:07Z"
                   exchange: binance
                   segment: spot
+                  venueType: cex
                 _links:
                   self:
                     href: /v1/exchange/binance/spot/instruments
@@ -3437,6 +3442,7 @@ components:
         - updatedAt
         - exchange
         - segment
+        - venueType
       properties:
         updatedAt:
           type: string
@@ -3452,6 +3458,11 @@ components:
           enum: [spot, futures]
           description: The market segment served in `data`
           example: spot
+        venueType:
+          type: string
+          enum: [cex]
+          description: The venue type of the exchange, as `GET /exchanges` lists it. Always `cex` here; a listing of pools says `dex`.
+          example: cex
     InstrumentLinks:
       description: HAL `_links` — segment discovery for the instruments listing
       type: object
@@ -3496,6 +3507,8 @@ components:
             baseAddress: "0x0bd7d308f8e1639fab988df18a8011f41eacad73"
             quoteAddress: "0x5fc5360d0400a0fd4f2af552add042d716f1d168"
             feePercent: 0.01
+            lastPrice: 2411.285967
+            volume24h: 274033077.4
             tvlUsd: 19857902.02
             volume24hUsd: 273876056.45
             createdAt: "2026-07-02T20:51:08Z"
@@ -3503,6 +3516,7 @@ components:
           updatedAt: "2026-10-14T22:32:34Z"
           exchange: robinhood
           segment: uniswap-v3
+          venueType: dex
           minTvlUsd: 10000
           limit: 50
         _links:
@@ -3517,13 +3531,14 @@ components:
         - updatedAt
         - exchange
         - segment
+        - venueType
         - minTvlUsd
         - limit
       properties:
         updatedAt:
           type: string
           format: date-time
-          description: When this listing was last refreshed. It is refreshed every hour.
+          description: When this listing was last refreshed. It is refreshed every hour, and the `lastPrice` of each pool is as of this time.
           example: "2026-10-14T22:32:34Z"
         exchange:
           type: string
@@ -3533,6 +3548,11 @@ components:
           type: string
           description: The protocol served in `data`, one of the exchange's `segments`
           example: uniswap-v3
+        venueType:
+          type: string
+          enum: [dex]
+          description: The venue type of the exchange, as `GET /exchanges` lists it. Always `dex` here; a listing of instruments of a centralized exchange says `cex`.
+          example: dex
         minTvlUsd:
           type: number
           description: A pool with less liquidity than this (in US dollars) is not listed
@@ -3600,6 +3620,20 @@ components:
           type: number
           description: The pool's fee tier, in percent (`0.05` is a 0.05 % fee). A protocol can have several pools of the same pair, one per fee tier.
           example: 0.01
+        lastPrice:
+          type:
+            - number
+            - 'null'
+          format: double
+          description: The price of one base token in the quote token, as the signals of a run on this pool name the pair. It is as of `meta.updatedAt`, so up to one hour old. `null` when there is no price for the pool.
+          example: 2411.285967
+        volume24h:
+          type:
+            - number
+            - 'null'
+          format: double
+          description: What traded in the pool over the last 24 hours, in the quote token, the same meaning as `volume24h` of an instrument of a centralized exchange. `null` when the quote token has no dollar price to convert from.
+          example: 274033077.4
         tvlUsd:
           type: number
           description: The liquidity held by the pool, in US dollars
@@ -3791,12 +3825,17 @@ components:
       type: object
       required:
         - id
+        - symbol
         - base
         - quote
       properties:
         id:
           type: string
           description: Instrument identifier (e.g. currency pair)
+          example: BTC/USDT
+        symbol:
+          type: string
+          description: The instrument's name, the same as `id`. A pool of a decentralized exchange has the same field (`PoolDetail`), so both listings are read alike.
           example: BTC/USDT
         base:
           type: string
@@ -3806,17 +3845,25 @@ components:
           type: string
           description: Quote currency
           example: USDT
+        settle:
+          type: string
+          description: Settlement currency. Present on a futures instrument only.
+          example: USDT
         coverage:
           $ref: '#/components/schemas/InstrumentCoverage'
         lastPrice:
-          type: number
+          type:
+            - number
+            - 'null'
           format: double
-          description: Last traded price
+          description: Last traded price. `null` for an instrument with no recent price.
           example: 84250.50
         volume24h:
-          type: number
+          type:
+            - number
+            - 'null'
           format: double
-          description: Trading volume in the last 24 hours (in quote currency)
+          description: Trading volume in the last 24 hours (in quote currency). `null` for an instrument with no recent volume.
           example: 1234567.89
     InstrumentCoverage:
       description: Time coverage of available data for this instrument, per data type

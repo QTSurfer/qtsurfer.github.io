@@ -7,6 +7,17 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.28] — 2026-10-15
+
+### Added
+
+- The listing of the instruments of a centralized exchange and the listing of the pools of a decentralized one can be read the same way. `meta.venueType` (`cex` or `dex`, the venue type `GET /exchanges` gives the exchange) is in both, required, in `InstrumentListMeta` (`cex`) and `PoolListMeta` (`dex`), which also tells the two answers of the `200` of both instruments routes apart. `InstrumentDetail` gains `symbol` (required, the same as `id`) and `PoolDetail` gains `lastPrice` (the price of one base in the quote token) and `volume24h` (what traded over the last 24 hours, in the quote token), both numbers or `null`, with the same meaning they have in `InstrumentDetail`. `volume24hUsd` and `tvlUsd` stay in `PoolDetail`, which ranks and filters in US dollars. A pool's price and volume are as of `meta.updatedAt`, refreshed every hour, so up to one hour old; an instrument's are refreshed every few minutes. The market-data guide has a table of the fields both listings share and those that belong to one kind only.
+- `InstrumentDetail` lists `settle`, the settlement currency a futures instrument has, which the listing already carried.
+
+### Changed
+
+- `lastPrice` and `volume24h` of `InstrumentDetail` can be `null` in the schema, as they already were in the answers for an instrument with no recent price or volume.
+
 ## [0.128.27] — 2026-10-14
 
 ### Added
