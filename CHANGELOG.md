@@ -7,6 +7,15 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.30] — 2026-10-15
+
+### Added
+
+- `POST /datasets/imports` imports the history of a centralized exchange, not only a decentralized pool's. `type` takes the two values of the `venueType` of `GET /exchanges`, `dex` (as before) and `cex`, and a `cex` import has its own block, `cex`, with `exchange` (the id of a centralized exchange of `GET /exchanges`; a decentralized one is `400`, and is imported with `type: dex`), `segment` (`spot`, the only segment a `cex` import takes today) and `dataType` (`ticker` or `klines`, also the resulting dataset's `type`). The range is capped by the tier's `maxImportRangeHours` and counted against its dataset limits, like any import. Two examples and a section of the datasets guide cover it.
+- The `cadence` of an import takes more values for a `cex` import: `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w` or `1q`, for tickers and for klines alike (the same labels as the cadence of a backtest preparation). Omitted, the dataset gets the finest cadence every part of the range holds, so a range whose history changes cadence part-way comes out entirely at the coarser one and has no gap that is only a change of cadence. A `cadence` finer than the range holds fails the import (`failed`), and `error` names the finest one. For a `dex` import `cadence` is as before: `1s`, `1m` or `5m`.
+- The `cadence` a dataset version reports (`DatasetVersion.cadence`) can now also be `3m`, `2h`, `8h`, `12h` or `1w`, so a dataset whose rows are that many minutes, hours or days apart is reported at that step instead of `rt`. It applies to uploads as well as to imports.
+- `ResponseError` gains two optional fields. `reason` is a stable token that names the cause, for a client to branch on without reading `message`; `next` is the call that gets past the error (`method`, `path` and, when it has one, `body`), ready to send. An error that has neither does not carry them, and a client treats a `reason` it does not know like an absent one. Each operation that returns them lists the values it uses.
+
 ## [0.128.29] — 2026-10-15
 
 ### Changed

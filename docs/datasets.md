@@ -187,7 +187,7 @@ case below).
 | `id` | the version id — pass as `datasetVersionId` on prepare to pin it |
 | `bytes` | size of the **stored** file (`dataUrl`) — a converted `lastra` for a CSV upload (decompressed first, if it arrived as `.gz`/`.zip`), or the parquet/lastra file itself, unconverted, for a parquet or lastra upload. Not the size of the bytes originally `PUT` |
 | `rows` | number of data rows |
-| `cadence` | discovered from the data's own timestamps: a fixed grid (`1s`, `5s`, `15s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`) when at least half the intervals between rows fall on that step (small clock jitter tolerated), or `rt` — native data at the rate it was captured, each row at its own timestamp with no fixed step (per-trade on-chain swaps, block-spaced or sub-second ticks, irregular intervals). An `rt` dataset can be resampled to any fixed cadence at prepare time |
+| `cadence` | discovered from the data's own timestamps: a fixed grid (`1s`, `5s`, `15s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w`) when at least half the intervals between rows fall on that step (small clock jitter tolerated), or `rt` — native data at the rate it was captured, each row at its own timestamp with no fixed step (per-trade on-chain swaps, block-spaced or sub-second ticks, irregular intervals). An `rt` dataset can be resampled to any fixed cadence at prepare time |
 | `timestampUnit` | `iso` \| `s` \| `ms` \| `us` — the unit the `timestamp` column arrived in |
 | `gaps`, `largestGapSteps` | gap count at the discovered cadence, and the largest one's size in cadence steps. Always `0` for `rt` |
 | `dataUrl` | presigned GET URL to the stored file — see `dataFormat`. Present once `ready` |
@@ -222,9 +222,18 @@ yourself, ask the API to go fetch history on your behalf. Creates the dataset an
 in the same call — there's no separate upload step, and the result lands as a dataset version
 indistinguishable from an uploaded one once it's ready.
 
-`type` selects the source. `dex` — history over a pool/pair's own on-chain market — is the only
-value today; other source types join this same endpoint later. A `dex` import has two data shapes,
-chosen by the top-level `cadence`:
+`type` selects the kind of venue the history comes from, with the same two values as the `venueType`
+of [`GET /exchanges`](market_data.md): `dex` — history over a pool/pair's own on-chain market — and
+`cex` — the history of a centralized exchange's market, kept by the platform. Each has its own block
+(`dex`, `cex`). A decentralized exchange of `GET /exchanges` (`robinhood`, say) is imported with
+`type: dex`; as the `exchange` of a `cex` import its id is `400`.
+
+A `cex` import covers one instrument over a range: the API reads that range of the exchange's
+history, builds the bars of the requested `cadence` from the finest data it has for it and stores the
+result as a dataset version, exactly as for an upload. See [Importing an exchange's
+history](#importing-an-exchanges-history) below.
+
+A `dex` import has two data shapes, chosen by the top-level `cadence`:
 
 * Omitted/blank (default) — on-chain swap history, replayed directly from the pool/pair's own
   chain, each swap at its own timestamp (native per-trade cadence).
@@ -236,8 +245,8 @@ chosen by the top-level `cadence`:
 | `name` | string | required, unique among your datasets. `409` if already taken |
 | `instrument` | string | required, plain spot pair — the dataset's own label, independent of the pool's on-chain token order |
 | `from`, `to` | string (date-time) | required, ISO-8601 UTC. `from` inclusive, `to` exclusive, `from < to`. Total span is capped by your tier |
-| `cadence` | string | optional. Omitted/blank = native per-trade cadence (see below). One of `1s` \| `1m` \| `5m` asks for pre-aggregated candles at that width on a network that supports it (any other value is `400`) — on a network that doesn't, it's silently ignored, see below |
-| `type` | string | required, `"dex"` is the only value today |
+| `cadence` | string | optional. For `dex`: omitted/blank = native per-trade cadence (see below); one of `1s` \| `1m` \| `5m` asks for pre-aggregated candles at that width on a network that supports it (any other value is `400`) — on a network that doesn't, it's silently ignored, see below. For `cex`: see [Importing an exchange's history](#importing-an-exchanges-history) |
+| `type` | string | required, `"dex"` \| `"cex"` |
 | `dex.network` | string | required, one of `ethereum` \| `robinhood` |
 | `dex.id` | string | required unless a candle `cadence` actually resolves (see below) — a candle `cadence` ignored on a non-candle network still requires this. `"uniswap"` is the only value today — which on-chain DEX protocol `dex.contract` implements |
 | `dex.version` | string | required unless a candle `cadence` actually resolves (see below). `"v2"` \| `"v3"` |
@@ -309,6 +318,54 @@ asynchronously — see `failed` below) · `409` dataset name already taken · `4
 count limit is reached, or your account's total storage limit ([`GET /account`](account.md)'s
 `maxTotalStorageBytes`) is already reached — delete a dataset to free a slot or space, or upgrade.
 
+### Importing an exchange's history
+
+`type: "cex"` imports one instrument of a centralized exchange over a range. The same endpoint, the
+same `name`, `instrument`, `from`, `to` and `cadence` fields, the same limits (the range is capped by
+your tier's `maxImportRangeHours`, [`GET /account`](account.md)) and the same poll below; only the
+block that says what to import changes:
+
+| Field | Type | Notes |
+|---|---|---|
+| `cex.exchange` | string | required, the `id` of a centralized exchange (`venueType` `cex`) of `GET /exchanges`, lower-case. A decentralized exchange's id is `400`: use `type: dex` |
+| `cex.segment` | string | required, one of the exchange's `segments`. `spot` is the only segment a `cex` import takes today, which matches `instrument` being a plain spot pair |
+| `cex.dataType` | string | required, `"ticker"` \| `"klines"`. It is also the resulting dataset's `type` |
+
+`cadence` is optional, and takes the same labels as the cadence of a backtest preparation, for
+tickers and for klines alike: `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`,
+`12h`, `1d`, `1w` or `1q`. Any other label is `400`. Omitted, the dataset gets the finest cadence **every part** of the range
+holds. The bars are built from the finest data every part of the range holds, so a range whose
+history changes cadence part-way (from `1m` to `1s`, say) comes out entirely at the coarser one: the
+dataset has no gap that is only a change of cadence. A `cadence` finer than that, or not an exact
+multiple of it, fails the import (`failed`, and `error` names the finest cadence the range holds)
+instead of giving you a dataset with a different cadence from the one you asked for.
+
+```bash
+curl -X POST https://api.qtsurfer.net/v1/datasets/imports \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "btc-usdt-1s-sept",
+    "instrument": "BTC/USDT",
+    "from": "2026-09-01T00:00:00Z",
+    "to": "2026-09-01T06:00:00Z",
+    "cadence": "1s",
+    "type": "cex",
+    "cex": {
+      "exchange": "binance",
+      "segment": "spot",
+      "dataType": "klines"
+    }
+  }'
+# → 202 {"datasetId":"ds_3f9a1c2e7b0d4a5f","importId":"imp_01j9z...","jobId":"dataset-import:...","status":"fetching"}
+```
+
+Errors, in addition to the ones above: `400` no `cex` block, `cex.exchange` not a centralized exchange
+of `GET /exchanges` (a decentralized one included), `cex.segment` not `spot`, `cex.dataType` not
+`ticker` or `klines`, or a `cadence` that is none of the labels above. Whether the range holds data,
+and whether it holds data fine enough for the `cadence`, is checked later, asynchronously: see
+`failed` below.
+
 ## Polling an import
 
 `GET /datasets/{datasetId}/imports/{importId}` — poll after `POST /datasets/imports` until
@@ -321,7 +378,7 @@ anything is even staged; once fetched, it re-enters the exact same ingest chain 
 |---|---|
 | `status` | `fetching` (reading from the source, nothing staged yet — the one status only an import ever reports) → `ingesting` (fetched, staged, worker parsing/validating) → `ready` (`version` carries the result) \| `failed` |
 | `jobId` | the fetch/ingest job id, while `status` is `fetching` or `ingesting` |
-| `error` | human-readable reason, present when `status` is `failed` — an unresolvable pool/pair, no data in the requested range, a range older than the source retains, the fetch exceeding your tier's time ceiling, or any of the ingest-side reasons `DatasetUploadState.error` can carry, once fetching hands off to that same chain. Durably recorded, same as on the upload path |
+| `error` | human-readable reason, present when `status` is `failed` — an unresolvable pool/pair, no data in the requested range, a range older than the source retains, a `cex` `cadence` finer than the range holds (the message names the finest one), the fetch exceeding your tier's time ceiling, or any of the ingest-side reasons `DatasetUploadState.error` can carry, once fetching hands off to that same chain. Durably recorded, same as on the upload path |
 | `version` | a [`DatasetVersion`](#datasetversion--one-successfully-ingested-upload), present when `status` is `ready` or `failed` |
 
 ```bash
@@ -355,7 +412,7 @@ don't need a second call to see what a dataset covers.
 
 | Field | Notes |
 |---|---|
-| `datasetId`, `name`, `type` (`"ticker"` \| `"klines"`), `instrument`, `createdAt`, `status` | always present. `type` is `"klines"` only for a `dex` import that requested a candle `cadence`; `"ticker"` for everything else (uploads, and native-cadence `dex` imports) |
+| `datasetId`, `name`, `type` (`"ticker"` \| `"klines"`), `instrument`, `createdAt`, `status` | always present. `type` is `"klines"` for a `dex` import that requested a candle `cadence` and for a `cex` import with `dataType: "klines"`; `"ticker"` for everything else (uploads, native-cadence `dex` imports, and `cex` imports with `dataType: "ticker"`) |
 | `currentVersionId` | the most recently finalized, successfully ingested version. **Absent until at least one upload has finished ingesting** |
 | `status` | `ready` — `currentVersionId` is set and the fields below describe it; `failed` — the most recent upload or import attempt failed, there is nothing to read yet (see `error`); `pending` — nothing has ever been attempted (just created, or an upload was never finalized) |
 | `updatedAt` | when `currentVersionId` last changed; absent until it has a value |
