@@ -7,6 +7,15 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.31] — 2026-10-16
+
+### Changed
+
+- The hourly download routes (`GET /exchange/{exchangeId}/tickers/{base}/{quote}` and `.../klines/...`) serve the last 7 days. An hour that started more than 7 days before the request is `400` with `reason: OUTSIDE_WINDOW`, and the error carries `next`: the `POST /datasets/imports` request (`type: "cex"`) that imports exactly that hour as a dataset. Older history and ranges are imported the same way, within the plan's limits. The market-data guide explains it.
+- Their errors are typed. `ResponseError` (with the `reason` and `next` that 0.128.30 added) is what every failure answers, and the contract lists the causes: `404` `NOT_YET_AVAILABLE` (the hour has just ended and is not stored yet, with `Retry-After`) and `NO_DATA` (the hour is stored and holds nothing for the instrument), `400` `OUTSIDE_WINDOW`, and the new `503` `TEMPORARILY_UNAVAILABLE` (reads of stored data are being limited, with `Retry-After`). The routes used to answer these with a body of the shape `{"error": ...}`, which the contract never described; a client that read `error` reads `message` now.
+- The `ts` column of a Lastra response is declared: microseconds since the epoch, in the column's metadata (`ts_unit: micros`) and in the new response header `X-Ts-Unit: micros`. Until now the unit was not declared and the service served milliseconds; the SDKs return the bytes untouched, so a client that decoded `ts` as milliseconds has to read the header (a Parquet response keeps its `TIMESTAMP` column in milliseconds).
+- The content type of a Lastra response is `application/vnd.qtsurfer.lastra`, which is what the service has always answered; the contract said `application/vnd.lastra`.
+
 ## [0.128.30] — 2026-10-15
 
 ### Added

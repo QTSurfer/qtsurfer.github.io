@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.30
+  version: 0.128.31
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -351,8 +351,20 @@ paths:
         One segment = one hour, aligned to UTC. The `hour` query parameter selects
         the segment and must match `YYYY-MM-DDTHH` (no minutes/seconds, no timezone
         suffix). Example: `hour=2026-01-15T10` returns `h10.lastra` for
-        2026-01-15, covering `[10:00:00Z, 11:00:00Z)`. Hours not yet available
-        return `404`.
+        2026-01-15, covering `[10:00:00Z, 11:00:00Z)`.
+
+        **Which hours.** The last 7 days: an hour that started no more than 7 days before the
+        request and has ended. This route gives one hour of one instrument, fast; it is not how to
+        get older history or a range. An older hour is `400` with `reason: OUTSIDE_WINDOW`, and the
+        error carries `next`, the `POST /datasets/imports` request that imports exactly that hour
+        as a dataset (add a `name`); a longer span is imported the same way, within your plan's
+        limits. An hour that has just ended may not be stored yet: `404` with
+        `reason: NOT_YET_AVAILABLE` and a `Retry-After`.
+
+        **Timestamps.** In a Lastra response the `ts` column holds microseconds since the epoch,
+        declared by `ts_unit: micros` in the column's metadata and by the response header
+        `X-Ts-Unit: micros`. In a Parquet response the timestamp column is a `TIMESTAMP` in
+        milliseconds.
 
         A `format=parquet` query parameter switches the response to on-the-fly
         Parquet conversion via [lastra-convert](https://github.com/QTSurfer/lastra-convert)
@@ -419,7 +431,7 @@ paths:
         '200':
           description: |
             One hour of tickers for the instrument. `Content-Type` is
-            `application/vnd.lastra` by default or
+            `application/vnd.qtsurfer.lastra` by default or
             `application/vnd.apache.parquet` when `format=parquet` was
             requested.
           headers:
@@ -429,8 +441,10 @@ paths:
                 where `{ext}` is `lastra` or `parquet` to match the format.
               schema:
                 type: string
+            X-Ts-Unit:
+              $ref: '#/components/headers/XTsUnit'
           content:
-            application/vnd.lastra:
+            application/vnd.qtsurfer.lastra:
               schema:
                 type: string
                 format: binary
@@ -439,23 +453,83 @@ paths:
                 type: string
                 format: binary
         '400':
-          description: Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`).
+          description: |
+            Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`), an `hour` in the
+            future, or an hour older than the last 7 days (`reason: OUTSIDE_WINDOW`, with `next`).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+              examples:
+                malformedHour:
+                  summary: The hour is not YYYY-MM-DDTHH
+                  value:
+                    code: 400
+                    message: "hour must match YYYY-MM-DDTHH"
+                outsideWindow:
+                  summary: The hour is older than the last 7 days
+                  value:
+                    code: 400
+                    message: "Hour older than 7 days: import it as a dataset"
+                    reason: OUTSIDE_WINDOW
+                    next:
+                      method: POST
+                      path: /datasets/imports
+                      body:
+                        type: cex
+                        instrument: "BTC/USDT"
+                        from: "2026-09-01T10:00:00Z"
+                        to: "2026-09-01T11:00:00Z"
+                        cex:
+                          exchange: binance
+                          segment: spot
+                          dataType: ticker
         '404':
-          description: No Lastra segment exists for the requested instrument/hour.
+          description: |
+            No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
+            has just ended and is not stored yet (the answer carries `Retry-After`); `reason:
+            NO_DATA` — the hour is stored and holds nothing for this instrument.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+              examples:
+                notYetAvailable:
+                  summary: The hour has just ended
+                  value:
+                    code: 404
+                    message: "Hour not available yet"
+                    reason: NOT_YET_AVAILABLE
+                noData:
+                  summary: Nothing for this instrument in that hour
+                  value:
+                    code: 404
+                    message: "No data for that hour"
+                    reason: NO_DATA
         '500':
           description: Unexpected I/O error serving the file.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '503':
+          description: |
+            Reads of stored data are being limited and this one was not served
+            (`reason: TEMPORARILY_UNAVAILABLE`). Ask again after the `Retry-After` delay.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 503
+                message: "Temporarily unavailable"
+                reason: TEMPORARILY_UNAVAILABLE
       tags:
         - Exchange
   '/exchange/{exchangeId}/klines/{base}/{quote}':
@@ -471,6 +545,9 @@ paths:
         Klines use the same columnar layout as tickers — readers that handle one
         format read the other with the same code. Use this endpoint when a
         per-tick payload would be too large for the window of interest.
+
+        The hours served (the last 7 days), the timestamps (`ts` in microseconds, `X-Ts-Unit:
+        micros`) and the errors are those of the tickers route.
       parameters:
         - name: exchangeId
           in: path
@@ -518,8 +595,9 @@ paths:
         '200':
           description: |
             One hour of klines for the instrument. `Content-Type` is
-            `application/vnd.lastra` by default or
-            `application/vnd.apache.parquet` when `format=parquet`.
+            `application/vnd.qtsurfer.lastra` by default or
+            `application/vnd.apache.parquet` when `format=parquet` was
+            requested.
           headers:
             Content-Disposition:
               description: |
@@ -528,8 +606,10 @@ paths:
                 where `{ext}` is `lastra` or `parquet` to match the format.
               schema:
                 type: string
+            X-Ts-Unit:
+              $ref: '#/components/headers/XTsUnit'
           content:
-            application/vnd.lastra:
+            application/vnd.qtsurfer.lastra:
               schema:
                 type: string
                 format: binary
@@ -538,23 +618,83 @@ paths:
                 type: string
                 format: binary
         '400':
-          description: Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`).
+          description: |
+            Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`), an `hour` in the
+            future, or an hour older than the last 7 days (`reason: OUTSIDE_WINDOW`, with `next`).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+              examples:
+                malformedHour:
+                  summary: The hour is not YYYY-MM-DDTHH
+                  value:
+                    code: 400
+                    message: "hour must match YYYY-MM-DDTHH"
+                outsideWindow:
+                  summary: The hour is older than the last 7 days
+                  value:
+                    code: 400
+                    message: "Hour older than 7 days: import it as a dataset"
+                    reason: OUTSIDE_WINDOW
+                    next:
+                      method: POST
+                      path: /datasets/imports
+                      body:
+                        type: cex
+                        instrument: "BTC/USDT"
+                        from: "2026-09-01T10:00:00Z"
+                        to: "2026-09-01T11:00:00Z"
+                        cex:
+                          exchange: binance
+                          segment: spot
+                          dataType: klines
         '404':
-          description: No Lastra segment exists for the requested instrument/hour.
+          description: |
+            No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
+            has just ended and is not stored yet (the answer carries `Retry-After`); `reason:
+            NO_DATA` — the hour is stored and holds nothing for this instrument.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+              examples:
+                notYetAvailable:
+                  summary: The hour has just ended
+                  value:
+                    code: 404
+                    message: "Hour not available yet"
+                    reason: NOT_YET_AVAILABLE
+                noData:
+                  summary: Nothing for this instrument in that hour
+                  value:
+                    code: 404
+                    message: "No data for that hour"
+                    reason: NO_DATA
         '500':
           description: Unexpected I/O error serving the file.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '503':
+          description: |
+            Reads of stored data are being limited and this one was not served
+            (`reason: TEMPORARILY_UNAVAILABLE`). Ask again after the `Retry-After` delay.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 503
+                message: "Temporarily unavailable"
+                reason: TEMPORARILY_UNAVAILABLE
       tags:
         - Exchange
   '/strategies':
@@ -3436,6 +3576,22 @@ paths:
       tags:
         - Live Execution
 components:
+  headers:
+    XTsUnit:
+      description: |
+        The unit of the `ts` column of a Lastra response: `micros`, microseconds since the epoch.
+        The column's own metadata declares the same unit (`ts_unit`). Present when the response is a
+        Lastra segment; a Parquet response has a `TIMESTAMP` column in milliseconds instead.
+      schema:
+        type: string
+        enum: [micros]
+        example: micros
+    RetryAfter:
+      description: Seconds to wait before asking again.
+      schema:
+        type: integer
+        minimum: 1
+        example: 30
   schemas:
     ResponseError:
       description: General response error

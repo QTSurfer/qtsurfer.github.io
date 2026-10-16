@@ -117,7 +117,7 @@ Two routes return bytes rather than JSON:
 Both require the `hour` query parameter in `YYYY-MM-DDTHH` UTC form. For example,
 `2026-01-15T10` covers `[2026-01-15T10:00:00Z, 2026-01-15T11:00:00Z)`. The default
 `format=lastra` is QTSurfer's compact columnar format; `format=parquet` asks the service to convert
-the same segment on demand. The response is respectively `application/vnd.lastra` or
+the same segment on demand. The response is respectively `application/vnd.qtsurfer.lastra` or
 `application/vnd.apache.parquet`, and `Content-Disposition` supplies a useful filename.
 
 ```bash
@@ -126,9 +126,60 @@ curl --fail --remote-name \
   -H "Authorization: Bearer $QTSURFER_JWT"
 ```
 
-Use a kline segment when bar-level data is enough; tickers can be much larger. A malformed hour or
-parameter is `400`; a valid hour with no stored segment is `404`. Download consumers should stream
-the response to disk or a compatible reader instead of buffering an hour in memory.
+Use a kline segment when bar-level data is enough; tickers can be much larger. Download consumers
+should stream the response to disk or a compatible reader instead of buffering an hour in memory.
+
+### Which hours
+
+The last 7 days: an hour that started no more than 7 days before the request and has ended. The
+routes give one hour of one instrument, fast; they are not how to get older history or a range.
+For those, [import a dataset](datasets.md#importing-a-dataset-instead-of-uploading-one) of the
+exchange's history (`POST /datasets/imports` with `type: "cex"`) and download it the way any dataset is
+downloaded.
+
+### Timestamps
+
+In a Lastra response the `ts` column holds **microseconds** since the epoch. The column's metadata
+declares it (`ts_unit: micros`) and so does the response header `X-Ts-Unit: micros`, so a reader
+does not have to guess the unit from the magnitude. A Parquet response has its timestamp column as a
+`TIMESTAMP` in milliseconds.
+
+### Errors
+
+A failed request answers [`ResponseError`](../openapi.yaml): `code` and `message`, and, when the
+cause has a stable name, `reason`, and when there is a request that gets past it, `next`. A client
+branches on `reason`, not on the text of `message`.
+
+| Status | `reason` | Meaning | What to do |
+| --- | --- | --- | --- |
+| `400` | none | `hour` missing or not `YYYY-MM-DDTHH`, `format` unknown, or an hour in the future | fix the request |
+| `400` | `OUTSIDE_WINDOW` | the hour is older than the last 7 days | send `next`: the `POST /datasets/imports` request that imports exactly that hour (add a `name`) |
+| `404` | `NOT_YET_AVAILABLE` | the hour has just ended and is not stored yet; carries `Retry-After` | ask again after that many seconds |
+| `404` | `NO_DATA` | the hour is stored and holds nothing for this instrument | none: there is no data to get |
+| `503` | `TEMPORARILY_UNAVAILABLE` | reads of stored data are being limited and this one was not served; carries `Retry-After` | ask again after that many seconds |
+| `500` | none | unexpected failure; the message says nothing about its cause | retry later |
+
+```json
+{
+  "code": 400,
+  "message": "Hour older than 7 days: import it as a dataset",
+  "reason": "OUTSIDE_WINDOW",
+  "next": {
+    "method": "POST",
+    "path": "/datasets/imports",
+    "body": {
+      "type": "cex",
+      "instrument": "BTC/USDT",
+      "from": "2026-09-01T10:00:00Z",
+      "to": "2026-09-01T11:00:00Z",
+      "cex": { "exchange": "binance", "segment": "spot", "dataType": "klines" }
+    }
+  }
+}
+```
+
+`next.path` is relative to the server URL (the one that already ends in `/v1`). Whatever depends on you
+and cannot be known to the service, such as the `name` of the dataset, is left for you to add.
 
 ## Related guides
 
