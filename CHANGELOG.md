@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.32] — 2026-10-16
+
+### Added
+
+- The hourly download routes answer the hour in progress, and an hour that has ended but is not stored yet, with what has been received so far, marked provisional: `200` with the new response headers `X-Data-Status: provisional` and `X-Data-Through` (the instant of the last row, an ISO-8601 UTC time whatever the unit of `ts`). The body is the same as any other hour's. A provisional answer can still grow and the stored hour replaces it once there is one. Until now those hours were `404` with `NOT_YET_AVAILABLE`, which remains the answer when there is nothing to give (no rows of the instrument yet, or what has been received does not reach back to the start of the hour).
+
 ## [0.128.31] — 2026-10-16
 
 ### Changed

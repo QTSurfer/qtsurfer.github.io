@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.31
+  version: 0.128.32
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -358,8 +358,17 @@ paths:
         get older history or a range. An older hour is `400` with `reason: OUTSIDE_WINDOW`, and the
         error carries `next`, the `POST /datasets/imports` request that imports exactly that hour
         as a dataset (add a `name`); a longer span is imported the same way, within your plan's
-        limits. An hour that has just ended may not be stored yet: `404` with
-        `reason: NOT_YET_AVAILABLE` and a `Retry-After`.
+        limits.
+
+        **The hour in progress and the last hours.** The hour in progress, and an hour that has ended
+        but is not stored yet, are answered with what has been received so far, marked provisional:
+        `200` with `X-Data-Status: provisional` and `X-Data-Through`, the instant of the last row.
+        A provisional answer is not to keep: it can still grow, and the stored hour replaces it once
+        there is one. It takes seconds to build, longer the further the hour has gone, and the service
+        limits how many it builds at once (`503` with `Retry-After`). When there is nothing to give,
+        because the instrument has no rows in the hour yet or what has been received does not reach back
+        to the start of the hour, the answer is `404` with `reason: NOT_YET_AVAILABLE` and a
+        `Retry-After`.
 
         **Timestamps.** In a Lastra response the `ts` column holds microseconds since the epoch,
         declared by `ts_unit: micros` in the column's metadata and by the response header
@@ -433,7 +442,8 @@ paths:
             One hour of tickers for the instrument. `Content-Type` is
             `application/vnd.qtsurfer.lastra` by default or
             `application/vnd.apache.parquet` when `format=parquet` was
-            requested.
+            requested. The hour in progress, or one that has ended and is not stored yet, is
+            provisional: see `X-Data-Status`.
           headers:
             Content-Disposition:
               description: |
@@ -443,6 +453,10 @@ paths:
                 type: string
             X-Ts-Unit:
               $ref: '#/components/headers/XTsUnit'
+            X-Data-Status:
+              $ref: '#/components/headers/XDataStatus'
+            X-Data-Through:
+              $ref: '#/components/headers/XDataThrough'
           content:
             application/vnd.qtsurfer.lastra:
               schema:
@@ -487,8 +501,9 @@ paths:
         '404':
           description: |
             No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
-            has just ended and is not stored yet (the answer carries `Retry-After`); `reason:
-            NO_DATA` — the hour is stored and holds nothing for this instrument.
+            is not stored yet and there is nothing provisional to give for it (the answer carries
+            `Retry-After`); `reason: NO_DATA` — the hour is stored and holds nothing for this
+            instrument.
           headers:
             Retry-After:
               $ref: '#/components/headers/RetryAfter'
@@ -517,7 +532,7 @@ paths:
                 $ref: '#/components/schemas/ResponseError'
         '503':
           description: |
-            Reads of stored data are being limited and this one was not served
+            Reads are being limited (of stored or of provisional data) and this one was not served
             (`reason: TEMPORARILY_UNAVAILABLE`). Ask again after the `Retry-After` delay.
           headers:
             Retry-After:
@@ -546,8 +561,8 @@ paths:
         format read the other with the same code. Use this endpoint when a
         per-tick payload would be too large for the window of interest.
 
-        The hours served (the last 7 days), the timestamps (`ts` in microseconds, `X-Ts-Unit:
-        micros`) and the errors are those of the tickers route.
+        The hours served (the last 7 days, and the provisional hour in progress), the timestamps
+        (`ts` in microseconds, `X-Ts-Unit: micros`) and the errors are those of the tickers route.
       parameters:
         - name: exchangeId
           in: path
@@ -597,7 +612,8 @@ paths:
             One hour of klines for the instrument. `Content-Type` is
             `application/vnd.qtsurfer.lastra` by default or
             `application/vnd.apache.parquet` when `format=parquet` was
-            requested.
+            requested. The hour in progress, or one that has ended and is not stored yet, is
+            provisional: see `X-Data-Status`.
           headers:
             Content-Disposition:
               description: |
@@ -608,6 +624,10 @@ paths:
                 type: string
             X-Ts-Unit:
               $ref: '#/components/headers/XTsUnit'
+            X-Data-Status:
+              $ref: '#/components/headers/XDataStatus'
+            X-Data-Through:
+              $ref: '#/components/headers/XDataThrough'
           content:
             application/vnd.qtsurfer.lastra:
               schema:
@@ -652,8 +672,9 @@ paths:
         '404':
           description: |
             No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
-            has just ended and is not stored yet (the answer carries `Retry-After`); `reason:
-            NO_DATA` — the hour is stored and holds nothing for this instrument.
+            is not stored yet and there is nothing provisional to give for it (the answer carries
+            `Retry-After`); `reason: NO_DATA` — the hour is stored and holds nothing for this
+            instrument.
           headers:
             Retry-After:
               $ref: '#/components/headers/RetryAfter'
@@ -682,7 +703,7 @@ paths:
                 $ref: '#/components/schemas/ResponseError'
         '503':
           description: |
-            Reads of stored data are being limited and this one was not served
+            Reads are being limited (of stored or of provisional data) and this one was not served
             (`reason: TEMPORARILY_UNAVAILABLE`). Ask again after the `Retry-After` delay.
           headers:
             Retry-After:
@@ -3586,6 +3607,25 @@ components:
         type: string
         enum: [micros]
         example: micros
+    XDataStatus:
+      description: |
+        Present, with the value `provisional`, when the answer is not a stored hour: the hour in
+        progress, or an hour that has ended and is not stored yet. It holds what had been received up
+        to `X-Data-Through`, it can still grow, and the stored hour replaces it once there is one. Do
+        not keep it as the record of the hour. Absent for a stored hour.
+      schema:
+        type: string
+        enum: [provisional]
+        example: provisional
+    XDataThrough:
+      description: |
+        With `X-Data-Status: provisional`: the instant of the last row, an ISO-8601 UTC time with
+        milliseconds, whatever the unit of `ts` (a Lastra `ts` is in microseconds, a Parquet one in
+        milliseconds). Rows after it had not arrived when the answer was made.
+      schema:
+        type: string
+        format: date-time
+        example: '2026-10-16T10:00:00.175Z'
     RetryAfter:
       description: Seconds to wait before asking again.
       schema:

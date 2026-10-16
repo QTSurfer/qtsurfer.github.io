@@ -137,6 +137,18 @@ For those, [import a dataset](datasets.md#importing-a-dataset-instead-of-uploadi
 exchange's history (`POST /datasets/imports` with `type: "cex"`) and download it the way any dataset is
 downloaded.
 
+### The hour in progress and the last hours
+
+The hour in progress, and an hour that has ended but is not stored yet, are answered with what has
+been received so far: `200` with `X-Data-Status: provisional` and `X-Data-Through`, the instant of the
+last row (an ISO-8601 UTC time, whatever the unit of `ts`). The columns, the time unit and the formats
+are those of any other hour. A provisional answer can still grow and the stored hour replaces it once
+there is one: use it for the tip of the market, not as the record of an hour. It takes seconds to
+build, longer the further the hour has gone, and the service limits how many it builds at once, so a
+`503` with `Retry-After` is a request to ask again, not a failure. When there is nothing to give,
+because the instrument has no rows in the hour yet or what has been received does not reach back to
+the start of the hour, the answer is `404` with `NOT_YET_AVAILABLE`.
+
 ### Timestamps
 
 In a Lastra response the `ts` column holds **microseconds** since the epoch. The column's metadata
@@ -154,9 +166,9 @@ branches on `reason`, not on the text of `message`.
 | --- | --- | --- | --- |
 | `400` | none | `hour` missing or not `YYYY-MM-DDTHH`, `format` unknown, or an hour in the future | fix the request |
 | `400` | `OUTSIDE_WINDOW` | the hour is older than the last 7 days | send `next`: the `POST /datasets/imports` request that imports exactly that hour (add a `name`) |
-| `404` | `NOT_YET_AVAILABLE` | the hour has just ended and is not stored yet; carries `Retry-After` | ask again after that many seconds |
+| `404` | `NOT_YET_AVAILABLE` | the hour is not stored yet and there is nothing provisional to give for it; carries `Retry-After` | ask again after that many seconds |
 | `404` | `NO_DATA` | the hour is stored and holds nothing for this instrument | none: there is no data to get |
-| `503` | `TEMPORARILY_UNAVAILABLE` | reads of stored data are being limited and this one was not served; carries `Retry-After` | ask again after that many seconds |
+| `503` | `TEMPORARILY_UNAVAILABLE` | reads are being limited (stored or provisional) and this one was not served; carries `Retry-After` | ask again after that many seconds |
 | `500` | none | unexpected failure; the message says nothing about its cause | retry later |
 
 ```json
