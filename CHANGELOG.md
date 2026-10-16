@@ -7,6 +7,16 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.34] — 2026-10-16
+
+### Fixed
+
+- The example hour of the hourly download routes (`2026-01-15T10`, in the description, the `hour` parameter's example and the guide's `curl`) is now `2026-10-15T10`, and the text says it only shows the shape of the value: the hour has to be one of the last 7 days, and the old one answered `400` `OUTSIDE_WINDOW`.
+
+### Changed
+
+- The provisional answer for the hour in progress and the last hours (0.128.32) is described as something a deployment may give, not something every one does: where it does not, those hours are `404` `NOT_YET_AVAILABLE` with `Retry-After`, as they already were when there was nothing to give, and a client that needs them handles both. No field, header or status is added or removed.
+
 ## [0.128.33] — 2026-10-16
 
 ### Fixed

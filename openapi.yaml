@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.33
+  version: 0.128.34
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -350,8 +350,9 @@ paths:
 
         One segment = one hour, aligned to UTC. The `hour` query parameter selects
         the segment and must match `YYYY-MM-DDTHH` (no minutes/seconds, no timezone
-        suffix). Example: `hour=2026-01-15T10` returns `h10.lastra` for
-        2026-01-15, covering `[10:00:00Z, 11:00:00Z)`.
+        suffix). Example: `hour=2026-10-15T10` is the segment `h10.lastra` of
+        2026-10-15, covering `[10:00:00Z, 11:00:00Z)`. The hour has to be one of the last 7 days (see
+        below): read the example as the shape of the value.
 
         **Which hours.** The last 7 days: an hour that started no more than 7 days before the
         request and has ended. This route gives one hour of one instrument, fast; it is not how to
@@ -361,14 +362,16 @@ paths:
         limits.
 
         **The hour in progress and the last hours.** The hour in progress, and an hour that has ended
-        but is not stored yet, are answered with what has been received so far, marked provisional:
+        but is not stored yet, can be answered with what has been received so far, marked provisional:
         `200` with `X-Data-Status: provisional` and `X-Data-Through`, the instant of the last row.
-        A provisional answer is not to keep: it can still grow, and the stored hour replaces it once
-        there is one. It takes seconds to build, longer the further the hour has gone, and the service
-        limits how many it builds at once (`503` with `Retry-After`). When there is nothing to give,
-        because the instrument has no rows in the hour yet or what has been received does not reach back
-        to the start of the hour, the answer is `404` with `reason: NOT_YET_AVAILABLE` and a
-        `Retry-After`.
+        Not every deployment of the service gives provisional answers: where it does not, those hours
+        are `404` with `reason: NOT_YET_AVAILABLE` and a `Retry-After`, and a client that needs them
+        handles both. A provisional answer is not to keep: it can still grow, and the stored hour
+        replaces it once there is one. It takes seconds to build, longer the further the hour has gone,
+        and the service limits how many it builds at once (`503` with `Retry-After`). When there is
+        nothing to give, because the instrument has no rows in the hour yet or what has been received
+        does not reach back to the start of the hour, the answer is also `404` with
+        `reason: NOT_YET_AVAILABLE`.
 
         **Timestamps.** In a Lastra response the `ts` column holds microseconds since the epoch,
         declared by `ts_unit: micros` in the column's metadata and by the response header
@@ -423,7 +426,7 @@ paths:
           schema:
             type: string
             pattern: '^\d{4}-\d{2}-\d{2}T\d{2}$'
-            example: '2026-01-15T10'
+            example: '2026-10-15T10'
         - name: format
           in: query
           required: false
@@ -442,8 +445,8 @@ paths:
             One hour of tickers for the instrument. `Content-Type` is
             `application/vnd.qtsurfer.lastra` by default or
             `application/vnd.apache.parquet` when `format=parquet` was
-            requested. The hour in progress, or one that has ended and is not stored yet, is
-            provisional: see `X-Data-Status`.
+            requested. The hour in progress, or one that has ended and is not stored yet, may be
+            provisional where the service gives provisional answers: see `X-Data-Status`.
           headers:
             Content-Disposition:
               description: |
@@ -501,7 +504,7 @@ paths:
         '404':
           description: |
             No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
-            is not stored yet and there is nothing provisional to give for it (the answer carries
+            is not stored yet and no provisional answer was given for it (the answer carries
             `Retry-After`); `reason: NO_DATA` — the hour is stored and holds nothing for this
             instrument.
           headers:
@@ -561,7 +564,7 @@ paths:
         format read the other with the same code. Use this endpoint when a
         per-tick payload would be too large for the window of interest.
 
-        The hours served (the last 7 days, and the provisional hour in progress), the timestamps
+        The hours served (the last 7 days; the hour in progress and the last hours may be provisional), the timestamps
         (`ts` in microseconds, `X-Ts-Unit: micros`) and the errors are those of the tickers route.
       parameters:
         - name: exchangeId
@@ -594,7 +597,7 @@ paths:
           schema:
             type: string
             pattern: '^\d{4}-\d{2}-\d{2}T\d{2}$'
-            example: '2026-01-15T10'
+            example: '2026-10-15T10'
         - name: format
           in: query
           required: false
@@ -612,8 +615,8 @@ paths:
             One hour of klines for the instrument. `Content-Type` is
             `application/vnd.qtsurfer.lastra` by default or
             `application/vnd.apache.parquet` when `format=parquet` was
-            requested. The hour in progress, or one that has ended and is not stored yet, is
-            provisional: see `X-Data-Status`.
+            requested. The hour in progress, or one that has ended and is not stored yet, may be
+            provisional where the service gives provisional answers: see `X-Data-Status`.
           headers:
             Content-Disposition:
               description: |
@@ -672,7 +675,7 @@ paths:
         '404':
           description: |
             No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
-            is not stored yet and there is nothing provisional to give for it (the answer carries
+            is not stored yet and no provisional answer was given for it (the answer carries
             `Retry-After`); `reason: NO_DATA` — the hour is stored and holds nothing for this
             instrument.
           headers:

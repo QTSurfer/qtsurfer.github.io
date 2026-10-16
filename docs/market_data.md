@@ -115,14 +115,16 @@ Two routes return bytes rather than JSON:
 | `GET /exchange/{exchangeId}/klines/{base}/{quote}` | Aggregated exchange-native klines for one UTC hour |
 
 Both require the `hour` query parameter in `YYYY-MM-DDTHH` UTC form. For example,
-`2026-01-15T10` covers `[2026-01-15T10:00:00Z, 2026-01-15T11:00:00Z)`. The default
+`2026-10-15T10` covers `[2026-10-15T10:00:00Z, 2026-10-15T11:00:00Z)` (the hour has to be one of the last
+7 days, see below: read the example as the shape of the value). The default
 `format=lastra` is QTSurfer's compact columnar format; `format=parquet` asks the service to convert
 the same segment on demand. The response is respectively `application/vnd.qtsurfer.lastra` or
 `application/vnd.apache.parquet`, and `Content-Disposition` supplies a useful filename.
 
 ```bash
+# the hour has to be one of the last 7 days
 curl --fail --remote-name \
-  "https://api.qtsurfer.net/v1/exchange/binance/tickers/BTC/USDT?hour=2026-01-15T10&format=parquet" \
+  "https://api.qtsurfer.net/v1/exchange/binance/tickers/BTC/USDT?hour=2026-10-15T10&format=parquet" \
   -H "Authorization: Bearer $QTSURFER_JWT"
 ```
 
@@ -139,15 +141,17 @@ downloaded.
 
 ### The hour in progress and the last hours
 
-The hour in progress, and an hour that has ended but is not stored yet, are answered with what has
-been received so far: `200` with `X-Data-Status: provisional` and `X-Data-Through`, the instant of the
-last row (an ISO-8601 UTC time, whatever the unit of `ts`). The columns, the time unit and the formats
+The hour in progress, and an hour that has ended but is not stored yet, can be answered with what
+has been received so far: `200` with `X-Data-Status: provisional` and `X-Data-Through`, the instant of
+the last row (an ISO-8601 UTC time, whatever the unit of `ts`). Not every deployment of the service
+gives provisional answers: where it does not, those hours are `404` with `NOT_YET_AVAILABLE` and a
+`Retry-After`, and a client that needs them handles both. The columns, the time unit and the formats
 are those of any other hour. A provisional answer can still grow and the stored hour replaces it once
 there is one: use it for the tip of the market, not as the record of an hour. It takes seconds to
 build, longer the further the hour has gone, and the service limits how many it builds at once, so a
 `503` with `Retry-After` is a request to ask again, not a failure. When there is nothing to give,
 because the instrument has no rows in the hour yet or what has been received does not reach back to
-the start of the hour, the answer is `404` with `NOT_YET_AVAILABLE`.
+the start of the hour, the answer is also `404` with `NOT_YET_AVAILABLE`.
 
 ### Timestamps
 
@@ -166,7 +170,7 @@ branches on `reason`, not on the text of `message`.
 | --- | --- | --- | --- |
 | `400` | none | `hour` missing or not `YYYY-MM-DDTHH`, `format` unknown, or an hour in the future | fix the request |
 | `400` | `OUTSIDE_WINDOW` | the hour is older than the last 7 days | send `next`: the `POST /datasets/imports` request that imports exactly that hour (add a `name`) |
-| `404` | `NOT_YET_AVAILABLE` | the hour is not stored yet and there is nothing provisional to give for it; carries `Retry-After` | ask again after that many seconds |
+| `404` | `NOT_YET_AVAILABLE` | the hour is not stored yet and no provisional answer was given for it; carries `Retry-After` | ask again after that many seconds |
 | `404` | `NO_DATA` | the hour is stored and holds nothing for this instrument | none: there is no data to get |
 | `503` | `TEMPORARILY_UNAVAILABLE` | reads are being limited (stored or provisional) and this one was not served; carries `Retry-After` | ask again after that many seconds |
 | `500` | none | unexpected failure; the message says nothing about its cause | retry later |
