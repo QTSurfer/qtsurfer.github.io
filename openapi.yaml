@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.29
+  version: 0.128.33
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -351,8 +351,29 @@ paths:
         One segment = one hour, aligned to UTC. The `hour` query parameter selects
         the segment and must match `YYYY-MM-DDTHH` (no minutes/seconds, no timezone
         suffix). Example: `hour=2026-01-15T10` returns `h10.lastra` for
-        2026-01-15, covering `[10:00:00Z, 11:00:00Z)`. Hours not yet available
-        return `404`.
+        2026-01-15, covering `[10:00:00Z, 11:00:00Z)`.
+
+        **Which hours.** The last 7 days: an hour that started no more than 7 days before the
+        request and has ended. This route gives one hour of one instrument, fast; it is not how to
+        get older history or a range. An older hour is `400` with `reason: OUTSIDE_WINDOW`, and the
+        error carries `next`, the `POST /datasets/imports` request that imports exactly that hour
+        as a dataset (add a `name`); a longer span is imported the same way, within your plan's
+        limits.
+
+        **The hour in progress and the last hours.** The hour in progress, and an hour that has ended
+        but is not stored yet, are answered with what has been received so far, marked provisional:
+        `200` with `X-Data-Status: provisional` and `X-Data-Through`, the instant of the last row.
+        A provisional answer is not to keep: it can still grow, and the stored hour replaces it once
+        there is one. It takes seconds to build, longer the further the hour has gone, and the service
+        limits how many it builds at once (`503` with `Retry-After`). When there is nothing to give,
+        because the instrument has no rows in the hour yet or what has been received does not reach back
+        to the start of the hour, the answer is `404` with `reason: NOT_YET_AVAILABLE` and a
+        `Retry-After`.
+
+        **Timestamps.** In a Lastra response the `ts` column holds microseconds since the epoch,
+        declared by `ts_unit: micros` in the column's metadata and by the response header
+        `X-Ts-Unit: micros`. In a Parquet response the timestamp column is a `TIMESTAMP` in
+        milliseconds.
 
         A `format=parquet` query parameter switches the response to on-the-fly
         Parquet conversion via [lastra-convert](https://github.com/QTSurfer/lastra-convert)
@@ -419,9 +440,10 @@ paths:
         '200':
           description: |
             One hour of tickers for the instrument. `Content-Type` is
-            `application/vnd.lastra` by default or
+            `application/vnd.qtsurfer.lastra` by default or
             `application/vnd.apache.parquet` when `format=parquet` was
-            requested.
+            requested. The hour in progress, or one that has ended and is not stored yet, is
+            provisional: see `X-Data-Status`.
           headers:
             Content-Disposition:
               description: |
@@ -429,8 +451,14 @@ paths:
                 where `{ext}` is `lastra` or `parquet` to match the format.
               schema:
                 type: string
+            X-Ts-Unit:
+              $ref: '#/components/headers/XTsUnit'
+            X-Data-Status:
+              $ref: '#/components/headers/XDataStatus'
+            X-Data-Through:
+              $ref: '#/components/headers/XDataThrough'
           content:
-            application/vnd.lastra:
+            application/vnd.qtsurfer.lastra:
               schema:
                 type: string
                 format: binary
@@ -439,23 +467,84 @@ paths:
                 type: string
                 format: binary
         '400':
-          description: Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`).
+          description: |
+            Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`), an `hour` in the
+            future, or an hour older than the last 7 days (`reason: OUTSIDE_WINDOW`, with `next`).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+              examples:
+                malformedHour:
+                  summary: The hour is not YYYY-MM-DDTHH
+                  value:
+                    code: 400
+                    message: "hour must match YYYY-MM-DDTHH"
+                outsideWindow:
+                  summary: The hour is older than the last 7 days
+                  value:
+                    code: 400
+                    message: "Hour older than 7 days: import it as a dataset"
+                    reason: OUTSIDE_WINDOW
+                    next:
+                      method: POST
+                      path: /datasets/imports
+                      body:
+                        type: cex
+                        instrument: "BTC/USDT"
+                        from: "2026-09-01T10:00:00Z"
+                        to: "2026-09-01T11:00:00Z"
+                        cex:
+                          exchange: binance
+                          segment: spot
+                          dataType: ticker
         '404':
-          description: No Lastra segment exists for the requested instrument/hour.
+          description: |
+            No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
+            is not stored yet and there is nothing provisional to give for it (the answer carries
+            `Retry-After`); `reason: NO_DATA` — the hour is stored and holds nothing for this
+            instrument.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+              examples:
+                notYetAvailable:
+                  summary: The hour has just ended
+                  value:
+                    code: 404
+                    message: "Hour not available yet"
+                    reason: NOT_YET_AVAILABLE
+                noData:
+                  summary: Nothing for this instrument in that hour
+                  value:
+                    code: 404
+                    message: "No data for that hour"
+                    reason: NO_DATA
         '500':
           description: Unexpected I/O error serving the file.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '503':
+          description: |
+            Reads are being limited (of stored or of provisional data) and this one was not served
+            (`reason: TEMPORARILY_UNAVAILABLE`). Ask again after the `Retry-After` delay.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 503
+                message: "Temporarily unavailable"
+                reason: TEMPORARILY_UNAVAILABLE
       tags:
         - Exchange
   '/exchange/{exchangeId}/klines/{base}/{quote}':
@@ -471,6 +560,9 @@ paths:
         Klines use the same columnar layout as tickers — readers that handle one
         format read the other with the same code. Use this endpoint when a
         per-tick payload would be too large for the window of interest.
+
+        The hours served (the last 7 days, and the provisional hour in progress), the timestamps
+        (`ts` in microseconds, `X-Ts-Unit: micros`) and the errors are those of the tickers route.
       parameters:
         - name: exchangeId
           in: path
@@ -518,8 +610,10 @@ paths:
         '200':
           description: |
             One hour of klines for the instrument. `Content-Type` is
-            `application/vnd.lastra` by default or
-            `application/vnd.apache.parquet` when `format=parquet`.
+            `application/vnd.qtsurfer.lastra` by default or
+            `application/vnd.apache.parquet` when `format=parquet` was
+            requested. The hour in progress, or one that has ended and is not stored yet, is
+            provisional: see `X-Data-Status`.
           headers:
             Content-Disposition:
               description: |
@@ -528,8 +622,14 @@ paths:
                 where `{ext}` is `lastra` or `parquet` to match the format.
               schema:
                 type: string
+            X-Ts-Unit:
+              $ref: '#/components/headers/XTsUnit'
+            X-Data-Status:
+              $ref: '#/components/headers/XDataStatus'
+            X-Data-Through:
+              $ref: '#/components/headers/XDataThrough'
           content:
-            application/vnd.lastra:
+            application/vnd.qtsurfer.lastra:
               schema:
                 type: string
                 format: binary
@@ -538,23 +638,84 @@ paths:
                 type: string
                 format: binary
         '400':
-          description: Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`).
+          description: |
+            Missing or malformed parameters (e.g. `hour` not `YYYY-MM-DDTHH`), an `hour` in the
+            future, or an hour older than the last 7 days (`reason: OUTSIDE_WINDOW`, with `next`).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+              examples:
+                malformedHour:
+                  summary: The hour is not YYYY-MM-DDTHH
+                  value:
+                    code: 400
+                    message: "hour must match YYYY-MM-DDTHH"
+                outsideWindow:
+                  summary: The hour is older than the last 7 days
+                  value:
+                    code: 400
+                    message: "Hour older than 7 days: import it as a dataset"
+                    reason: OUTSIDE_WINDOW
+                    next:
+                      method: POST
+                      path: /datasets/imports
+                      body:
+                        type: cex
+                        instrument: "BTC/USDT"
+                        from: "2026-09-01T10:00:00Z"
+                        to: "2026-09-01T11:00:00Z"
+                        cex:
+                          exchange: binance
+                          segment: spot
+                          dataType: klines
         '404':
-          description: No Lastra segment exists for the requested instrument/hour.
+          description: |
+            No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
+            is not stored yet and there is nothing provisional to give for it (the answer carries
+            `Retry-After`); `reason: NO_DATA` — the hour is stored and holds nothing for this
+            instrument.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+              examples:
+                notYetAvailable:
+                  summary: The hour has just ended
+                  value:
+                    code: 404
+                    message: "Hour not available yet"
+                    reason: NOT_YET_AVAILABLE
+                noData:
+                  summary: Nothing for this instrument in that hour
+                  value:
+                    code: 404
+                    message: "No data for that hour"
+                    reason: NO_DATA
         '500':
           description: Unexpected I/O error serving the file.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '503':
+          description: |
+            Reads are being limited (of stored or of provisional data) and this one was not served
+            (`reason: TEMPORARILY_UNAVAILABLE`). Ask again after the `Retry-After` delay.
+          headers:
+            Retry-After:
+              $ref: '#/components/headers/RetryAfter'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResponseError'
+              example:
+                code: 503
+                message: "Temporarily unavailable"
+                reason: TEMPORARILY_UNAVAILABLE
       tags:
         - Exchange
   '/strategies':
@@ -2235,8 +2396,18 @@ paths:
         as a dataset version indistinguishable from an uploaded one once it's ready. Poll
         `GET /datasets/{datasetId}/imports/{importId}` for progress.
 
-        `type` selects the source. `dex` — history over a pool/pair's own on-chain market — is the
-        only value today; other source types join this same endpoint later.
+        `type` selects the kind of venue the history comes from, with the same two values as the
+        `venueType` of `GET /exchanges`: `dex` — history over a pool/pair's own on-chain market —
+        and `cex` — the history of a centralized exchange's market, kept by the platform. Each
+        has its own block (`dex`, `cex`). The exchange id of a `cex` import has to be a centralized
+        exchange of `GET /exchanges`; a decentralized one (`robinhood`, say) is `400`, and is imported
+        with `type: dex`.
+
+        A `cex` import covers one instrument over a range: the API reads that range of the
+        exchange's history, builds the bars of the requested `cadence` from the finest data it has
+        for it, and stores the result as a dataset version, exactly as for an upload. `cex.dataType`
+        picks tickers or klines and is also the resulting dataset's `type`. The range is capped by
+        your tier like any import (`maxImportRangeHours` of `GET /account`).
 
         A `dex` import has two data shapes, chosen by the top-level `cadence`:
 
@@ -2281,6 +2452,31 @@ paths:
                   dex:
                     network: "ethereum"
                     contract: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+              cexKlines:
+                summary: Klines of a centralized exchange, 1-second bars
+                value:
+                  name: "btc-usdt-1s-sept"
+                  instrument: "BTC/USDT"
+                  from: "2026-09-01T00:00:00Z"
+                  to: "2026-09-01T06:00:00Z"
+                  cadence: "1s"
+                  type: "cex"
+                  cex:
+                    exchange: "binance"
+                    segment: "spot"
+                    dataType: "klines"
+              cexTicker:
+                summary: Tickers of a centralized exchange, finest cadence the range holds
+                value:
+                  name: "btc-usdt-ticker-sept"
+                  instrument: "BTC/USDT"
+                  from: "2026-09-01T00:00:00Z"
+                  to: "2026-09-01T01:00:00Z"
+                  type: "cex"
+                  cex:
+                    exchange: "binance"
+                    segment: "spot"
+                    dataType: "ticker"
       responses:
         '202':
           description: Dataset created, fetch started
@@ -2303,6 +2499,15 @@ paths:
             missing. Whether the pool/pair actually exists and resolves — and, for a candle
             `cadence`, whether that combination is actually servable on the requested `network` —
             is checked later, asynchronously — see the `failed` status on the poll endpoint below.
+
+            For `type: cex`: no `cex` block, or its `exchange` is not a centralized exchange of
+            `GET /exchanges` (a decentralized one is `400` too — use `type: dex`), `segment` is not
+            `spot` (the only segment a `cex` import takes today), `dataType` is not `ticker` or
+            `klines`, or
+            `cadence` is not one of the values a `cex` import takes (see `DatasetImportRequest`).
+            Whether the range holds data, and whether it holds data fine enough for the `cadence`
+            asked, is checked later, asynchronously — see the `failed` status on the poll endpoint
+            below.
           content:
             application/json:
               schema:
@@ -3392,6 +3597,41 @@ paths:
       tags:
         - Live Execution
 components:
+  headers:
+    XTsUnit:
+      description: |
+        The unit of the `ts` column of a Lastra response: `micros`, microseconds since the epoch.
+        The column's own metadata declares the same unit (`ts_unit`). Present when the response is a
+        Lastra segment; a Parquet response has a `TIMESTAMP` column in milliseconds instead.
+      schema:
+        type: string
+        enum: [micros]
+        example: micros
+    XDataStatus:
+      description: |
+        Present, with the value `provisional`, when the answer is not a stored hour: the hour in
+        progress, or an hour that has ended and is not stored yet. It holds what had been received up
+        to `X-Data-Through`, it can still grow, and the stored hour replaces it once there is one. Do
+        not keep it as the record of the hour. Absent for a stored hour.
+      schema:
+        type: string
+        enum: [provisional]
+        example: provisional
+    XDataThrough:
+      description: |
+        With `X-Data-Status: provisional`: the instant of the last row, an ISO-8601 UTC time with
+        milliseconds, whatever the unit of `ts` (a Lastra `ts` is in microseconds, a Parquet one in
+        milliseconds). Rows after it had not arrived when the answer was made.
+      schema:
+        type: string
+        format: date-time
+        example: '2026-10-16T10:00:00.175Z'
+    RetryAfter:
+      description: Seconds to wait before asking again.
+      schema:
+        type: integer
+        minimum: 1
+        example: 30
   schemas:
     ResponseError:
       description: General response error
@@ -3408,6 +3648,39 @@ components:
           description: Error description
           type: string
           example: Invalid request
+        reason:
+          description: |
+            A stable token naming the cause, for a client to branch on without reading `message`.
+            Present only on an error that has one, and each operation that can return one lists
+            the values it uses. A client treats a value it does not know like an absent `reason`.
+          type: string
+          example: OUTSIDE_WINDOW
+        next:
+          $ref: '#/components/schemas/ErrorNextCall'
+    ErrorNextCall:
+      description: |
+        The call that gets past an error, ready to send: a client that wants the same thing by
+        another route makes this request. Present only on an error that has one.
+      type: object
+      required:
+        - method
+        - path
+      properties:
+        method:
+          description: HTTP method of the call.
+          type: string
+          enum: [GET, POST, PUT, DELETE]
+          example: POST
+        path:
+          description: Path of the call, relative to the server URL (the one that already ends in `/v1`).
+          type: string
+          example: /datasets/imports
+        body:
+          description: |
+            JSON body of the call, when it has one. Whatever depends on the caller and cannot be
+            known here (such as the `name` of a dataset) is left for the client to add.
+          type: object
+          additionalProperties: true
     ScalarStrategyParamValue:
       description: A scalar strategy property value for one execution.
       oneOf:
@@ -4010,11 +4283,10 @@ components:
             * Managed exchange, `ticker` or `funding` — one of `1s`, `5s`, `1m`, `3m`, `5m`, `15m`,
               `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w`, `1q`; any other label returns `400`.
               Omitted = `1s`, the publisher's native cadence.
-            * Managed exchange, `kline` — one of `1s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`;
-              any other label, including `5s`, `3m` and `8h`, returns `400` and names the accepted
-              ones. Omitted = `1s`. This is the width of the bars a run reads: it is chosen here,
-              once, and the same strategy can be run at several cadences by preparing the range at
-              each.
+            * Managed exchange, `kline` — the same labels as above, `1s` to `1q`; a label that is
+              not a whole number of seconds returns `400`. Omitted = `1s`. This is the width of the
+              bars a run reads: it is chosen here, once, and the same strategy can be run at
+              several cadences by preparing the range at each.
             * Dataset (`exchangeId: user`) — omitted = the dataset version's own discovered
               `cadence` (see `DatasetVersion.cadence`), served as-is. Any cadence equal to or
               coarser than it and an exact multiple of it is accepted, including ones outside the
@@ -5428,9 +5700,11 @@ components:
           type: string
           enum: [ticker, klines]
           description: |
-            `ticker` for an upload or a `dex` import with no `cadence` requested (native per-trade
-            data). `klines` for a `dex` import that requested a candle `cadence` — pre-aggregated
-            bars rather than raw ticks. Purely informational; both shapes are read the same way.
+            `ticker` for an upload, a `dex` import with no `cadence` requested (native per-trade
+            data) or a `cex` import with `dataType: ticker`. `klines` for a `dex` import that
+            requested a candle `cadence` — pre-aggregated bars rather than raw ticks — or a `cex`
+            import with `dataType: klines`. Purely informational; both shapes are read the same
+            way.
           example: "ticker"
         instrument:
           $ref: '#/components/schemas/Instrument'
@@ -5645,11 +5919,12 @@ components:
           type: string
           description: |
             The cadence discovered from the data's own timestamps. Either a fixed grid — `1s`,
-            `5s`, `15s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d` — when at least half the
-            intervals between consecutive rows fall on that step (small clock jitter tolerated), or
-            `rt`: native data at the rate it was captured, each row at its own timestamp with no
-            fixed step — per-trade on-chain swaps, block-spaced or sub-second ticks, irregular
-            intervals. An `rt` dataset can be resampled to any fixed cadence at prepare time.
+            `5s`, `15s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`,
+            `1w` — when at least half the intervals between consecutive rows fall on that step
+            (small clock jitter tolerated), or `rt`: native data at the rate it was captured, each
+            row at its own timestamp with no fixed step — per-trade on-chain swaps, block-spaced
+            or sub-second ticks, irregular intervals. An `rt` dataset can be resampled to any
+            fixed cadence at prepare time.
           example: "1s"
         timestampUnit:
           type: string
@@ -5725,7 +6000,8 @@ components:
       type: object
       description: |
         `POST /datasets/imports`'s request body. A common block plus one type-specific block,
-        selected by `type` — `dex` is the only value today.
+        selected by `type`: `dex` (block `dex`) or `cex` (block `cex`), the two `venueType`s of
+        `GET /exchanges`.
       required: [name, instrument, from, to, type]
       properties:
         name:
@@ -5748,22 +6024,41 @@ components:
           example: "2026-08-08T00:00:00Z"
         cadence:
           type: string
-          enum: ["1s", "1m", "5m"]
+          enum: ["1s", "5s", "1m", "3m", "5m", "15m", "30m", "1h", "2h", "4h", "8h", "12h", "1d", "1w", "1q"]
           description: |
-            Optional. Omitted/blank keeps native per-trade event cadence — each swap at its own
-            timestamp, so the resulting version's `cadence` is `rt` unless the swaps happen to sit
-            on a fixed grid (see `DatasetVersion.cadence`). Set to `1s`, `1m` or
-            `5m` instead to get pre-aggregated candles at that width rather than raw trades (the
-            resulting dataset's `type` becomes `klines`); any other value is `400`. Not every
-            network supports every cadence — an unsupported combination fails asynchronously, not
-            at request time (see `DatasetImportState.error`).
+            Optional; what it means, and what it accepts, depends on `type`. Any other value is
+            `400`.
+
+            * `dex` — omitted/blank keeps native per-trade event cadence: each swap at its own
+              timestamp, so the resulting version's `cadence` is `rt` unless the swaps happen to
+              sit on a fixed grid (see `DatasetVersion.cadence`). Set to `1s`, `1m` or `5m`
+              instead to get pre-aggregated candles at that width rather than raw trades (the
+              resulting dataset's `type` becomes `klines`). Not every network supports every
+              cadence — an unsupported combination fails asynchronously, not at request time (see
+              `DatasetImportState.error`).
+            * `cex` — one of `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`,
+              `12h`, `1d`, `1w`, `1q`, whether `dataType` is `ticker` or `klines`. Omitted = the
+              finest cadence every part of the range holds.
+
+            For `cex` the bars are built from the finest data every part of the range holds. A
+            `cadence` finer than that, or not an exact multiple of it, fails the import
+            asynchronously (`failed`; the `error` names the finest cadence the range holds) rather
+            than returning a dataset with a different cadence from the one asked for. So a range
+            whose history changes cadence part-way (from `1m` to `1s`, say) comes out entirely at
+            the coarser one when `cadence` is omitted: the dataset has no gap that is only a
+            change of cadence.
         type:
           type: string
-          enum: [dex]
-          description: The source to fetch from. `dex` is the only value today.
-          example: "dex"
+          enum: [dex, cex]
+          description: |
+            The kind of venue to import from, the same two values as the `venueType` of
+            `GET /exchanges`: `dex` — a pool/pair's own on-chain market (block `dex`) — or `cex` —
+            a centralized exchange's market history (block `cex`).
+          example: "cex"
         dex:
           $ref: '#/components/schemas/DatasetImportDexRequest'
+        cex:
+          $ref: '#/components/schemas/DatasetImportCexRequest'
     DatasetImportDexRequest:
       type: object
       description: |
@@ -5811,6 +6106,38 @@ components:
         id: "uniswap"
         version: "v3"
         contract: "0x88e6a0c2ddd26feeb64f039a2c41296fcb3f5640"
+    DatasetImportCexRequest:
+      type: object
+      description: |
+        The `cex` source's own fields — required when `type` is `cex`. They name a market the way
+        `GET /exchanges` and the instruments routes do: `exchange` is the `id` of a centralized
+        exchange, `segment` one of its `segments`.
+      required: [exchange, segment, dataType]
+      properties:
+        exchange:
+          type: string
+          description: |
+            The id of a centralized exchange (`venueType` `cex`) of `GET /exchanges`, lower-case.
+            A decentralized exchange's id is `400`: import its pools with `type: dex`.
+          example: "binance"
+        segment:
+          type: string
+          enum: [spot]
+          description: |
+            The market segment, one of the exchange's `segments`. `spot` is the only segment a
+            `cex` import takes today, which matches `instrument` being a plain spot pair.
+          example: "spot"
+        dataType:
+          type: string
+          enum: [ticker, klines]
+          description: |
+            What to import, and the resulting dataset's `type`: `ticker` — the exchange's ticker
+            series — or `klines` — its aggregated bars (open, high, low, close and volume).
+          example: "klines"
+      example:
+        exchange: "binance"
+        segment: "spot"
+        dataType: "klines"
     DatasetImportCreated:
       type: object
       description: The response to `POST /datasets/imports` — the dataset now exists, and its fetch has started.
@@ -5864,7 +6191,8 @@ components:
           description: |
             A human-readable reason, present when `status` is `failed` — an unresolvable
             pool/pair, no data in the requested range, a range older than the configured source
-            retains, the fetch exceeding your tier's time ceiling, or any of
+            retains, a `cex` `cadence` finer than the range holds (the message names the finest
+            one), the fetch exceeding your tier's time ceiling, or any of
             `DatasetUploadState.error`'s own ingest-side reasons once fetching hands off to it.
             Durably recorded, same as on the upload path.
           example: "Import exceeded the tier's 12 minute ceiling"

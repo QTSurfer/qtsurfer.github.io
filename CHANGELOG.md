@@ -7,6 +7,36 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.33] — 2026-10-16
+
+### Fixed
+
+- The text of `POST /backtest/prepare` (and the guide's) said that a kline run takes eight cadences (`1s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`) and that `5s`, `3m` or `8h` are `400`. The service has accepted the same fifteen labels for klines as for tickers and funding (`1s` to `1q`) and refuses only a label that is not a whole number of seconds. The text now says what the service does; no behaviour changes.
+
+## [0.128.32] — 2026-10-16
+
+### Added
+
+- The hourly download routes answer the hour in progress, and an hour that has ended but is not stored yet, with what has been received so far, marked provisional: `200` with the new response headers `X-Data-Status: provisional` and `X-Data-Through` (the instant of the last row, an ISO-8601 UTC time whatever the unit of `ts`). The body is the same as any other hour's. A provisional answer can still grow and the stored hour replaces it once there is one. Until now those hours were `404` with `NOT_YET_AVAILABLE`, which remains the answer when there is nothing to give (no rows of the instrument yet, or what has been received does not reach back to the start of the hour).
+
+## [0.128.31] — 2026-10-16
+
+### Changed
+
+- The hourly download routes (`GET /exchange/{exchangeId}/tickers/{base}/{quote}` and `.../klines/...`) serve the last 7 days. An hour that started more than 7 days before the request is `400` with `reason: OUTSIDE_WINDOW`, and the error carries `next`: the `POST /datasets/imports` request (`type: "cex"`) that imports exactly that hour as a dataset. Older history and ranges are imported the same way, within the plan's limits. The market-data guide explains it.
+- Their errors are typed. `ResponseError` (with the `reason` and `next` that 0.128.30 added) is what every failure answers, and the contract lists the causes: `404` `NOT_YET_AVAILABLE` (the hour has just ended and is not stored yet, with `Retry-After`) and `NO_DATA` (the hour is stored and holds nothing for the instrument), `400` `OUTSIDE_WINDOW`, and the new `503` `TEMPORARILY_UNAVAILABLE` (reads of stored data are being limited, with `Retry-After`). The routes used to answer these with a body of the shape `{"error": ...}`, which the contract never described; a client that read `error` reads `message` now.
+- The `ts` column of a Lastra response is declared: microseconds since the epoch, in the column's metadata (`ts_unit: micros`) and in the new response header `X-Ts-Unit: micros`. Until now the unit was not declared and the service served milliseconds; the SDKs return the bytes untouched, so a client that decoded `ts` as milliseconds has to read the header (a Parquet response keeps its `TIMESTAMP` column in milliseconds).
+- The content type of a Lastra response is `application/vnd.qtsurfer.lastra`, which is what the service has always answered; the contract said `application/vnd.lastra`.
+
+## [0.128.30] — 2026-10-15
+
+### Added
+
+- `POST /datasets/imports` imports the history of a centralized exchange, not only a decentralized pool's. `type` takes the two values of the `venueType` of `GET /exchanges`, `dex` (as before) and `cex`, and a `cex` import has its own block, `cex`, with `exchange` (the id of a centralized exchange of `GET /exchanges`; a decentralized one is `400`, and is imported with `type: dex`), `segment` (`spot`, the only segment a `cex` import takes today) and `dataType` (`ticker` or `klines`, also the resulting dataset's `type`). The range is capped by the tier's `maxImportRangeHours` and counted against its dataset limits, like any import. Two examples and a section of the datasets guide cover it.
+- The `cadence` of an import takes more values for a `cex` import: `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w` or `1q`, for tickers and for klines alike (the same labels as the cadence of a backtest preparation). Omitted, the dataset gets the finest cadence every part of the range holds, so a range whose history changes cadence part-way comes out entirely at the coarser one and has no gap that is only a change of cadence. A `cadence` finer than the range holds fails the import (`failed`), and `error` names the finest one. For a `dex` import `cadence` is as before: `1s`, `1m` or `5m`.
+- The `cadence` a dataset version reports (`DatasetVersion.cadence`) can now also be `3m`, `2h`, `8h`, `12h` or `1w`, so a dataset whose rows are that many minutes, hours or days apart is reported at that step instead of `rt`. It applies to uploads as well as to imports.
+- `ResponseError` gains two optional fields. `reason` is a stable token that names the cause, for a client to branch on without reading `message`; `next` is the call that gets past the error (`method`, `path` and, when it has one, `body`), ready to send. An error that has neither does not carry them, and a client treats a `reason` it does not know like an absent one. Each operation that returns them lists the values it uses.
+
 ## [0.128.29] — 2026-10-15
 
 ### Changed
