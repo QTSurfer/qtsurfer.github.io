@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.33] — 2026-10-16
+
+### Fixed
+
+- The text of `POST /backtest/prepare` (and the guide's) said that a kline run takes eight cadences (`1s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d`) and that `5s`, `3m` or `8h` are `400`. The service has accepted the same fifteen labels for klines as for tickers and funding (`1s` to `1q`) and refuses only a label that is not a whole number of seconds. The text now says what the service does; no behaviour changes.
+
 ## [0.128.32] — 2026-10-16
 
 ### Added

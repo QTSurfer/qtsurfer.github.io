@@ -43,10 +43,10 @@ Sources that can be executed: ticker, kline`.
 
 ### Kline: you choose the bar width
 
-A kline run reads bars of exactly the `cadence` you prepared at — `1s` (the default), `1m`, `5m`,
-`15m`, `30m`, `1h`, `4h` or `1d` — whatever the strategy itself might suggest. The same strategy
-can therefore be run at several cadences by preparing the range once per cadence. Any other label
-(`5s`, `3m`, `8h`, ...) is `400` at prepare, and the message lists the accepted ones.
+A kline run reads bars of exactly the `cadence` you prepared at — `1s` (the default) up to `1q`, the
+same labels as for tickers (`5s`, `3m`, `8h`, `1w` among them) — whatever the strategy itself might
+suggest. The same strategy can therefore be run at several cadences by preparing the range once per
+cadence. A label that is not a whole number of seconds is `400` at prepare.
 
 ```bash
 curl -X POST https://api.qtsurfer.net/v1/backtest/binance/kline/prepare \
@@ -79,7 +79,7 @@ Two shapes, chosen by the `exchangeId` path segment:
 | `instrument` | string | required **unless** `exchangeId` is the reserved value `user` |
 | `datasetId` | string | **only** for `exchangeId: user` — a dataset from `POST /datasets`, in place of `instrument` |
 | `datasetVersionId` | string | **only** for `exchangeId: user`, optional — pins a past version instead of the dataset's current one |
-| `cadence` | string | optional. Managed exchange, `ticker` or `funding`: one of `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w`, `1q` — default `1s`. Managed exchange, `kline`: one of `1s`, `1m`, `5m`, `15m`, `30m`, `1h`, `4h`, `1d` — default `1s`; any other label is `400`. `exchangeId: user`: default is the dataset version's own discovered cadence, served as-is; any cadence equal to or coarser than it and an exact multiple of it is accepted, even outside that list (e.g. `15s`), and an `rt` dataset resamples to any fixed cadence. Finer than the source, or not an exact multiple of it, is `400` |
+| `cadence` | string | optional. Managed exchange, `ticker` or `funding`: one of `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`, `12h`, `1d`, `1w`, `1q` — default `1s`. Managed exchange, `kline`: the same labels — default `1s`; any other label is `400`. `exchangeId: user`: default is the dataset version's own discovered cadence, served as-is; any cadence equal to or coarser than it and an exact multiple of it is accepted, even outside that list (e.g. `15s`), and an `rt` dataset resamples to any fixed cadence. Finer than the source, or not an exact multiple of it, is `400` |
 
 `exchangeId: user` is reserved for your own uploaded data — see
 [`docs/datasets.md`](datasets.md).
