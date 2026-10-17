@@ -7,6 +7,15 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.36] — 2026-10-17
+
+### Changed
+
+- Both instruments routes share the named `InstrumentCatalogueResponse` schema, a union of
+  centralized-exchange instruments and decentralized-exchange pools. Generated clients expose the
+  same catalogue type for both routes; `meta.venueType` distinguishes the two answers even when
+  `data` is empty. The response JSON and routes are unchanged.
+
 ## [0.128.35] — 2026-10-17
 
 ### Changed
