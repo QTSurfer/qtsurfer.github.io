@@ -31,7 +31,8 @@ curl -X POST https://api.qtsurfer.net/v1/auth/token \
 | `tier` | the subscription tier the token was issued for; it sets your limits, see [Account](account.md) |
 
 A key that is unknown, revoked or expired is answered `401`; the body is `AuthTokenError` in the
-API reference.
+API reference. Where a deployment requires scopes, a key that carries none is answered `403` with
+the code `apikey_without_scopes` and no token: create a key with at least one scope in the web app.
 
 ## Scopes
 
@@ -41,7 +42,7 @@ A key carries scopes: a map from a resource to the actions it may take on it, in
 { "backtests": ["read", "write", "execute"], "exchanges": ["read"] }
 ```
 
-- A key with no scopes is `{}`.
+- A scope is a resource and an action: a resource is listed only with at least one action. A key either may do something or it may not; a key with no scope is `{}`.
 - You see them in two places, as the same map: the `scopes` of the token answer above, and the
   `scopes` of [`GET /account`](account.md#getting-your-tier-and-limits), which needs no new token.
 - The token carries the scopes your key had when it was issued. Change the key's scopes and the

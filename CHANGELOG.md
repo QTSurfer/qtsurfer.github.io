@@ -7,6 +7,17 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.37] — 2026-10-17
+
+### Added
+
+- `KeyScopes` and the guide say that a scope is a resource and an action: a resource is listed only with at least one action, and a key with no scope is `{}`.
+- `POST /auth/token` can answer `403` with the code `apikey_without_scopes` to a key that carries no scopes, where a deployment requires them. No token is minted; the answer says to create a key with at least one scope. The code is in `AuthTokenError` and the guide (`docs/auth.md`) says so.
+
+### Fixed
+
+- The example of the `200` answer of `POST /auth/token` still showed `scopes` as an empty list; it shows the map of 0.128.35.
+
 ## [0.128.36] — 2026-10-17
 
 ### Changed
