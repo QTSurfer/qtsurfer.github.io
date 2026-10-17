@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.34
+  version: 0.128.35
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3958,7 +3958,7 @@ components:
         page load. Live usage against these limits is a separate resource, `GET /account/usage`,
         deliberately: usage changes on every upload/execution and costs a query to compute, this
         one doesn't.
-      required: [userId, tier, maxExecute, maxRangeDays, maxSweepCartesian, maxImportRangeHours, maxDatasets, maxDatasetBytes, maxTotalStorageBytes, _links]
+      required: [userId, tier, scopes, maxExecute, maxRangeDays, maxSweepCartesian, maxImportRangeHours, maxDatasets, maxDatasetBytes, maxTotalStorageBytes, _links]
       properties:
         userId:
           type: string
@@ -3968,6 +3968,8 @@ components:
           type: string
           description: Your current subscription tier.
           example: "free"
+        scopes:
+          $ref: '#/components/schemas/KeyScopes'
         maxExecute:
           type: integer
           description: |
@@ -6203,6 +6205,22 @@ components:
           allOf:
             - $ref: '#/components/schemas/DatasetVersion'
           description: Present when `status` is `ready` or `failed`.
+    KeyScopes:
+      type: object
+      description: |
+        What your API key may do, as a map from a resource to the actions allowed on it. Names are
+        lower case: `{ "backtests": ["read", "write", "execute"], "exchanges": ["read"] }`. A key
+        with no scopes is `{}`. `GET /account` and `POST /auth/token` return the same map for the
+        same key. The API reports the scopes of a key; it does not yet refuse an operation because
+        a scope is missing.
+      additionalProperties:
+        type: array
+        description: The actions allowed on this resource (for example `read`, `write`, `execute`).
+        items:
+          type: string
+      example:
+        backtests: [read, write, execute]
+        exchanges: [read]
     AuthTokenResponse:
       type: object
       required: [access_token, token_type, expires_in, tier]
@@ -6219,11 +6237,7 @@ components:
           description: Seconds until the JWT expires (typically 3600).
           example: 3600
         scopes:
-          type: array
-          description: Scopes granted to this token. Reserved for future use; currently always empty.
-          items:
-            type: string
-          example: []
+          $ref: '#/components/schemas/KeyScopes'
         tier:
           type: string
           enum: [free, basic, pro, elite]

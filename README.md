@@ -156,14 +156,16 @@ curl -X POST https://api.qtsurfer.net/v1/auth/token \
   "access_token": "eyJhbGciOiJIUzI1NiJ9...",
   "token_type": "Bearer",
   "expires_in": 3600,
-  "scopes": ["STRATEGIES:READ", "STRATEGIES:WRITE", "..."],
+  "scopes": { "strategies": ["read", "write"], "backtests": ["read", "write", "execute"] },
   "tier": "free"
 }
 ```
 
 Send `access_token` as `Authorization: Bearer <token>` on every other call; refresh before it
 expires (or on a `401`) by calling `/auth/token` again. `X-API-Key` is accepted only on this one
-endpoint — everywhere else expects the bearer token, not the raw API key.
+endpoint — everywhere else expects the bearer token, not the raw API key. The `scopes` of the
+answer say what your key may do; they are explained, with the scope each operation requires, in
+[Authentication and scopes](docs/auth.md).
 
 Each area below has its own doc with full parameter tables, request/response examples, and error
 cases — this README stays a map, not a mirror, so a growing endpoint only ever needs its own doc
@@ -171,6 +173,7 @@ touched.
 
 | Area | Covers |
 |---|---|
+| **[Authentication and scopes](docs/auth.md)** | Exchange your API key for a token; see what your key may do and the scope each operation requires |
 | **[Strategy coding](docs/strategy_coding.md)** | Write Java strategies; emit execution and information signals; configure orders and chart markers |
 | **[QTScript (beta)](docs/qtscript.md)** | Write a strategy in a compact language whose braced bodies are plain Java — the parts of a file, windows, examples |
 | **[Market data](docs/market_data.md)** | Discover exchanges and instruments; download hourly ticker or kline segments |

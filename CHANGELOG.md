@@ -7,6 +7,18 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.35] — 2026-10-17
+
+### Changed
+
+- `scopes` in the answer of `POST /auth/token` is now an object, a map from a resource to its actions in lower case (`{ "backtests": ["read", "write", "execute"] }`; `{}` for a key with none), not a list of strings. It was described as reserved and always empty, which stopped being true: it carries what the key was granted. Anything that read it as a list needs to read the object; nothing in the contract depended on the list.
+
+### Added
+
+- `scopes` in `GET /account`, the same map for the same key, so a client can see what its key may do without asking for a token.
+- The schema `KeyScopes`, shared by both. It says that the scopes are reported, and that the API does not yet refuse an operation for a missing one.
+- A guide, `docs/auth.md`: getting a token, the shape of the scopes, the resources and actions, and the scope each operation will require. The README, the account guide and the market-data guide point to it.
+
 ## [0.128.34] — 2026-10-16
 
 ### Fixed
