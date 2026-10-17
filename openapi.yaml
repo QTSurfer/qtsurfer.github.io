@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.36
+  version: 0.128.37
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -35,6 +35,10 @@ paths:
         The returned JWT carries the caller's subscription `tier` as a claim and
         expires after `expires_in` seconds. Callers should refresh the token
         before expiry (or on a `401` response) by calling this endpoint again.
+
+        The answer's `scopes` say what the key may do. Where a deployment requires scopes, a key
+        that carries none is refused with `403` and the code `apikey_without_scopes`: create a key
+        with at least one scope.
       responses:
         '200':
           description: API key accepted; JWT returned.
@@ -46,7 +50,9 @@ paths:
                 access_token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI3NmI5MDIwMy0wM2MyLTQ2ZjYtYjM2Ni05OTQ0ZjE2N2U4MTgiLCJzY29wZXMiOltdLCJ0aWVyIjoiZnJlZSIsImlhdCI6MTc3OTczNTQ2MiwiZXhwIjoxNzc5NzM5MDYyfQ.signature
                 token_type: Bearer
                 expires_in: 3600
-                scopes: []
+                scopes:
+                  backtests: [read, write, execute]
+                  exchanges: [read]
                 tier: free
         '401':
           description: API key is invalid, revoked, or expired.
@@ -57,6 +63,15 @@ paths:
               example:
                 code: invalid_apikey
                 message: API key not recognized
+        '403':
+          description: The API key is valid but carries no scopes, and this deployment requires them.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthTokenError'
+              example:
+                code: apikey_without_scopes
+                message: This API key has no scopes. Create a key with at least one scope in the web app.
         '429':
           description: Rate limit exceeded for this API key.
       security:
@@ -6212,8 +6227,9 @@ components:
       type: object
       description: |
         What your API key may do, as a map from a resource to the actions allowed on it. Names are
-        lower case: `{ "backtests": ["read", "write", "execute"], "exchanges": ["read"] }`. A key
-        with no scopes is `{}`. `GET /account` and `POST /auth/token` return the same map for the
+        lower case: `{ "backtests": ["read", "write", "execute"], "exchanges": ["read"] }`. A scope
+        is a resource and an action: a resource is listed only with at least one action, and a key
+        with no scope is `{}`. `GET /account` and `POST /auth/token` return the same map for the
         same key. The API reports the scopes of a key; it does not yet refuse an operation because
         a scope is missing.
       additionalProperties:
@@ -6249,11 +6265,11 @@ components:
     AuthTokenError:
       type: object
       required: [code, message]
-      description: Error envelope returned by `POST /auth/token` when the API key is rejected.
+      description: Error envelope returned by `POST /auth/token` when the API key is rejected (`401`) or carries no scopes where scopes are required (`403`).
       properties:
         code:
           type: string
-          enum: [invalid_apikey, apikey_revoked, apikey_expired]
+          enum: [invalid_apikey, apikey_revoked, apikey_expired, apikey_without_scopes]
           description: Machine-readable error reason.
         message:
           type: string
