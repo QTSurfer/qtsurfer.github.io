@@ -1,6 +1,6 @@
 # Market data
 
-All market-data routes require a bearer JWT obtained from [authentication](../README.md#api-quick-start).
+All market-data routes require a bearer JWT obtained from [authentication](auth.md).
 They expose the exchange catalogue and historical data that QTSurfer manages; they do not submit a
 backtest or create server-side state.
 
