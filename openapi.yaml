@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.37
+  version: 0.128.38
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -186,6 +186,8 @@ paths:
                   venueType: dex
                   segments: [uniswap-v3]
                   liveSegments: [uniswap-v3]
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
       tags:
         - Exchange
   '/exchange/{exchangeId}/instruments':
@@ -249,6 +251,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: The instrument catalog is not available
           content:
@@ -341,6 +345,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: The instrument catalog is not available
           content:
@@ -512,6 +518,8 @@ paths:
                           exchange: binance
                           segment: spot
                           dataType: ticker
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: |
             No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
@@ -683,6 +691,8 @@ paths:
                           exchange: binance
                           segment: spot
                           dataType: klines
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: |
             No segment for the requested instrument/hour. `reason: NOT_YET_AVAILABLE` — the hour
@@ -778,6 +788,8 @@ paths:
                     requiredSources: [Ticker]
                   - strategyId: 2ul144qe9tlwzu5anhwvc6
                     compiledAt: '2026-08-12T09:02:11Z'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
       security:
         - bearerAuth: []
       tags:
@@ -882,6 +894,8 @@ paths:
               example:
                 code: 400
                 message: 'Line 1, Column 18: syntax error'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '413':
           description: The source is larger than 32 KiB (32768 bytes). Every endpoint that reads a request body caps it, and the message names the cap; see the Strategy guide.
           content:
@@ -947,6 +961,8 @@ paths:
               example:
                 strategyId: 6bsh31ikwkuivhtgcoa6s4
                 validation: pending
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such registered strategy for this user
           content:
@@ -981,6 +997,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StrategyState'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such registered strategy for this user
           content:
@@ -1029,6 +1047,8 @@ paths:
               example:
                 strategyId: 6bsh31ikwkuivhtgcoa6s4
                 deleted: true
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such registered strategy for this user
           content:
@@ -1078,6 +1098,8 @@ paths:
                 code: |
                   package strategy;
                   public class EmaCrossStrategy extends AbstractTickerStrategy { ... }
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such registered strategy for this user, or nothing to read for this id
           content:
@@ -1151,6 +1173,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: |
             Exchange or data source type not found. For `exchangeId: user`, also returned when
@@ -1232,6 +1256,8 @@ paths:
                   - hour: "2026-04-14T02:00:00Z"
                     expected: 0
                     rationale: low_activity
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: Prepare job not found or expired
           content:
@@ -1312,6 +1338,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: Prepared request not found or expired.
           content:
@@ -1415,6 +1443,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ExecuteSweepResult'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: Sweep not found or expired.
           content:
@@ -1475,6 +1505,8 @@ paths:
                     enum: [cancelling]
                   sweepId:
                     type: string
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: Sweep not found.
           content:
@@ -1549,6 +1581,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SweepSensitivity'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: Sweep not found or expired.
           content:
@@ -1642,6 +1676,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EquityCurveResult'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: >-
             Sweep or `runIx` not found, or that trial's curve was never selected — indistinguishable
@@ -1785,6 +1821,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AcceptedJob'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: Prepare job not found or expired
           content:
@@ -1852,6 +1890,8 @@ paths:
                   jobId:
                     type: string
                     example: 13RBLGQlPnfDjO6wyKSX8i
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: Execution not found
           content:
@@ -1964,6 +2004,8 @@ paths:
                 type: object
                 additionalProperties: false
               example: {}
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: Execution job not found
           content:
@@ -2059,6 +2101,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '409':
           description: You already have a dataset with this `name`
           content:
@@ -2126,6 +2170,8 @@ paths:
                     rows: 86400
                     gaps: 0
                     largestGapSteps: 0
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
       security:
         - bearerAuth: []
       tags:
@@ -2172,6 +2218,8 @@ paths:
                 _links:
                   self:
                     href: "/v1/datasets/ds_3f9a1c2e7b0d4a5f"
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such dataset for this user
           content:
@@ -2214,6 +2262,8 @@ paths:
               example:
                 datasetId: "ds_3f9a1c2e7b0d4a5f"
                 deleted: true
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such dataset for this user, or already deleted
           content:
@@ -2257,6 +2307,8 @@ paths:
                 upload:
                   url: "https://storage.qtsurfer.com/00000000-.../uploads/up_1a2b3c4d5e6f7a8b/raw.csv?X-Amz-..."
                   expiresInMinutes: 15
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such dataset for this user
           content:
@@ -2309,6 +2361,8 @@ paths:
                     type: string
               example:
                 jobId: "dataset-upload:00000000-.../ds_3f9a1c2e7b0d4a5f:up_1a2b3c4d5e6f7a8b"
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: |
             No such dataset for this user; `uploadId` was not issued for this dataset (never
@@ -2387,6 +2441,8 @@ paths:
                   largestGapSteps: 0
                   dataUrl: "https://storage.qtsurfer.com/00000000-.../ds_3f9a1c2e7b0d4a5f/dsv_8e2b4f19c6a03d7e/ticker_BTC_USDT_1700000000000_1700086400000_1m.lastra?X-Amz-..."
                   dataFormat: "lastra"
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: |
             No such dataset for this user, or genuinely nothing is known about this `uploadId` — no
@@ -2526,6 +2582,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '409':
           description: You already have a dataset with this `name`
           content:
@@ -2591,6 +2649,8 @@ paths:
                   largestGapSteps: 0
                   dataUrl: "https://storage.qtsurfer.com/00000000-.../ds_3f9a1c2e7b0d4a5f/dsv_8e2b4f19c6a03d7e/ticker_WETH_USDC_....lastra?X-Amz-..."
                   dataFormat: "lastra"
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: |
             No such dataset for this user, or genuinely nothing is known about this `importId`.
@@ -2733,6 +2793,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such registered strategy for this user, or it has never been compiled.
           content:
@@ -2793,6 +2855,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LiveRunWithStream'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: You have never started a live run for this strategy.
           content:
@@ -2826,6 +2890,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LiveRun'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: You have never started a live run for this strategy.
           content:
@@ -2891,6 +2957,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
       security:
         - bearerAuth: []
       tags:
@@ -2998,6 +3066,8 @@ paths:
                 relay: false
                 startedAtMs: 1790790087954
                 updatedAtMs: 1790790092722
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such run, or you do not own it — the two look identical on purpose.
           content:
@@ -3057,6 +3127,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such run, or you do not own it — the two look identical on purpose.
           content:
@@ -3115,6 +3187,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such run, or you do not own it.
           content:
@@ -3184,6 +3258,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such run, or you do not own it.
           content:
@@ -3241,6 +3317,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LiveStreamUrl'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such run, or you do not own it.
           content:
@@ -3286,6 +3364,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LiveStreamRevoked'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such run, or you do not own it.
           content:
@@ -3418,6 +3498,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such run, or not one you may read.
           content:
@@ -3492,6 +3574,8 @@ paths:
                       cagr: -0.41
                       maxDrawdown: 3.4
                       maxDrawdownPercent: 0.34
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such run, not one you may read, or a run without paper trading.
           content:
@@ -3577,6 +3661,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResponseError'
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
         '404':
           description: No such run, not one you may read, or a run without paper trading.
           content:
@@ -3606,11 +3692,28 @@ paths:
               example:
                 token: eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI4YWViOTljYi01NjcyLTQ1ZmItYWJiNi02NDU4NTk1NzJkMDAiLCJpYXQiOjE3OTAwOTkxNTksImV4cCI6MTc5MDA5OTc1OX0.signature
                 expiresAtMs: 1758502200000
+        '403':
+          $ref: '#/components/responses/InsufficientScope'
       security:
         - bearerAuth: []
       tags:
         - Live Execution
 components:
+  responses:
+    InsufficientScope:
+      description: |
+        The API key behind the token does not carry the scope this operation needs; `required` names
+        it. Create or edit the key in the web app to give it that scope, then ask for a new token:
+        the scopes of a token are the ones the key had when it was issued. See
+        [Authentication and scopes](https://github.com/QTSurfer/qtsurfer-api/blob/main/docs/auth.md).
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/InsufficientScopeError'
+          example:
+            code: insufficient_scope
+            message: This API key does not have the scope datasets:write.
+            required: datasets:write
   headers:
     XTsUnit:
       description: |
@@ -6230,8 +6333,8 @@ components:
         lower case: `{ "backtests": ["read", "write", "execute"], "exchanges": ["read"] }`. A scope
         is a resource and an action: a resource is listed only with at least one action, and a key
         with no scope is `{}`. `GET /account` and `POST /auth/token` return the same map for the
-        same key. The API reports the scopes of a key; it does not yet refuse an operation because
-        a scope is missing.
+        same key. An operation that needs a scope the key does not carry is answered `403` with the
+        code `insufficient_scope`, and says which scope it needed.
       additionalProperties:
         type: array
         description: The actions allowed on this resource (for example `read`, `write`, `execute`).
@@ -6240,6 +6343,22 @@ components:
       example:
         backtests: [read, write, execute]
         exchanges: [read]
+    InsufficientScopeError:
+      type: object
+      required: [code, message, required]
+      description: Error envelope of a `403` returned when the API key behind the token does not carry the scope the operation needs.
+      properties:
+        code:
+          type: string
+          enum: [insufficient_scope]
+          description: Machine-readable error reason.
+        message:
+          type: string
+          description: Human-readable description of the failure.
+        required:
+          type: string
+          description: The scope the operation needs, as `resource:action`, in lower case.
+          example: datasets:write
     AuthTokenResponse:
       type: object
       required: [access_token, token_type, expires_in, tier]

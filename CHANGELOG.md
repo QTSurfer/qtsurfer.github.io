@@ -7,6 +7,17 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.38] — 2026-10-18
+
+### Changed
+
+- The API now checks the scopes of a key. An operation that needs a scope the key behind the token does not carry is answered `403` with the code `insufficient_scope` and the scope it needed in `required` (`resource:action`, lower case). `KeyScopes` and the guide (`docs/auth.md`) no longer say that the scopes are only reported. A key's token that came from a key with every scope an operation needs is not affected.
+
+### Added
+
+- The `403` answer on every operation that needs a scope (44 of them), through the shared response `InsufficientScope` and the schema `InsufficientScopeError`.
+- A section in the guide, "When a scope is missing", with the body of the answer and what to do.
+
 ## [0.128.37] — 2026-10-17
 
 ### Added
