@@ -260,7 +260,7 @@ See [Commands](live.md#commands) for the request/response shape and error codes.
 - [QTScript (beta)](qtscript.md) — the same strategies written with the ceremony left out.
 - [Strategies](strategy.md) — compile, validate, list and read back a strategy, in either language.
 
-[engine-javadoc]: https://qtsurfer.github.io/qtsurfer-engine-java-docs/
-[market-hint-javadoc]: https://qtsurfer.github.io/qtsurfer-engine-java-docs/com/wualabs/qtsurfer/engine/strategy/event/signal/MarketHintSignal.html
-[signal-javadoc]: https://qtsurfer.github.io/qtsurfer-engine-java-docs/com/wualabs/qtsurfer/engine/strategy/event/signal/package-summary.html
+[engine-javadoc]: https://www.qtsurfer.com/docs/developers/java-api
+[market-hint-javadoc]: https://www.qtsurfer.com/docs/developers/java-api/reference/latest/com/wualabs/qtsurfer/engine/strategy/event/signal/MarketHintSignal.html
+[signal-javadoc]: https://www.qtsurfer.com/docs/developers/java-api/reference/latest/com/wualabs/qtsurfer/engine/strategy/event/signal/package-summary.html
 [strategy-skill]: https://github.com/QTSurfer/strategy-skills
