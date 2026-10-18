@@ -12,7 +12,7 @@ Write trading strategies in Java — or in QTScript, a compact language, current
 
 **[`asyncapi.yaml`](asyncapi.yaml)** — the Live Execution WebSocket contract (Centrifugo client protocol); guide in [`docs/live.md`](docs/live.md)
 
-**[Engine Javadoc](https://qtsurfer.github.io/qtsurfer-engine-java-docs/)** — strategy SDK classes (indicators, signals, execution) referenced below
+**[Engine Javadoc](https://www.qtsurfer.com/docs/developers/java-api)** — strategy SDK classes (indicators, signals, execution) referenced below
 
 **[Java strategy coding guide](docs/strategy_coding.md)** — signal emission, order parameters, chart metadata, and links to the maintained authoring skill
 
