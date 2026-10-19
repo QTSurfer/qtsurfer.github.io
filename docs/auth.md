@@ -30,6 +30,11 @@ curl -X POST https://api.qtsurfer.net/v1/auth/token \
 | `scopes` | what your key may do, [below](#scopes) |
 | `tier` | the subscription tier the token was issued for; it sets your limits, see [Account](account.md) |
 
+Send a `User-Agent` of your own. A request that carries the default of some HTTP libraries, Python's `urllib`
+among them, is turned away at the network edge before it reaches the API, with a `403` whose body is the plain text
+`error code: 1010` and not the JSON the API answers with. That is not a problem with your key: set a `User-Agent`
+header, the name of your tool is enough, and send the request again. `curl` and browsers send one already.
+
 A key that is unknown, revoked or expired is answered `401`; the body is `AuthTokenError` in the
 API reference. Where a deployment requires scopes, a key that carries none is answered `403` with
 the code `apikey_without_scopes` and no token: create a key with at least one scope in the web app.

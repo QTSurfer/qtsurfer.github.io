@@ -165,7 +165,9 @@ Send `access_token` as `Authorization: Bearer <token>` on every other call; refr
 expires (or on a `401`) by calling `/auth/token` again. `X-API-Key` is accepted only on this one
 endpoint — everywhere else expects the bearer token, not the raw API key. The `scopes` of the
 answer say what your key may do; they are explained, with the scope each operation requires, in
-[Authentication and scopes](docs/auth.md).
+[Authentication and scopes](docs/auth.md). Send a `User-Agent` of your own on that call: the default of some HTTP
+libraries, Python's `urllib` among them, is refused with a `403` and the body `error code: 1010`, which is not a
+problem with your key ([details](docs/auth.md#getting-a-token)).
 
 Each area below has its own doc with full parameter tables, request/response examples, and error
 cases — this README stays a map, not a mirror, so a growing endpoint only ever needs its own doc
