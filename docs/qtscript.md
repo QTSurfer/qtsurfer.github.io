@@ -57,9 +57,28 @@ on a one-minute window, emitting a signal on each threshold.
 | `param` | A configurable value. The type comes from the literal (`9` → `int`, `0.5` → `double`, `true` → `boolean`, `"text"` → `String`). **The name is the key** that a run's `params` and a sweep axis use | `param rsiLow = 30 "Oversold"` |
 | `init { }` | Optional. Plain Java run once when the strategy is built — engine setters | `init { setPercentGain(0.5); }` |
 | `instruments` | Optional. Which markets: pairs (`BASE/QUOTE`, either side may be `*`), regular expressions (`~"..."`, matched against the whole symbol), or a Java body for full control | `instruments */usdt` · `instruments btc/usdt, eth/*` |
-| `setup:` | The indicators, **one builder call per line** (the same catalogue a Java strategy uses). The lines under `setup:` are indented, and the first line back at column 0 ends the section | `ema(12)` · `bollinger(20, 2)` |
+| `setup:` | The indicators, **one builder call per line** (the free catalogue of the builder a Java strategy uses, [listed below](#what-goes-under-setup)). The lines under `setup:` are indented, and the first line back at column 0 ends the section | `ema(12)` · `bollinger(20, 2)` |
 | Windows | Where the logic goes — see below | `rsi(14) window m1 { ... }` |
 | `onCommand { }` | Optional, at most one per file. Runs when the run receives a [command](live.md#commands) — see below | `onCommand { if ("flatten".equals($command)) ... }` |
+
+### What goes under `setup:`
+
+Each line is a call on the indicator builder that a Java strategy configures in `setupIndicators`,
+[`InstrumentGroupRTIndicator`](https://www.qtsurfer.com/docs/developers/java-api/reference/latest/com/wualabs/qtsurfer/engine/indicators/helpers/group/InstrumentGroupRTIndicator.html),
+written without the dot. These are the names that work:
+
+`add` `bollinger` `bollingerBandwidth` `cci` `clamp` `conditional` `diff` `distance` `distanceMa` `ema` `equal`
+`gain` `greatOrEqual` `greatThan` `lessOrEqual` `lessThan` `loss` `macd` `max` `min` `mul` `notEqual`
+`percentChange` `rateChange` `round` `rsi` `sma` `stochRsi` `sum`
+
+Which arguments each takes is in the builder's Javadoc. A call whose arguments match none of them is rejected with
+the forms that do exist: `ema(1, 2, 3)` answers that its forms are `ema(int)`, `ema(String, int)` and `ema(String,
+String, int)`. The builder's methods that take a function (`predicate`, `fun`, `decorate`, `periodCount`) can only be
+written in Java.
+
+A name that is not on the list is not an indicator you can use here, and the strategy is rejected with `unknown
+indicator '<name>'`: `atr`, `wma`, `adx` and `zscore` are among the names that answer this way. The same goes for
+`value("name")`, which reads an indicator inside a `{ }` body and has no meaning on a `setup:` line.
 
 ## Windows
 
@@ -88,6 +107,44 @@ Main m1 {
   if (actual > prev) emitBuy(price);
 }
 ```
+
+### The window gives you the previous value
+
+A window fires when its period closes, so `prev` is the value the indicator had when the **previous** window
+closed and `actual` is its value now: the `close[1]` of other tools. A crossing, or anything else that compares one
+close with the one before, needs nothing kept in the [store](#inside-a-body); the previous value is already in
+scope.
+
+This enters when the RSI climbs back through a level, once, on the window where it happens:
+
+```
+strategy "RSI re-entry"
+
+param level = 30 "Level to climb back through"
+
+setup:
+  rsi(14) window m1 {
+    if (prev < level && actual >= level) emitBuy(price);
+  }
+```
+
+On a `kline` strategy a window on `close` hands you the previous bar's close as `prev`, which is what the true range
+needs next to the bar's own `high` and `low`:
+
+```
+strategy "True range" kline
+
+setup:
+  window close m1 {
+    double trueRange = Math.max(high - low, Math.max(Math.abs(high - prev), Math.abs(low - prev)));
+    emitInfo("trueRange", trueRange);
+  }
+```
+
+The first time a window fires there is no earlier window to compare with: `prev` is the value the indicator had when
+that first window opened. A rule that needs two real closes should let the first firing pass, and an indicator with a
+warm-up period, such as an RSI or an EMA, has not settled in its first windows either. Keep the store for what a
+window cannot hand you: a flag, a counter, a value from several windows ago.
 
 ### Which indicator a window is on
 
@@ -122,7 +179,7 @@ Your Java, plus what is already in scope — nothing needs importing:
 
 | In scope | What it is |
 |---|---|
-| `actual`, `prev` | the window's new and previous value |
+| `actual`, `prev` | the window's new value and the one it had when the previous window closed — [see above](#the-window-gives-you-the-previous-value) |
 | `price` (ticker) · `price open high low close volume` (kline) · `rate` (funding) | the current values, as plain variables |
 | `value("name")` | any other indicator's current value |
 | `$indicator` | the name of the indicator this window is on, as a `String` — [see above](#which-indicator-a-window-is-on) |
@@ -220,6 +277,17 @@ per-instrument state a window body already reads, since a command carries no ins
 
 A Java strategy implements the same contract directly, through `CommandRequestHandler` — see [Coding Java
 strategies](strategy_coding.md#receiving-commands).
+
+## Sizing
+
+A strategy says when and which way, not how much. `emitBuy(price)` and `emitSell(price)` carry a price and nothing
+else, and no call puts a quantity or a notional on a signal. The size of each entry is a setting of the run,
+`percentAmountToLock`: the percentage of the account's free balance that an entry locks, above 0 and up to 100.
+
+Where you give it depends on the run: `baseConfig` for a [backtest](backtest_execute.md) or a
+[sweep](backtest_sweep.md), the `paper` block for a [paper live run](live_paper.md). Left out, a backtest puts the
+whole free balance into each entry (all-in) and a live run's paper account locks 10%. To see how a strategy behaves
+at another size, run it again with another `percentAmountToLock`; the file does not change.
 
 ## Running it
 

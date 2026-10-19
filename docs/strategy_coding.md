@@ -31,6 +31,10 @@ These signal families have different effects:
 | `SellSignal` | Expresses a sell instruction and its order configuration | Yes |
 | `InfoStrategySignal` | Records indicators, diagnostics, or visualization metadata | No |
 
+All three are in `com.wualabs.qtsurfer.engine.strategy.event.signal`, and a strategy that names one imports it
+from there: `import com.wualabs.qtsurfer.engine.strategy.event.signal.InfoStrategySignal;`, the same way as
+`BuySignal` below. Using only `emitBuy`, `emitSell` and `emitInfo`, which never name the type, needs no import.
+
 An information signal labelled `BUY` is still only information. Conversely, `emitBuy(price)`
 emits an executable buy signal even if no chart metadata is attached.
 
@@ -39,6 +43,8 @@ information signal on every window update so the indicator series can be inspect
 buy or sell only when the moving averages cross:
 
 ```java
+import com.wualabs.qtsurfer.engine.strategy.event.signal.InfoStrategySignal;
+
 InfoStrategySignal signal = createInfoSignal();
 signal.set("fast", fast);
 signal.set("slow", slow);
@@ -137,12 +143,25 @@ The same fields apply symmetrically to a short entry. A stop condition is evalua
 the engine and can suppress the stop until a wider strategy condition permits it. It is live
 strategy logic, not serializable signal data.
 
+## Sizing
+
+A strategy says when and which way, not how much. `emitBuy(price)` and `emitSell(price)` carry a price and nothing
+else, and no call puts a quantity or a notional on a signal. The size of each entry is a setting of the run,
+`percentAmountToLock`: the percentage of the account's free balance that an entry locks, above 0 and up to 100.
+
+Where you give it depends on the run: `baseConfig` for a [backtest](backtest_execute.md) or a
+[sweep](backtest_sweep.md), the `paper` block for a [paper live run](live_paper.md). Left out, a backtest puts the
+whole free balance into each entry (all-in) and a live run's paper account locks 10%. To see how a strategy behaves
+at another size, run it again with another `percentAmountToLock`; the class does not change.
+
 ## Information and chart metadata
 
 `createInfoSignal()` is listener-local syntactic sugar: it creates an `InfoStrategySignal` already
 bound to the current strategy and instrument. Populate it with `set` and emit it when ready:
 
 ```java
+import com.wualabs.qtsurfer.engine.strategy.event.signal.InfoStrategySignal;
+
 InfoStrategySignal signal = createInfoSignal();
 signal.set("price", price);
 signal.set("fast", fast);
@@ -188,6 +207,137 @@ chart markers written that way.
 Use the longer `createInfoSignal()` form when one event needs several top-level values or marker
 metadata. Information signals are useful for explaining a decision, but they never replace the
 corresponding `emitBuy` or `emitSell` when the strategy is meant to trade.
+
+## Window listeners and the previous value
+
+A window listener fires once when its period closes, and `onChange` receives the indicator's value then, `actual`,
+and the value it had when the **previous** window closed, `prev`: the `close[1]` of other tools. A crossing, or
+anything else that compares one close with the one before, needs nothing kept in the `StateStore`.
+
+This enters when the RSI climbs back through 30, once, on the window where it happens:
+
+```java
+import com.wualabs.qtsurfer.engine.core.state.StateStore;
+import com.wualabs.qtsurfer.engine.indicators.helpers.WindowTimeRTIndicator.WindowTime;
+import com.wualabs.qtsurfer.engine.indicators.helpers.group.InstrumentGroupRTIndicator;
+import com.wualabs.qtsurfer.engine.strategy.AbstractTickerStrategy;
+import com.wualabs.qtsurfer.engine.strategy.AbstractWindowListener;
+
+public class RsiReentry extends AbstractTickerStrategy {
+
+    @Override
+    protected void setupIndicators(InstrumentGroupRTIndicator indicators) {
+        indicators
+            .addPrice()
+            .rsi(14)
+            .window("rsi14", WindowTime.m1, new Reentry(this, indicators));
+    }
+
+    private class Reentry extends AbstractWindowListener {
+
+        public Reentry(AbstractTickerStrategy strategy, InstrumentGroupRTIndicator indicators) {
+            super(strategy, indicators);
+        }
+
+        @Override
+        public void onChange(StateStore store, double prev, double actual) {
+            if (prev < 30 && actual >= 30) emitBuy(indicators.getValue("price"));
+        }
+    }
+}
+```
+
+On a kline strategy a window on `close` hands you the previous bar's close as `prev`, which is what the true range
+needs next to the bar's own `high` and `low`. The bar's fields are indicators too, registered from a
+`KlineValueSource`:
+
+```java
+import com.wualabs.qtsurfer.engine.core.KlineInterval;
+import com.wualabs.qtsurfer.engine.core.state.StateStore;
+import com.wualabs.qtsurfer.engine.indicators.core.KlineValueSource;
+import com.wualabs.qtsurfer.engine.indicators.helpers.WindowTimeRTIndicator.WindowTime;
+import com.wualabs.qtsurfer.engine.indicators.helpers.group.InstrumentGroupRTIndicator;
+import com.wualabs.qtsurfer.engine.strategy.AbstractKlineStrategy;
+import com.wualabs.qtsurfer.engine.strategy.AbstractWindowListener;
+
+public class TrueRange extends AbstractKlineStrategy {
+
+    @Override
+    public KlineInterval getInterval() {
+        return KlineInterval.s1;
+    }
+
+    @Override
+    protected void setupIndicators(InstrumentGroupRTIndicator indicators) {
+        indicators
+            .add("high", KlineValueSource.High)
+            .add("low", KlineValueSource.Low)
+            .add("close", KlineValueSource.Close)
+            .window("close", WindowTime.m1, new Range(this, indicators));
+    }
+
+    private class Range extends AbstractWindowListener {
+
+        public Range(AbstractKlineStrategy strategy, InstrumentGroupRTIndicator indicators) {
+            super(strategy, indicators);
+        }
+
+        @Override
+        public void onChange(StateStore store, double prev, double actual) {
+            double high = indicators.getValue("high");
+            double low = indicators.getValue("low");
+            double trueRange = Math.max(high - low, Math.max(Math.abs(high - prev), Math.abs(low - prev)));
+            emitInfo("trueRange", trueRange);
+        }
+    }
+}
+```
+
+A Java kline strategy has to override `getInterval()`: the base class leaves it abstract, and a source without it is
+rejected. In a backtest the bar width is not what it returns but the `cadence` the data was prepared at, so
+`KlineInterval.s1` serves any run; a [QTScript](qtscript.md#candles) `kline` strategy gets this method written for it.
+
+The first time a window fires there is no earlier window to compare with: `prev` is the value the indicator had when
+that first window opened. A rule that needs two real closes should let the first firing pass, and an indicator with a
+warm-up period, such as an RSI or an EMA, has not settled in its first windows either. Keep the `StateStore` for what
+a window cannot hand you: a flag, a counter, a value from several windows ago. A listener that only needs the
+store, `prev` and `actual` can be a lambda; one that emits a signal extends `AbstractWindowListener`, as above.
+
+## Reading indicators from update()
+
+A strategy that overrides `update()` instead of using windows advances the indicators itself with
+`updateIndicators(instrument, source)`. It returns the instrument's indicator map, an `InstrumentMapRTIndicator`,
+not an indicator: write `var`, or this type, and read each indicator from it by name.
+
+```java
+import com.wualabs.qtsurfer.engine.core.Ticker;
+import com.wualabs.qtsurfer.engine.core.instrument.Instrument;
+import com.wualabs.qtsurfer.engine.indicators.helpers.group.InstrumentMapRTIndicator;
+
+@Override
+public void update(Ticker ticker) {
+    Instrument instrument = ticker.instrument();
+    updateInstrument(instrument, ticker.timestamp());
+    InstrumentMapRTIndicator indicators = updateIndicators(instrument, ticker);
+
+    if (!indicators.getReadOnlyExisting("emaSlow").isReady()) return;   // wait for warm-up
+
+    double fast = indicators.getValue("emaFast");
+    double slow = indicators.getValue("emaSlow");
+    // ...
+}
+```
+
+`getReadOnlyExisting(name)` returns the indicator as a read-only view, which is what a strategy that only reads
+values wants: nothing in `update()` can change a shared indicator by accident. `getExisting(name)` returns the live
+one, and both throw if there is no indicator of that name. Do not spell the map's type as `RichRTIndicator`, the
+interface for writing an indicator of your own: the map does not implement it, and the compiler answers incompatible
+types. `RTIndicator` does compile, since the map is one, but it hides `getExisting` and `getReadOnlyExisting`, which
+only the map has.
+
+`updateIndicators` on its own publishes no signals: a strategy that calls it from its own `update()` trades normally
+and leaves the signals that a backtest stores empty. To keep them, call `super.update(ticker)` first, which already
+does `updateInstrument` and `updateIndicators`, and read the indicators with `getRTIndicator(instrument, name)`.
 
 ## Receiving commands
 
