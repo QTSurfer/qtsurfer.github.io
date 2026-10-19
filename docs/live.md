@@ -482,7 +482,10 @@ the promotion; what the run produced meanwhile then arrives in order, and each s
    {"id": 1, "connect": {"client": "<client-id>", "expires": true, "ttl": 600, "ping": 25, "pong": true}}
    ```
    `ttl` and `ping` are in seconds. A token that is not accepted closes the socket with close code
-   `3500` (`invalid token`).
+   `3500` (`invalid token`). From a client that is neither a browser nor Node, a Python WebSocket library for
+   example, this endpoint may be refused at the network edge with a `403`, and a `User-Agent` or an `Origin` of
+   your own does not change that. Such a client reads the run through a [stream URL](#a-plain-websocket-stream-of-a-run)
+   instead.
 3. **Subscribe to the run's signal channel**, named `sig:<runId>` — for example `sig:6TzAPiPpsOWwBLdLBZCxwH`:
    ```json
    {"id": 2, "subscribe": {"channel": "sig:6TzAPiPpsOWwBLdLBZCxwH"}}
@@ -619,6 +622,10 @@ simple alternative. It is one address that you open as an ordinary WebSocket —
 tool such as [`websocat`](https://github.com/vi/websocat), or a service of your own that passes your signals on
 to others — and each signal of the run arrives as **one JSON text frame**. There is no token to mint, nothing
 to subscribe to and nothing to send.
+
+It is also the way in for a client that is not a browser or Node. The connection with a token, above, may be refused
+to such a client, a Python WebSocket library for one, at the network edge; a stream URL carries no key and no token
+and is accepted from any client.
 
 It is meant for your own tests, for simple clients, and for services that pass your signals on to many
 connections themselves: this address is limited in how many connections it accepts (see below), so a service
