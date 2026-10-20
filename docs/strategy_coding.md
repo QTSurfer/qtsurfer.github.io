@@ -328,9 +328,11 @@ public void update(Ticker ticker) {
 }
 ```
 
-`getReadOnlyExisting(name)` returns the indicator as a read-only view, which is what a strategy that only reads
-values wants: nothing in `update()` can change a shared indicator by accident. `getExisting(name)` returns the live
-one, and both throw if there is no indicator of that name. Do not spell the map's type as `RichRTIndicator`, the
+`getReadOnlyExisting(name)` returns a read-only view: it reads the live indicator's value and ignores `update(...)`,
+without an error, so nothing in `update()` can change a shared indicator's value by accident, which is what a
+strategy that only reads values wants. `getExisting(name)` returns the live indicator: an `update` or `reset` called
+on it changes the series for everyone who reads it, and nothing reports it. Both throw if there is no indicator of
+that name. Do not spell the map's type as `RichRTIndicator`, the
 interface for writing an indicator of your own: the map does not implement it, and the compiler answers incompatible
 types. The `cannot find symbol` for `getExisting` that follows it is a consequence, and the answer says so under it.
 `RTIndicator` does compile, since the map is one, but it hides `getExisting` and `getReadOnlyExisting`, which only the
@@ -338,7 +340,8 @@ map has.
 
 `updateIndicators` on its own publishes no signals: a strategy that calls it from its own `update()` trades normally
 and leaves the signals that a backtest stores empty. To keep them, call `super.update(ticker)` first, which already
-does `updateInstrument` and `updateIndicators`, and read the indicators with `getRTIndicator(instrument, name)`.
+does `updateInstrument` and `updateIndicators`, and read the indicators with `getRTIndicator(instrument, name)`. It
+returns the live indicator in an `Optional`, not a read-only view; `.map(RTIndicator::ro)` gives the view.
 
 ## Receiving commands
 
