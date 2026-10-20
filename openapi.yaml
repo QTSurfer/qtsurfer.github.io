@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.38
+  version: 0.128.39
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3772,6 +3772,15 @@ components:
             the values it uses. A client treats a value it does not know like an absent `reason`.
           type: string
           example: OUTSIDE_WINDOW
+        retryable:
+          description: |
+            Whether sending the same request again can succeed. `true` for `408`, `425`, `429` and
+            every `5xx`; `false` for every other `4xx`, which fails the same way until the request
+            changes: a field of the wrong type, a strategy that does not compile, a missing
+            parameter. A plan limit, a `429` without `Retry-After`, is `false`. When the answer
+            carries a `Retry-After`, wait that long before sending the request again.
+          type: boolean
+          example: false
         next:
           $ref: '#/components/schemas/ErrorNextCall'
     ErrorNextCall:
@@ -4478,6 +4487,14 @@ components:
             format: date-time
             description: Timestamp for when the preparation finished
             example: "2025-01-04T14:00:20Z"
+          retryable:
+            type: boolean
+            description: |
+              Present in the `state` of an execute job and not in the `state` of a prepare. Whether sending
+              the same request again can succeed once the job has failed: `true` for a temporary fault
+              reading the market data, `false` for any other failure, such as a strategy that throws. A job
+              that has not failed carries `false`.
+            example: false
     PrepareJobState:
       description: |
         State of a single-instrument prepare job — the `JobState` shape plus a coverage summary.

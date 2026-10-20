@@ -7,6 +7,17 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.39] — 2026-10-20
+
+### Added
+
+- `ResponseError` describes `retryable`, a field of the error answers: whether sending the same request
+  again can succeed. It is `true` for `408`, `425`, `429` and every `5xx`, and `false` for any other `4xx`,
+  which fails the same way until the request changes.
+- `JobState` describes `retryable` too, as the `state` of an execute job carries it: once the job has failed,
+  `true` for a temporary fault reading the market data and `false` for any other failure. The `state` of a
+  prepare does not carry it.
+
 ## [0.128.38] — 2026-10-18
 
 ### Changed
