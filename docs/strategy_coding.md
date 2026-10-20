@@ -332,8 +332,9 @@ public void update(Ticker ticker) {
 values wants: nothing in `update()` can change a shared indicator by accident. `getExisting(name)` returns the live
 one, and both throw if there is no indicator of that name. Do not spell the map's type as `RichRTIndicator`, the
 interface for writing an indicator of your own: the map does not implement it, and the compiler answers incompatible
-types. `RTIndicator` does compile, since the map is one, but it hides `getExisting` and `getReadOnlyExisting`, which
-only the map has.
+types. The `cannot find symbol` for `getExisting` that follows it is a consequence, and the answer says so under it.
+`RTIndicator` does compile, since the map is one, but it hides `getExisting` and `getReadOnlyExisting`, which only the
+map has.
 
 `updateIndicators` on its own publishes no signals: a strategy that calls it from its own `update()` trades normally
 and leaves the signals that a backtest stores empty. To keep them, call `super.update(ticker)` first, which already

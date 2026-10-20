@@ -109,6 +109,11 @@ appear here — a name absent from this list may still be valid.
 Errors: `400` not valid — the message carries the diagnostics, nothing is
 registered · `429` too many compilations in flight, retry later.
 
+For a Java source the diagnostics are the compiler's own, each one beginning with `Line N, Column M:` of the file
+you sent. The type error comes first. A `cannot find symbol` that follows an `incompatible types` on the same
+variable stays in the answer after it, with a note under it, `this follows from the type error on line N, not from a
+missing member`, which names the declaration to correct: fix the first error and the second one goes with it.
+
 ## Request size limits
 
 Every endpoint that reads a request body caps it, and a strategy's source is the biggest body the
