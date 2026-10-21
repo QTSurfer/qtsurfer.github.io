@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.39
+  version: 0.128.40
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3591,14 +3591,33 @@ paths:
       operationId: getLiveRunPaperEquity
       summary: Read a run's paper equity curve
       description: |
-        The run's paper equity curve, oldest first, page by page. It is kept for the life of the
-        run, so unlike signals it has no moving window. Points are `equity` at every closed trade,
-        `mark` every minute of market time while positions are open, and `gap` where the run was
-        restarted with positions open: those positions are not carried over, so the curve has no
-        value there.
+        One paper account's equity curve, oldest first, in the same shape as every other equity
+        curve of this API (`EquityCurveResult`): `{points, meta}`, or `{timestamps, equities, meta}`
+        with `outMode=SHORT`, shaped by the same `outMode`, `resample` and `differential` query
+        parameters, with the account's `currency` and its `gaps` alongside. The curve is kept for
+        the life of the run, so unlike signals it has no moving window.
 
-        `currency` narrows to one account; without it, every account's points come interleaved by
-        time, each carrying its currency.
+        It is one series of running equity: the value after every closed trade and, every minute
+        of market time while positions are open, the value marked to market. Where the run was
+        restarted with positions open, those positions are not carried over, so the curve has no
+        value there: that moment is listed in `gaps` and is not a point of the curve.
+
+        A run has one account per quote currency and accounts are never summed. `currency` chooses
+        the account; it may be left out only when the run has a single account, or none yet (an
+        empty curve).
+
+        `sinceMs` reads from that market time on, inclusive, which is how a client that already
+        holds a curve reads only what is new. A curve too long to be read in one request answers
+        `400`: narrow it with `sinceMs`, or page it. As for any equity curve, the server may force
+        a smaller representation above its size thresholds: `meta.outMode` is the source of truth
+        for what came back.
+
+        Paging is opt-in. With `limit` or `cursor` the answer is one page of the raw curve, oldest
+        first, with `_links.next` while there is more: the way to read a long curve at full
+        resolution, since a long one is otherwise resampled. A page has the same shape (`outMode`
+        and `differential` apply to it, and each page is decoded on its own), holds at most `limit`
+        entries (a gap counts as one), and `resample` cannot be combined with it. The cursor is
+        opaque: follow `_links.next.href` as given.
 
         Readable by the run's owner, and by anyone if the run is `public` and has reached the `live`
         stage.
@@ -3613,50 +3632,92 @@ paths:
           required: false
           schema:
             type: string
-          description: One account's quote currency, e.g. `USDT`.
+          description: >-
+            One account's quote currency, e.g. `USDT`. May be left out when the run has a single
+            account, or none yet.
         - name: sinceMs
           in: query
           required: false
           schema:
             type: integer
             format: int64
-          description: Start from this market time (epoch ms). Ignored when `cursor` is given.
-        - name: cursor
+            minimum: 0
+          description: Start from this market time (epoch ms), inclusive. Ignored when `cursor` is given.
+        - name: outMode
           in: query
           required: false
+          description: >-
+            Requested JSON shape. May be overridden by the server's size guard; `meta.outMode` in
+            the response is the source of truth.
           schema:
-            type: string
-          description: Continue from a previous page's `_links.next`.
+            allOf:
+              - $ref: '#/components/schemas/EquityCurveOutMode'
+            default: ARRAY
+        - name: resample
+          in: query
+          required: false
+          description: >-
+            Downsample to at most this many points (extrema-preserving — the global max/min and
+            the exact first/last point are always kept). Omit for no downsampling.
+          schema:
+            type: integer
+            minimum: 2
+        - name: differential
+          in: query
+          required: false
+          description: >-
+            Delta-encode both fields from the second point onward (from the second point of each
+            page, when paging).
+          schema:
+            type: boolean
+            default: false
         - name: limit
           in: query
           required: false
+          description: >-
+            Page size, in entries (a gap is one). Giving it turns the answer into one page of the
+            raw curve; it cannot be combined with `resample`.
           schema:
             type: integer
             minimum: 1
             maximum: 1000
             default: 100
+        - name: cursor
+          in: query
+          required: false
+          description: >-
+            Continue from a previous page's `_links.next`. Giving it turns the answer into one page
+            of the raw curve; it cannot be combined with `resample`.
+          schema:
+            type: string
       responses:
         '200':
-          description: One page of the curve
+          description: The account's curve, shaped per the resolved options
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LivePaperEquityPage'
+                $ref: '#/components/schemas/LivePaperEquityCurve'
               example:
+                currency: USDT
                 points:
-                  - currency: USDT
-                    kind: equity
-                    eventTsMs: 1758330012000
-                    equity: 999.2
-                  - currency: USDT
-                    kind: mark
-                    eventTsMs: 1758330060000
-                    equity: 996.4
-                _links:
-                  next:
-                    href: '/v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?cursor=eyJ0cyI6MTc1ODMzMDA2MDAwMH0&limit=2&currency=USDT'
+                  - timestamp: 1758330060000
+                    equity: 999.62
+                  - timestamp: 1758330078000
+                    equity: 999.59
+                  - timestamp: 1758330120000
+                    equity: 1000.44
+                gaps: []
+                meta:
+                  inputPointCount: 3
+                  outputPointCount: 3
+                  resampled: false
+                  differential: false
+                  outMode: ARRAY
         '400':
-          description: '`sinceMs`, `limit` or `cursor` is malformed.'
+          description: >-
+            `sinceMs`, `limit` or `cursor` is malformed, `resample` is combined with `limit` or
+            `cursor`, the run has several accounts and `currency` is missing, or the curve is too
+            long to be read in one request (narrow it with `sinceMs`, or page it).
           content:
             application/json:
               schema:
@@ -5581,7 +5642,8 @@ components:
       description: >-
         An equity curve, shaped per `meta.outMode`: `points` when `ARRAY`, `timestamps` +
         `equities` (parallel arrays) when `SHORT`. Used identically wherever a curve is returned —
-        a plain backtest's inline `equityCurve` and a sweep row's `equityCurve` are the same type.
+        a plain backtest's inline `equityCurve`, a sweep row's `equityCurve` and a live paper
+        account's curve (`GET /live/{runId}/paper/equity`) are the same type.
         `url` is present *instead of* any points when the curve is served by pointer rather than
         inline (a sweep row's top-N winners only): `GET` it separately to fetch this exact same
         shape with the points populated.
@@ -7063,39 +7125,40 @@ components:
           type: number
           format: double
           description: Percent (0-100 scale).
-    LivePaperEquityPage:
-      type: object
-      required: [points]
-      properties:
-        points:
-          type: array
-          items:
-            $ref: '#/components/schemas/LivePaperEquityPoint'
-        _links:
-          type: object
+    LivePaperEquityCurve:
+      description: >-
+        One paper account's equity curve: the API's one equity curve (`EquityCurveResult`,
+        `{points|timestamps+equities, meta}`) with the account's `currency` and the `gaps`
+        alongside.
+      allOf:
+        - $ref: '#/components/schemas/EquityCurveResult'
+        - type: object
+          required: [gaps]
           properties:
-            next:
+            currency:
+              type: string
+              description: >-
+                The account's quote currency. Absent only when the run has no account yet, which
+                gives an empty curve.
+            gaps:
+              type: array
+              description: >-
+                Market times (epoch ms, oldest first) at which open positions were lost because the
+                run was restarted with them open. A gap is not a point of the curve and is not
+                counted in `meta`.
+              items:
+                type: integer
+                format: int64
+            _links:
               type: object
+              description: Present on a page of the raw curve while there is a next one.
               properties:
-                href:
-                  type: string
-    LivePaperEquityPoint:
-      type: object
-      required: [currency, kind, eventTsMs]
-      properties:
-        currency:
-          type: string
-        kind:
-          type: string
-          enum: [equity, mark, gap]
-        eventTsMs:
-          type: integer
-          format: int64
-          description: Market time of the point.
-        equity:
-          type: number
-          format: double
-          description: Absent on a `gap`.
+                next:
+                  type: object
+                  properties:
+                    href:
+                      type: string
+                      description: The next page; follow it as given, the cursor is opaque.
     LiveSignal:
       type: object
       required: [v, signalId, runId, stage, type, eventTsMs, emittedAtMs, instrument, digest]

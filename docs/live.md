@@ -16,7 +16,7 @@ change its parameters without restarting it.
 | `POST` | `/live/{runId}/commands` | Tell it a command while it stays live |
 | `GET` | `/live/{runId}/signals` | Read the signals it has already produced |
 | `GET` | `/live/{runId}/paper` | Read its paper trading — see [Paper trading](live_paper.md) |
-| `GET` | `/live/{runId}/paper/equity` | Page through its paper equity curve — see [Paper trading](live_paper.md) |
+| `GET` | `/live/{runId}/paper/equity` | Read one paper account's equity curve, in the shape of every [equity curve](equity_curves.md) — see [Paper trading](live_paper.md) |
 | `POST` | `/live/token` | Mint a WebSocket connection token |
 
 ## Lifecycle: sandbox, then live

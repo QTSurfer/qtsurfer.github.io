@@ -7,6 +7,37 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.40] — 2026-10-21
+
+### Changed
+
+- **Breaking, for one route.** `GET /live/{runId}/paper/equity` now returns the API's one equity curve
+  (`EquityCurveResult`) of one paper account, so a paper curve is read and shaped like the curve of a
+  backtest or a sweep trial. The route is four weeks old.
+  - It takes `outMode`, `resample` and `differential`, as every curve does, and `sinceMs`, which stays
+    (and is inclusive). By default the whole curve comes in one answer, compacted by the server above
+    a size threshold, with `meta` saying what was applied.
+  - Paging stays, **on request**: `limit` or `cursor` turns the answer into one page of the raw curve
+    with `_links.next`, the way to read a long curve at full resolution. `resample` cannot be combined
+    with it (`400`). Each page is the same shape and is decoded on its own.
+  - The answer is `{points, meta}` (or `{timestamps, equities, meta}` with `outMode=SHORT`) plus the
+    account's `currency` and `gaps`. A point is `{timestamp, equity}`; it was
+    `{currency, kind, eventTsMs, equity}`. The closed-trade and mark-to-market points are one series.
+  - A `gap` is no longer a point: its time is listed in `gaps`.
+  - `currency` may be left out only when the run has a single account (or none yet). With several
+    accounts and no `currency` the request is `400`; before, every account's points came interleaved.
+  - A curve too long to be read in one request answers `400`; narrow it with `sinceMs`, or page it.
+- A `resample` smaller than the server's largest size threshold is now kept for a curve above that
+  threshold, on every route that serves a curve. Before, the curve was resampled to the threshold
+  whatever was asked.
+- The schemas `LivePaperEquityPage` and `LivePaperEquityPoint` are replaced by `LivePaperEquityCurve`,
+  which is `EquityCurveResult` with `currency` and `gaps`.
+
+### Added
+
+- `docs/equity_curves.md` has a section, "Live paper accounts", and `docs/live_paper.md` shows the new
+  answers, including the compact form.
+
 ## [0.128.39] — 2026-10-20
 
 ### Added

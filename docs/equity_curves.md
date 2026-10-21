@@ -1,17 +1,20 @@
 # Equity curves
 
-An equity curve describes the account value through a backtest. QTSurfer returns the same
-`EquityCurveResult` contract for a plain backtest and for a retained sweep trial, with different
-delivery rules:
+An equity curve describes the account value through a backtest, or through a live paper account.
+QTSurfer returns the same `EquityCurveResult` contract for a plain backtest, for a retained sweep
+trial and for a live run's paper account, with different delivery rules:
 
 - A plain backtest returns the curve inline in `results.equityCurve` and fixes its transform when
   the execution is submitted.
 - A sweep row with a retained curve carries `equityCurve.url`. In the materialisation view
   (`?order=natural`) it can also include the curve inline; fetch its URL to choose a different
   transform at read time.
+- A live run started with a `paper` block serves each account's curve on demand from
+  `GET /live/{runId}/paper/equity`, which takes the same transform parameters on every read. See
+  [Live paper accounts](#live-paper-accounts).
 
-The first point is an anchor at the backtest `from` timestamp with the initial capital. Every later
-point is one sample per emitted yield. `equity` is account value (`initialCapital + cumulativePnl`),
+In a backtest or sweep curve the first point is an anchor at the backtest `from` timestamp with the
+initial capital. Every later point is one sample per emitted yield. `equity` is account value (`initialCapital + cumulativePnl`),
 not a percentage. To chart percentage return, normalize each value as
 `(equity / initialEquity - 1) * 100`.
 
@@ -216,3 +219,52 @@ Without a retained sweep curve, reproduce the chosen trial with [`params` on a p
 the same `prepareJobId`, no recompile needed. This is an independent execution, not a replay of the
 sweep trial, but the two paths are pinned to agree on every leaderboard metric for the same vector.
 Treat a difference as a bug worth reporting.
+
+## Live paper accounts
+
+A live run started with a [`paper` block](live_paper.md) has one simulated account per quote
+currency, and `GET /live/{runId}/paper/equity` serves one account's curve in this same shape, with
+the same `outMode`, `resample` and `differential` query parameters, the same `meta` and the same size
+guard. What differs is that the curve is live and what rides beside it:
+
+- **It grows while the run runs, and has no anchor point.** The first point is the first value the
+  account recorded. Nothing is fixed at submit time: a parameter left out of the request means
+  `ARRAY`, no resampling and no differential encoding.
+- **It is one series of running equity.** The value after every closed trade and, every minute of
+  market time while positions are open, the value marked to market.
+- **`currency` and `gaps` come beside the curve.** `currency` is the account (accounts are never
+  summed; it may be left out only when the run has a single account). `gaps` lists, as epoch
+  milliseconds, the moments open positions were lost because the run was restarted with them open. A
+  gap is not a point of the curve and `meta` does not count it.
+- **`sinceMs` starts from a market time, inclusive,** so a client that already holds the curve reads
+  only what is new. A curve too long to be read in one request answers `400`: narrow it with
+  `sinceMs`, or page it.
+- **`limit` pages the raw curve.** The server compacts a long curve and resamples a very long one, so
+  to read every point give `limit` (or `cursor`): the answer is one page of the raw curve, in the
+  same shape, with `_links.next` while there is more. `resample` cannot be combined with it. See
+  [Reading the raw curve in pages](live_paper.md#the-equity-curve).
+
+```bash
+curl "https://api.qtsurfer.net/v1/live/$RUN_ID/paper/equity?currency=USDT&outMode=SHORT&resample=500&differential=true" \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+```json
+{
+  "currency": "USDT",
+  "timestamps": [1758330060000, 18000, 42000],
+  "equities": [999.62, -0.03, 0.85],
+  "gaps": [],
+  "meta": {
+    "inputPointCount": 3,
+    "outputPointCount": 3,
+    "resampled": false,
+    "differential": true,
+    "outMode": "SHORT"
+  }
+}
+```
+
+Read the shape from `meta.outMode`, as for any curve. The run's accounts, their KPIs and their latest
+equity are in `GET /live/{runId}/paper`; the walkthrough of a paper run is in
+[Paper trading on live runs](live_paper.md#the-equity-curve).

@@ -9,7 +9,7 @@ the block, the run has no paper trading.
 |---|---|---|
 | `POST` | `/strategy/{strategyId}/live` | Start a run — with a `paper` block to paper-trade it |
 | `GET` | `/live/{runId}/paper` | Each paper account: equity, open positions, KPIs |
-| `GET` | `/live/{runId}/paper/equity` | Page through the equity curve |
+| `GET` | `/live/{runId}/paper/equity` | One account's equity curve, in the shape of every [equity curve](equity_curves.md) |
 | `GET` | `/live/{runId}/signals?type=paper` | Paper items interleaved in the run's signals (`output: mix` only) |
 
 Both paper routes follow the same access rule as a run's signals: the run's owner, or anyone if the
@@ -139,15 +139,22 @@ them.
 
 ## The equity curve
 
-`GET /live/{runId}/paper/equity` pages through an account's whole curve, oldest first. It is kept for
-the life of the run, so unlike signals there is no moving window. The curve is per **account**, not
-per pair: BTC/USDT and ETH/USDT share one. Each point is one of:
+`GET /v1/live/{runId}/paper/equity` returns an account's whole curve, oldest first, in the same shape
+as every other [equity curve](equity_curves.md) of the API: `{points, meta}` or, with
+`outMode=SHORT`, `{timestamps, equities, meta}`, shaped by the same `outMode`, `resample` and
+`differential` query parameters and described by the same `meta`. Beside it come the account's
+`currency` and its `gaps`. The curve is kept for the life of the run, so unlike signals there is no
+moving window. It is per **account**, not per pair: BTC/USDT and ETH/USDT share one.
 
-| `kind` | when | `equity` |
+It is one series of running equity, made of two kinds of point:
+
+| point | when | `equity` |
 |---|---|---|
-| `equity` | after every closed trade, of any pair | capital plus realised PnL |
-| `mark` | once a minute of market time, while any position is open | capital plus realised PnL plus the open positions at market price |
-| `gap` | open positions lost at a restart | absent |
+| closed trade | after every closed trade, of any pair | capital plus realised PnL |
+| mark | once a minute of market time, while any position is open | capital plus realised PnL plus the open positions at market price |
+
+Where the run was restarted with positions open, those positions are lost (see [Gaps](#gaps)) and the
+curve has no value there: that moment is listed in `gaps`, beside the curve, and is not a point of it.
 
 For the run above, from its start:
 
@@ -155,56 +162,115 @@ For the run above, from its start:
 |---|---|---|
 | 01:00:10 | BTC/USDT bought (200 USDT) | — |
 | 01:00:25 | ETH/USDT bought (160 USDT) | — |
-| 01:01:00 | a minute with both open, −0.38 unrealised | `mark` 999.62 |
-| 01:01:18 | BTC/USDT sold, −0.41 | `equity` 999.59 |
-| 01:02:00 | a minute with ETH/USDT open, +0.85 unrealised | `mark` 1000.44 |
-| 01:02:31 | ETH/USDT sold, +0.72 | `equity` 1000.31 |
+| 01:01:00 | a minute with both open, −0.38 unrealised | mark 999.62 |
+| 01:01:18 | BTC/USDT sold, −0.41 | closed trade 999.59 |
+| 01:02:00 | a minute with ETH/USDT open, +0.85 unrealised | mark 1000.44 |
+| 01:02:31 | ETH/USDT sold, +0.72 | closed trade 1000.31 |
 | 01:03:00 | nothing open | — |
 | 01:03:40 | BTC/USDT bought again (200.06 USDT) | — |
-| 01:04:00 | a minute with BTC/USDT open, −0.12 unrealised | `mark` 1000.19 |
+| 01:04:00 | a minute with BTC/USDT open, −0.12 unrealised | mark 1000.19 |
+
+```
+GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity
+
+200
+{
+  "currency": "USDT",
+  "points": [
+    {"timestamp": 1758330060000, "equity": 999.62},
+    {"timestamp": 1758330078000, "equity": 999.59},
+    {"timestamp": 1758330120000, "equity": 1000.44},
+    {"timestamp": 1758330151000, "equity": 1000.31},
+    {"timestamp": 1758330240000, "equity": 1000.19}
+  ],
+  "gaps": [],
+  "meta": {"inputPointCount": 5, "outputPointCount": 5, "resampled": false, "differential": false, "outMode": "ARRAY"}
+}
+```
+
+The compact forms are the ones every curve has. The same curve, delta-encoded in parallel arrays (the
+first value stays absolute, see [decoding differential data](equity_curves.md#decoding-differential-data)):
+
+```
+GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?outMode=SHORT&differential=true
+
+200
+{
+  "currency": "USDT",
+  "timestamps": [1758330060000, 18000, 42000, 31000, 89000],
+  "equities": [999.62, -0.03, 0.85, -0.13, -0.12],
+  "gaps": [],
+  "meta": {"inputPointCount": 5, "outputPointCount": 5, "resampled": false, "differential": true, "outMode": "SHORT"}
+}
+```
+
+A long run has a long curve. `resample` caps it (`?resample=500` is at most 500 points, keeping the
+first, the last and the extremes), and above a server-side size the shape is compacted whatever was
+asked, as for any curve: read `meta.outMode`. `sinceMs` starts from a given market time, inclusive, so
+a client that already holds a curve reads only what is new. A curve too long to be read in one request
+answers `400`; narrow it with `sinceMs`, or page it.
+
+**Reading the raw curve in pages.** The server compacts a long curve and, past a larger size,
+resamples it, so the whole-curve answer is not the way to take every point. To take them all, ask for
+pages: give `limit` (up to 1000, default 100) and the answer is one page of the raw curve, oldest
+first, with `_links.next` while there is more.
 
 ```
 GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?limit=3
 
 200
 {
+  "currency": "USDT",
   "points": [
-    {"currency": "USDT", "kind": "mark",   "eventTsMs": 1758330060000, "equity": 999.62},
-    {"currency": "USDT", "kind": "equity", "eventTsMs": 1758330078000, "equity": 999.59},
-    {"currency": "USDT", "kind": "mark",   "eventTsMs": 1758330120000, "equity": 1000.44}
+    {"timestamp": 1758330060000, "equity": 999.62},
+    {"timestamp": 1758330078000, "equity": 999.59},
+    {"timestamp": 1758330120000, "equity": 1000.44}
   ],
-  "_links": {"next": {"href": "/v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?cursor=eyJ0cyI6MTc1ODMzMDEyMDAwMCwiaWQiOiI…&limit=3"}}
+  "gaps": [],
+  "meta": {"inputPointCount": 3, "outputPointCount": 3, "resampled": false, "differential": false, "outMode": "ARRAY"},
+  "_links": {"next": {"href": "/v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?cursor=eyJ0cyI6MTc1ODMzMDEyMDAwMCwiaWQiOiI…&limit=3&currency=USDT"}}
 }
 ```
 
-Following `_links.next`:
+Follow `_links.next` as given (the cursor is opaque); a page without `_links` is the last one:
 
 ```
 200
 {
+  "currency": "USDT",
   "points": [
-    {"currency": "USDT", "kind": "equity", "eventTsMs": 1758330151000, "equity": 1000.31},
-    {"currency": "USDT", "kind": "mark",   "eventTsMs": 1758330240000, "equity": 1000.19}
-  ]
+    {"timestamp": 1758330151000, "equity": 1000.31},
+    {"timestamp": 1758330240000, "equity": 1000.19}
+  ],
+  "gaps": [],
+  "meta": {"inputPointCount": 2, "outputPointCount": 2, "resampled": false, "differential": false, "outMode": "ARRAY"}
 }
 ```
 
-No `_links.next`: that was the last page. The cursor is opaque — use the `href` as given.
-`sinceMs` starts from a given market time instead of the beginning; `limit` defaults to 100 and caps
-at 1000.
+A page has the same shape as the whole curve, so `outMode` and `differential` apply to it and the next
+link keeps them; each page is decoded on its own, with its own absolute first value. A page holds at
+most `limit` entries and a [gap](#gaps) counts as one, so a page with a gap has one point fewer, and
+the gap's time is in that page's `gaps`. `resample` cannot be combined with paging (`400`): a
+resampled curve is one answer, a paged one is the raw curve. A cursor never loses or repeats an
+entry, even between two entries of the same millisecond.
 
-**Several accounts.** Without `currency`, every account's points come interleaved by time, each
-carrying its currency. For a run on BTC/USDT and ETH/BTC, `?currency=BTC` narrows to the BTC account:
+**Several accounts.** Each account has its own curve, never added to another. `currency` chooses it,
+and it may be left out only when the run has a single account (or none yet, which gives an empty
+curve). With several accounts and no `currency` the request is a `400` that lists them. For a run on
+BTC/USDT and ETH/BTC, `?currency=BTC` is the BTC account:
 
 ```
 GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?currency=BTC
 
 200
 {
+  "currency": "BTC",
   "points": [
-    {"currency": "BTC", "kind": "mark",   "eventTsMs": 1758330060000, "equity": 999.9981},
-    {"currency": "BTC", "kind": "equity", "eventTsMs": 1758330097000, "equity": 1000.0012}
-  ]
+    {"timestamp": 1758330060000, "equity": 999.9981},
+    {"timestamp": 1758330097000, "equity": 1000.0012}
+  ],
+  "gaps": [],
+  "meta": {"inputPointCount": 2, "outputPointCount": 2, "resampled": false, "differential": false, "outMode": "ARRAY"}
 }
 ```
 
@@ -267,11 +333,11 @@ counted twice. Positions that were **open** at the restart, and any pending orde
 over: each open position is reported as a `gap`, with what it held, and is no longer counted.
 
 ```json
-{"currency": "USDT", "kind": "gap", "eventTsMs": 1758333600000}
+"gaps": [1758333600000]
 ```
 
-In the curve a gap has no `equity`, and the account's `gaps` counts them. In a `mix` run the
-matching signal names the pair and what was held:
+A gap is not a point of the curve: the curve lists its time in `gaps`, and the account's `gaps`
+counts them. In a `mix` run the matching signal names the pair and what was held:
 
 ```json
 {"type": "paper", "kind": "gap", "instrument": {"exchange": "binance", "segment": "spot", "symbol": "ETH/USDT"},
