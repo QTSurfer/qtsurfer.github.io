@@ -61,6 +61,14 @@ curl -X POST https://api.qtsurfer.net/v1/backtest/binance/kline/execute \
   -d '{"prepareJobId":"5ikYAMIO...","strategyId":"2ul144qe9tlwzu5anhwvc6"}'
 ```
 
+### Kline over your own data
+
+With `exchangeId: user`, a `kline` run reads the bars of a dataset whose `type` is `klines`: its rows
+are the bars, at the dataset's own cadence unless you prepare at a coarser exact multiple of it. A
+dataset of `type` `ticker` has no bars to give, so its `kline` prepare is `400`, naming the
+dataset's type; the same dataset prepared as `ticker` runs as always. See [which datasets run under
+which `{type}`](datasets.md#which-datasets-run-under-which-type).
+
 ## Preparing data
 
 `POST .../prepare`
@@ -97,7 +105,8 @@ curl -X POST https://api.qtsurfer.net/v1/backtest/binance/ticker/prepare \
 Errors: `400` invalid request, `from` older than the lookback window, `to` in the future, a `kline`
 `cadence` that isn't a kline cadence, or (for
 `exchangeId: user`) the dataset's upload hasn't finished ingesting / `cadence` finer than the
-dataset's discovered cadence / range exceeds your tier's limit · `404` exchange/type not found, or
+dataset's discovered cadence / a `kline` prepare over a dataset that isn't `klines` / range exceeds
+your tier's limit · `404` exchange/type not found, or
 (for `exchangeId: user`) `datasetId`/`datasetVersionId` doesn't exist or isn't yours · `429` global
 queue at capacity or too many active backtests — doesn't apply to `exchangeId: user`, which reads
 an already-ingested file rather than claiming worker capacity.

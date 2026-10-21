@@ -7,6 +7,25 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.41] — 2026-10-21
+
+### Changed
+
+- A `kline` backtest runs over your own data: with `exchangeId: user`, a `kline` prepare, `execute`,
+  `executeSweep` and walk-forward take a dataset whose `type` is `klines`, and its rows are the bars
+  (at the dataset's own cadence, or at a coarser exact multiple of it). Before, the prepare answered
+  `202` and the run then failed.
+- A `kline` prepare over a dataset that is not `klines` is now a `400` at prepare, naming the
+  dataset's type, instead of a run that fails after it is queued. A `ticker` prepare takes any
+  dataset, as before.
+- For `exchangeId: user`, a `kline` prepare also checks that the `cadence` is a width a bar can have
+  (a whole number of seconds), as it does for a managed exchange.
+
+### Added
+
+- `docs/datasets.md`: "Which datasets run under which `{type}`". `docs/backtest_execute.md`: "Kline
+  over your own data".
+
 ## [0.128.40] — 2026-10-21
 
 ### Changed

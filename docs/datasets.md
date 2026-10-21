@@ -480,3 +480,28 @@ and range are recovered from `prepareJobId` either way. See
 including `PrepareRequest`'s `datasetId`/`datasetVersionId` fields and the dataset-backed
 coverage shape on `PrepareJobState` (`cadence`/`gaps`/`largestGapSteps` in place of the
 hour-walked `totalHours`/`hoursWithData`/`hoursWithoutData`).
+
+### Which datasets run under which `{type}`
+
+The `{type}` in the path says what the strategy is fed; the dataset's own `type` says what it
+holds. Both `ticker` and `kline` runs take a dataset, and a dataset of candles can be run either
+way:
+
+| `{type}` of the run | dataset of `type` `ticker` | dataset of `type` `klines` |
+|---|---|---|
+| `ticker` | yes | yes |
+| `kline` | `400` at prepare | yes |
+
+A `kline` run over a dataset reads the dataset's own rows as the bars: no ticker is built from them.
+By default each row is one bar, at the dataset's own `cadence`. A coarser `cadence` that is an exact
+multiple of it aggregates the rows into wider bars, and a bar the range covers only partly is
+dropped rather than emitted short. `execute`, `executeSweep` and walk-forward all take it.
+
+A `kline` prepare over a dataset that is not `klines` is refused with a `400` that names the
+dataset's type, before anything is queued, and says to prepare it as ticker data instead. A
+`ticker` run over a `klines` dataset is accepted: each bar is read as one sample, with no order
+book.
+
+The `type` is what this table reads. A file you upload is `type: ticker`, so it runs as ticker
+data; a dataset of candles comes from an [import](#importing-a-dataset-instead-of-uploading-one) of
+an exchange's candles (or a `dex` import that asks for a candle `cadence`).

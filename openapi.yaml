@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.40
+  version: 0.128.41
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1129,7 +1129,9 @@ paths:
         **`exchangeId: user` is reserved for your own uploaded data.** Instead of a managed
         exchange, it prepares from a dataset you created via `POST /datasets` (see the **Dataset**
         endpoints) — send `datasetId` in place of `instrument`. See `PrepareRequest` below for the
-        two request shapes.
+        two request shapes. A `ticker` prepare takes any dataset; a `kline` prepare takes a dataset
+        whose `type` is `klines` (its rows are the bars, at its own cadence or a coarser exact
+        multiple of it) and is `400` over any other, naming the dataset's type.
       parameters:
         - name: exchangeId
           in: path
