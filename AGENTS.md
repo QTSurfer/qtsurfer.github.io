@@ -4,18 +4,14 @@ This file provides guidance to AI coding agents when working with code in this r
 
 ## Project Overview
 
-Public-facing OpenAPI documentation for the QTSurfer API, hosted at **[qtsurfer.github.io](https://qtsurfer.github.io)** via GitHub Pages.
+Public-facing contract of the QTSurfer API: the OpenAPI spec, the AsyncAPI spec of the Live Execution WebSocket, and the per-endpoint-group guides. The rendered reference lives on the project website, [qtsurfer.com/docs/api](https://www.qtsurfer.com/docs/api); this repository only holds the sources.
 
 ## How It Works
 
-```
-openapi.yaml ──► GitHub Actions ──► Redocly CLI ──► index.html ──► GitHub Pages
-```
-
 1. Edit `openapi.yaml` (the single source of truth)
 2. Push to `main`
-3. GitHub Actions workflow (`.github/workflows/redoc_index.yml`) runs `redocly build-docs` and auto-commits the generated `index.html`
-4. GitHub Pages serves `index.html` at the public URL
+3. GitHub Actions workflow (`.github/workflows/openapi_lint.yml`) runs `redocly lint` on the spec
+4. The website reads `openapi.yaml` and the guides from `main`
 
 ## Files
 
@@ -24,10 +20,9 @@ openapi.yaml ──► GitHub Actions ──► Redocly CLI ──► index.html
 | `openapi.yaml` | OpenAPI 3.1.0 spec — **edit this** |
 | `asyncapi.yaml` | AsyncAPI 3.1.0 spec of the Live Execution WebSocket (Centrifugo client protocol): frames, `sig:<runId>` channels, the `live.params` RPC, error codes. Reuses `openapi.yaml` schemas by `$ref` — **edit this** for any WebSocket change |
 | `scripts/live_ws_conformance.py` | Checks `asyncapi.yaml`: `--examples` offline against its own schemas, or live against the running service (needs `QTSURFER_APIKEY`) |
-| `index.html` | Generated Redoc HTML — **never edit manually** |
 | `README.md` | Repo README with strategy example and API quickstart |
 | `docs/*.md` | Per-endpoint-group reference (full params, examples, response fields) that the README links out to instead of inlining — e.g. `docs/backtest_execute.md`, `docs/backtest_sweep.md` |
-| `.github/workflows/redoc_index.yml` | CI: regenerates `index.html` on push |
+| `.github/workflows/openapi_lint.yml` | CI: lints `openapi.yaml` on push and pull request |
 
 ## Common Tasks
 
@@ -56,11 +51,6 @@ npx @redocly/cli preview-docs openapi.yaml
 # Opens browser at http://localhost:8080
 ```
 
-### Regenerate HTML locally
-```bash
-npx @redocly/cli build-docs openapi.yaml --output=index.html
-```
-
 ### Validate spec
 ```bash
 npx @redocly/cli lint openapi.yaml
@@ -69,11 +59,8 @@ npx @redocly/cli lint openapi.yaml
 ## Key Conventions
 
 - **openapi.yaml is the source of truth** — the spec is maintained here, not extracted from code
-- **index.html is generated** — the CI auto-commits it, so expect merge noise if editing the spec in a branch
-- **Only one CI generates it.** This repo is mirrored, and the mirror's CI reads `.github/workflows`
-  too, so the job is guarded to run on GitHub alone. Without that guard both sides regenerate
-  `index.html` and commit it, and the mirrors diverge by two content-identical commits on every spec
-  change. Do not remove the guard
+- **CI runs on GitHub alone.** This repo is mirrored, and the mirror's CI reads `.github/workflows`
+  too, so each job is guarded with `github.server_url == 'https://github.com'`. Do not remove the guard
 - **This is a public repo** — no internal URLs, credentials, or infrastructure details
 - **Server URLs**: staging is `api.qtsurfer.net`, and it is the one that actually serves the API.
   `api.qtsurfer.com` is listed as production but is reserved and not yet live — do not point examples

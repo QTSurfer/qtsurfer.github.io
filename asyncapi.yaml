@@ -6,7 +6,7 @@ info:
     The WebSocket side of Live Execution: receive a live run's signals as they happen, and change its
     parameters over the same connection. The REST side (starting, reading and stopping runs, minting
     the connection token, reading signals already produced) is in `openapi.yaml`; the narrative guide
-    is [`docs/live.md`](https://github.com/QTSurfer/qtsurfer.github.io/blob/main/docs/live.md).
+    is [`docs/live.md`](https://github.com/QTSurfer/qtsurfer-api/blob/main/docs/live.md).
 
     ## The protocol is Centrifugo's
 

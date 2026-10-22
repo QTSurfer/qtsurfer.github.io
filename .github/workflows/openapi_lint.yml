@@ -1,0 +1,28 @@
+name: Lint OpenAPI spec
+
+on:
+  push:
+    paths:
+      - "openapi.yaml"
+      - "redocly.yaml"
+      - ".github/workflows/openapi_lint.yml"
+    branches:
+      - main
+  pull_request:
+    paths:
+      - "openapi.yaml"
+      - "redocly.yaml"
+      - ".github/workflows/openapi_lint.yml"
+
+jobs:
+  lint:
+    # This repository is mirrored, and the other host's CI also reads .github/workflows,
+    # so the check runs on GitHub alone.
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Lint OpenAPI spec
+        run: npx -y @redocly/cli@2.24.0 lint openapi.yaml
