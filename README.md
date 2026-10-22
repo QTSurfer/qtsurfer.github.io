@@ -8,8 +8,6 @@ Write trading strategies in Java — or in QTScript, a compact language, current
 
 **[QTSurfer API documentation](https://www.qtsurfer.com/docs/developers/api)** — the developer documentation, on the public site
 
-**[qtsurfer.github.io](https://qtsurfer.github.io)** — Interactive OpenAPI documentation
-
 **[`asyncapi.yaml`](asyncapi.yaml)** — the Live Execution WebSocket contract (Centrifugo client protocol); guide in [`docs/live.md`](docs/live.md)
 
 **[Engine Javadoc](https://www.qtsurfer.com/docs/developers/java-api)** — strategy SDK classes (indicators, signals, execution) referenced below
