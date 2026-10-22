@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.43
+  version: 0.128.44
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3535,9 +3535,18 @@ paths:
         mark`, taken every minute of market time). Until either exists the account holds its
         starting capital.
 
+        A position also says what it is worth. When the last mark valued it as it stands now, its
+        entry in `openPositions` carries `markPrice` (the price it was valued at), `markedAtMs`
+        (when) and `unrealisedPnl` (`base` times `markPrice`, minus `cost`). A position opened or
+        changed since the last mark, which is at most about a minute old, has none of the three yet.
+        The account says it for all its positions together: `unrealisedPnl` (their sum, `0` when it
+        holds nothing) and `totalPnl` (with its `realisedPnl`); both are absent while any of its
+        positions has no current mark.
+
         An account is shared by every instrument of its quote currency, so each account also says
         what it realised per instrument, in `instruments`: the trades, the realised PnL, its
-        contribution as a percent of the account's starting capital, the position it holds and its
+        contribution as a percent of the account's starting capital, the position it holds, what
+        that position is worth (`unrealisedPnl`, and `totalPnl` with the realised part) and its
         KPIs. It is exact for what was realised, and it is not how the instrument would have done
         on its own: its entries depended on what the others had locked from the same account.
 
@@ -3566,12 +3575,17 @@ paths:
                     equityAtMs: 1758330060000
                     equityKind: mark
                     realisedPnl: -2.1
+                    unrealisedPnl: -1.5
+                    totalPnl: -3.6
                     trades: 14
                     gaps: 0
                     openPositions:
                       - instrument: BTC/USDT
                         base: 0.0023
                         cost: 194.2
+                        markPrice: 83782.61
+                        markedAtMs: 1758330060000
+                        unrealisedPnl: -1.5
                     kpi:
                       totalTrades: 14
                       winCount: 6
@@ -3591,9 +3605,14 @@ paths:
                         losses: 4
                         realisedPnl: 1.9
                         contributionPct: 0.19
+                        unrealisedPnl: -1.5
+                        totalPnl: 0.4
                         openPosition:
                           base: 0.0023
                           cost: 194.2
+                          markPrice: 83782.61
+                          markedAtMs: 1758330060000
+                          unrealisedPnl: -1.5
                         kpi:
                           totalTrades: 9
                           winCount: 5
@@ -3612,6 +3631,8 @@ paths:
                         losses: 4
                         realisedPnl: -4
                         contributionPct: -0.4
+                        unrealisedPnl: 0
+                        totalPnl: -4
         '403':
           $ref: '#/components/responses/InsufficientScope'
         '404':
@@ -3669,6 +3690,12 @@ paths:
         those points the two differ by one trade. The gaps of an account are not attributed to an
         instrument, so `gaps` is empty.
 
+        An instrument's curve can include what it holds and has not sold: with `measure=totalPnl`
+        each point is the instrument's realised PnL up to then plus the unrealised value of its open
+        position, at each closed trade (where nothing is held, so it is the realised PnL) and at
+        each mark while a position is open. The answer says `measure: totalPnl`. `measure` is only
+        for an instrument's curve: an account's is `equity` and already includes its marks.
+
         Readable by the run's owner, and by anyone if the run is `public` and has reached the `live`
         stage.
       parameters:
@@ -3695,6 +3722,16 @@ paths:
             One instrument of the account, as `BASE/QUOTE`: answers its cumulative realised PnL
             instead of the account's equity. Its account is its quote currency; a `currency` that
             is another one is a `400`.
+        - name: measure
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [realisedPnl, totalPnl]
+            default: realisedPnl
+          description: >-
+            With `instrument`: `realisedPnl` (the default) or `totalPnl`, which adds the unrealised
+            value of its open position at each mark. Without `instrument` it is a `400`.
         - name: sinceMs
           in: query
           required: false
@@ -7129,6 +7166,17 @@ components:
           type: number
           format: double
           description: Sum of the PnL of the closed trades.
+        unrealisedPnl:
+          type: number
+          format: double
+          description: >-
+            What its open positions are worth over their cost as of the last mark, in the account's
+            currency: the sum of `unrealisedPnl` over `openPositions`. `0` when it holds nothing.
+            Absent while any of its positions has no current mark (see `openPositions`).
+        totalPnl:
+          type: number
+          format: double
+          description: '`realisedPnl` plus `unrealisedPnl`. Absent when `unrealisedPnl` is.'
         trades:
           type: integer
           format: int64
@@ -7182,6 +7230,16 @@ components:
           description: >-
             `realisedPnl` as a percent of the account's `initialFunding` (0-100 scale), so the
             contributions of the instruments add up to the account's realised return.
+        unrealisedPnl:
+          type: number
+          format: double
+          description: >-
+            What its open position is worth over its cost as of the last mark; `0` when it holds
+            nothing. Absent while its position has no current mark (see `openPosition`).
+        totalPnl:
+          type: number
+          format: double
+          description: '`realisedPnl` plus `unrealisedPnl`. Absent when `unrealisedPnl` is.'
         openPosition:
           type: object
           description: What it holds now. Absent when it holds nothing.
@@ -7195,6 +7253,20 @@ components:
               type: number
               format: double
               description: What it cost, in the account's currency.
+            markPrice:
+              type: number
+              format: double
+              description: >-
+                The price it was valued at in the last mark. Present, with `markedAtMs` and
+                `unrealisedPnl`, only when that mark is of the position as it stands now.
+            markedAtMs:
+              type: integer
+              format: int64
+              description: Market time (epoch ms) of that mark.
+            unrealisedPnl:
+              type: number
+              format: double
+              description: '`base` times `markPrice`, minus `cost`, in the account''s currency.'
         kpi:
           allOf:
             - $ref: '#/components/schemas/LivePaperKpi'
@@ -7217,6 +7289,20 @@ components:
           type: number
           format: double
           description: What it cost, in the account's currency.
+        markPrice:
+          type: number
+          format: double
+          description: >-
+            The price the position was valued at in the last mark. Present, with `markedAtMs` and
+            `unrealisedPnl`, only when that mark is of the position as it stands now.
+        markedAtMs:
+          type: integer
+          format: int64
+          description: Market time (epoch ms) of that mark.
+        unrealisedPnl:
+          type: number
+          format: double
+          description: '`base` times `markPrice`, minus `cost`, in the account''s currency.'
     LivePaperKpi:
       type: object
       description: The same KPIs a backtest reports, over the trades closed so far. Absent until the first closed trade is recorded.
@@ -7276,13 +7362,17 @@ components:
             instrument:
               type: string
               example: BTC/USDT
-              description: Present when the curve is one instrument's (`measure` is `realisedPnl`).
+              description: >-
+                Present when the curve is one instrument's (`measure` is `realisedPnl` or
+                `totalPnl`).
             measure:
               type: string
-              enum: [equity, realisedPnl]
+              enum: [equity, realisedPnl, totalPnl]
               description: >-
-                What the values of the curve are: the account's `equity`, or an instrument's
-                cumulative `realisedPnl` from 0. The shape names its values `equity` either way.
+                What the values of the curve are: the account's `equity`, an instrument's
+                cumulative `realisedPnl` from 0, or its `totalPnl` (the realised PnL plus the
+                unrealised value of its open position). The shape names its values `equity` in
+                every case.
             gaps:
               type: array
               description: >-

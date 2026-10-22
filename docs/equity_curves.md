@@ -237,9 +237,10 @@ guard. What differs is that the curve is live and what rides beside it:
   milliseconds, the moments open positions were lost because the run was restarted with them open. A
   gap is not a point of the curve and `meta` does not count it.
 - **An instrument's own curve.** `?instrument=BTC/USDT` answers that instrument's cumulative realised
-  PnL from 0, a point at each of its closed trades, in this same shape and with the same options. `measure`
-  says what the values are: `equity` for an account's curve, `realisedPnl` for an instrument's. See
-  [Per instrument](live_paper.md#per-instrument).
+  PnL from 0, a point at each of its closed trades, in this same shape and with the same options.
+  `measure` says what the values are: `equity` for an account's curve, `realisedPnl` for an instrument's,
+  and with `&measure=totalPnl` the realised PnL plus the unrealised value of its open position at each
+  mark. See [Per instrument](live_paper.md#per-instrument).
 - **`sinceMs` starts from a market time, inclusive,** so a client that already holds the curve reads
   only what is new. A curve too long to be read in one request answers `400`: narrow it with
   `sinceMs`, or page it.

@@ -7,6 +7,27 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.44] — 2026-10-22
+
+### Added
+
+- A paper account's open positions say what they are worth. In `GET /live/{runId}/paper`, an entry of `openPositions`
+  carries `markPrice` (the price it was valued at in the last mark), `markedAtMs` and `unrealisedPnl` (`base` times
+  `markPrice`, minus `cost`) when that mark is of the position as it stands now; a position opened or changed since
+  has none of the three yet. The schema is `LivePaperPosition`.
+- The account itself carries `unrealisedPnl` (the sum of its positions' values; `0` when it holds nothing; absent
+  while any of its positions has no current mark) and `totalPnl` (`realisedPnl` plus `unrealisedPnl`), so a client has
+  one pair of fields whichever way the account is broken down.
+- Each entry of `instruments` carries `unrealisedPnl` (`0` when the instrument holds nothing, absent while its
+  position has no current mark) and `totalPnl` (the realised plus the unrealised), and its `openPosition` the same
+  three fields as above.
+- `GET /live/{runId}/paper/equity?instrument=…&measure=totalPnl`: the instrument's curve with the unrealised value of
+  its open position, a point at each closed trade and at each mark while a position is open. `measure` takes
+  `realisedPnl` (the default) or `totalPnl`, is only for an instrument's curve (without `instrument` it is a `400`),
+  and the answer's `measure` can now be `totalPnl`.
+- The `mark` item of the paper output (`type: paper`) carries `positions`: one entry per open position with
+  `instrument`, `base`, `cost`, `markPrice` and `unrealisedPnl`.
+
 ## [0.128.43] — 2026-10-22
 
 ### Added
