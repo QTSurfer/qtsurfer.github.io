@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.46] — 2026-10-22
+
+### Fixed
+
+- In `docs/live_paper.md`, the example of `?instrument=BTC/USDT` (an instrument's cumulative realised PnL, `measure: realisedPnl`) follows the paragraph that describes it again. The sections added in 0.128.44 and 0.128.45 (an account per instrument, and the curve with what the position holds) had been inserted between the paragraph and its example, so the example read as part of the `totalPnl` one. No field, route or behaviour changes.
+
 ## [0.128.45] — 2026-10-22
 
 ### Added
