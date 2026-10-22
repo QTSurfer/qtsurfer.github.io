@@ -42,12 +42,13 @@ so one object moves between a backtest and a live run unchanged:
 
 | field | default | meaning |
 |---|---|---|
-| `initialFunding` | `100` | Starting capital of each account, in that account's quote currency. At most 1,000,000,000. |
+| `initialFunding` | `100` | Starting capital of each account, in that account's quote currency. At most 1,000,000,000. With `accounts: instrument` it is the capital of EACH instrument's account, never the run's total. |
 | `feeRate` | `0.001` | Fee rate for both sides (0.001 = 0.1%). |
 | `buyFeeRate` / `sellFeeRate` | `feeRate` | Per-side rates; override `feeRate`. |
 | `feeLeg` | `RECEIVED` | Which asset fees are charged in: `RECEIVED`, `QUOTE` or `BASE`. |
 | `percentAmountToLock` | see below | Share of the account's free balance each entry locks, in percent (0–100]. |
 | `output` | `separate` | `separate`, or `mix` to also write paper items into the run's signals (see [below](#output-separate-or-mix)). |
+| `accounts` | `currency` | `currency`: one shared account per quote currency. `instrument`: one isolated account per instrument, each with its own `initialFunding` (see [One account per instrument](#one-account-per-instrument)). |
 
 The run's own `GET /strategy/{strategyId}/live` returns the block as accepted: `feeRate` resolved
 into `buyFeeRate`/`sellFeeRate`, defaults filled in, `feeLeg` upper-cased.
@@ -63,9 +64,11 @@ entry locks 200 of the 1000, and a second entry opened while the first is still 
 Anything invalid is a `400`, never silently adjusted:
 
 ```json
-{"code": 400, "message": "paper.slippage is not a known field (known: [initialFunding, feeRate, buyFeeRate, sellFeeRate, feeLeg, percentAmountToLock, output])"}
+{"code": 400, "message": "paper.slippage is not a known field (known: [initialFunding, feeRate, buyFeeRate, sellFeeRate, feeLeg, percentAmountToLock, output, accounts])"}
 {"code": 400, "message": "paper.initialFunding must be > 0"}
 {"code": 400, "message": "paper.output must be one of [separate, mix]"}
+{"code": 400, "message": "paper.accounts must be one of [currency, instrument]"}
+{"code": 400, "message": "paper.accounts = instrument needs the instruments named, not a wildcard ('*'): it opens one account for each"}
 ```
 
 **Strategies that listen to their own execution.** A strategy that overrides
@@ -89,6 +92,35 @@ there is no conversion between currencies.
 
 Pairs that share an account share its balance: sizing is always a share of what that account still
 has free.
+
+### One account per instrument
+
+With `"accounts": "instrument"` in the `paper` block, each instrument gets an account of its own
+instead, opened with `initialFunding` in the instrument's quote currency the first time it is traded.
+Each is a simulation of that instrument alone, exactly what a backtest of it would do with the same
+economics: it never draws on another instrument's balance, so it is the way to compare a live run with
+a backtest of each instrument.
+
+| `instruments` | `accounts: currency` (the default) | `accounts: instrument` |
+|---|---|---|
+| `["BTC/USDT", "ETH/USDT"]` | one: `USDT` (1000 USDT), shared | two: `BTC/USDT` (1000 USDT) and `ETH/USDT` (1000 USDT) |
+| `["BTC/USDT", "ETH/BTC"]` | two: `USDT` and `BTC` | two: `BTC/USDT` (1000 USDT) and `ETH/BTC` (1000 BTC) |
+
+Three things to know:
+
+- **`initialFunding` is the capital of each account, never the run's total.** Two instruments with
+  `"initialFunding": 1000` are two accounts of 1000, not 1000 split between them. The accounts are
+  never added together, in the same currency or not, and nothing here reports a total.
+- **It is less realistic than the shared account.** A venue holds one wallet per asset, not one per
+  pair: with a shared account, a `*/USDT` run at 25% per entry can hold four instruments from one USDT
+  wallet, and what it sells comes back as USDT. Use the isolated mode to ask "how would this strategy
+  have done on this instrument alone"; use the shared one to ask how the run behaves with one wallet.
+- **Without `percentAmountToLock`, an entry locks the whole free balance**, as a backtest does, because
+  nothing is shared. The shared account keeps its 10% default. A value you give wins in both.
+
+The instruments have to be named: `"instruments": ["*"]`, or a pair with a `*` on one side, is refused
+whatever the plan, since it would open an account, each with the whole `initialFunding`, for every
+instrument of the exchange. The split is fixed when the run starts and is returned with the block.
 
 ## Reading an account
 
@@ -198,6 +230,46 @@ instrument would have done on its own: its entries depended on what the others h
 the same account (with `percentAmountToLock: 20`, a second entry locks 20 % of what the first left
 free), so a different mix of instruments would have sized it differently. It answers which instrument
 adds to the account and which one takes away.
+
+### An account per instrument
+
+For a run started with `"accounts": "instrument"` each entry of `accounts` is one instrument and says
+so with `instrument`; `currency` is its quote, and two accounts can share it. There is no `instruments`
+to break down, since the account already is one instrument.
+
+```
+GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper
+
+200
+{
+  "runId": "6TzAPiPpsOWwBLdLBZCxwH",
+  "stage": "SANDBOX",
+  "accounts": [
+    {
+      "currency": "USDT", "instrument": "BTC/USDT",
+      "initialFunding": 1000.0, "equity": 1001.2, "equityAtMs": 1758330120000, "equityKind": "mark",
+      "realisedPnl": 1.2, "unrealisedPnl": 0.0, "totalPnl": 1.2, "trades": 3, "gaps": 0, "openPositions": [],
+      "kpi": {"totalTrades": 3, "winCount": 2, "lossCount": 1, "winRate": 0.6667, "pnlTotal": 1.2, "pnlTotalPercent": 0.12}
+    },
+    {
+      "currency": "USDT", "instrument": "ETH/USDT",
+      "initialFunding": 1000.0, "equity": 997.35, "equityAtMs": 1758330120000, "equityKind": "mark",
+      "realisedPnl": -3.5, "unrealisedPnl": 0.85, "totalPnl": -2.65, "trades": 2, "gaps": 0,
+      "openPositions": [{
+        "instrument": "ETH/USDT", "base": 0.05948, "cost": 160.0,
+        "markPrice": 2704.25, "markedAtMs": 1758330120000, "unrealisedPnl": 0.85
+      }],
+      "kpi": {"totalTrades": 2, "winCount": 0, "lossCount": 2, "winRate": 0.0, "pnlTotal": -3.5, "pnlTotalPercent": -0.35}
+    }
+  ]
+}
+```
+
+Each account has its own `initialFunding` and its own KPIs, computed over its trades alone. Its
+`unrealisedPnl` and `totalPnl` are those of any account (above): what its position is worth, and that
+with what it realised, so here they are the instrument's own. Read
+`GET /live/{runId}/paper/equity?instrument=ETH/USDT` for the curve of one of them (see [The equity
+curve](#the-equity-curve)).
 
 ## The equity curve
 
@@ -353,6 +425,29 @@ processed in: the account's curve is recorded in that order and this one is serv
 two instruments that close almost together can be stamped slightly out of it, so at those points the
 two differ by one trade. The account's gaps are not attributed to an instrument, so `gaps` is empty
 here.
+
+**With an account per instrument**, `?instrument=ETH/USDT` does not ask for a part of a shared account:
+it SELECTS the account that instrument is, and the answer is that account's own curve, its `equity` (it
+already includes its marks), with the `instrument` beside the `currency` and the account's own `gaps`.
+`currency` may be given instead only while it names a single account, `measure` does not apply (a
+`400`), and with several accounts one of them has to be named.
+
+```
+GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?instrument=ETH/USDT
+
+200
+{
+  "currency": "USDT",
+  "instrument": "ETH/USDT",
+  "measure": "equity",
+  "points": [
+    {"timestamp": 1758330060000, "equity": 999.1},
+    {"timestamp": 1758330120000, "equity": 996.5}
+  ],
+  "gaps": [],
+  "meta": {"inputPointCount": 2, "outputPointCount": 2, "resampled": false, "differential": false, "outMode": "ARRAY"}
+}
+```
 
 **With what it holds and has not sold.** `?instrument=ETH/USDT&measure=totalPnl` adds to each point the
 unrealised value of the instrument's open position: a point at each closed trade (nothing is held then,

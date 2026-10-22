@@ -241,6 +241,9 @@ guard. What differs is that the curve is live and what rides beside it:
   `measure` says what the values are: `equity` for an account's curve, `realisedPnl` for an instrument's,
   and with `&measure=totalPnl` the realised PnL plus the unrealised value of its open position at each
   mark. See [Per instrument](live_paper.md#per-instrument).
+- **With an account per instrument,** `?instrument=ETH/USDT` selects the account that instrument is, and
+  the answer is its own `equity` curve in this same shape (`measure: equity`, with the account's `gaps`),
+  not a part of a shared account. See [One account per instrument](live_paper.md#one-account-per-instrument).
 - **`sinceMs` starts from a market time, inclusive,** so a client that already holds the curve reads
   only what is new. A curve too long to be read in one request answers `400`: narrow it with
   `sinceMs`, or page it.

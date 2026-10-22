@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.44
+  version: 0.128.45
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3535,6 +3535,10 @@ paths:
         mark`, taken every minute of market time). Until either exists the account holds its
         starting capital.
 
+        A run started with `accounts: instrument` has one account per instrument instead: each
+        carries the `instrument` it is, with its own `initialFunding`, and none carries
+        `instruments`. The accounts of such a run are never added together either.
+
         A position also says what it is worth. When the last mark valued it as it stands now, its
         entry in `openPositions` carries `markPrice` (the price it was valued at), `markedAtMs`
         (when) and `unrealisedPnl` (`base` times `markPrice`, minus `cost`). A position opened or
@@ -3663,7 +3667,10 @@ paths:
 
         A run has one account per quote currency and accounts are never summed. `currency` chooses
         the account; it may be left out only when the run has a single account, or none yet (an
-        empty curve).
+        empty curve). In a run started with `accounts: instrument` each instrument is an account:
+        `instrument` selects it, and the answer is that account's own curve, its `equity` with its
+        `gaps`, with the `instrument` beside the `currency`. `currency` may then be given instead
+        only while it names a single account, and `measure` does not apply (`400`).
 
         `sinceMs` reads from that market time on, inclusive, which is how a client that already
         holds a curve reads only what is new. A curve too long to be read in one request answers
@@ -3721,7 +3728,8 @@ paths:
           description: >-
             One instrument of the account, as `BASE/QUOTE`: answers its cumulative realised PnL
             instead of the account's equity. Its account is its quote currency; a `currency` that
-            is another one is a `400`.
+            is another one is a `400`. In a run started with `accounts: instrument` it selects the
+            account of that instrument instead and the answer is the account's own equity curve.
         - name: measure
           in: query
           required: false
@@ -3731,7 +3739,8 @@ paths:
             default: realisedPnl
           description: >-
             With `instrument`: `realisedPnl` (the default) or `totalPnl`, which adds the unrealised
-            value of its open position at each mark. Without `instrument` it is a `400`.
+            value of its open position at each mark. Without `instrument` it is a `400`, and so it
+            is in a run started with `accounts: instrument`, whose accounts have one curve.
         - name: sinceMs
           in: query
           required: false
@@ -6727,11 +6736,12 @@ components:
       additionalProperties: false
       description: |
         Paper trading for this run: the same economics as a backtest's `baseConfig` (same fields,
-        defaults and limits), plus `output`. An empty object takes every default. Each quote
-        currency the run trades gets its own simulated account, opened with `initialFunding` in
-        that currency; accounts are never added together. As returned on a run, the block is
+        defaults and limits), plus `output` and `accounts`. An empty object takes every default.
+        By default each quote currency the run trades gets its own simulated account, opened with
+        `initialFunding` in that currency; with `accounts: instrument` each instrument gets one
+        instead. Accounts are never added together. As returned on a run, the block is
         normalised: `feeRate` is resolved into `buyFeeRate`/`sellFeeRate` and defaults are filled
-        in.
+        in; `accounts` is returned when the request gave it.
       properties:
         initialFunding:
           type: number
@@ -6739,7 +6749,10 @@ components:
           exclusiveMinimum: 0
           maximum: 1000000000
           default: 100
-          description: Starting capital of each account, in that account's own quote currency.
+          description: >-
+            Starting capital of each account, in that account's own quote currency. With `accounts:
+            instrument` it is the capital of EACH instrument's account: it is never the run's total
+            capital and accounts are never added together.
         feeRate:
           type: number
           format: double
@@ -6766,12 +6779,27 @@ components:
           format: double
           exclusiveMinimum: 0
           maximum: 100
-          description: Share of the account's free balance each entry locks, in percent. Omitted, the strategy's own setting applies, and without one 10%.
+          description: >-
+            Share of the account's free balance each entry locks, in percent. Omitted, the
+            strategy's own setting applies, and without one 10% (the whole free balance, as a
+            backtest, with `accounts: instrument`, where nothing is shared).
         output:
           type: string
           enum: [separate, mix]
           default: separate
           description: '`separate` keeps paper output out of the run''s signals (read it with `GET /live/{runId}/paper`); `mix` also interleaves it into the run''s signals as `type: paper`, right after the signal that caused it.'
+        accounts:
+          type: string
+          enum: [currency, instrument]
+          default: currency
+          description: >-
+            How the run's accounts are split, fixed when it starts. `currency` (the default) is one
+            shared account per quote currency: every instrument of a currency draws on the same
+            balance, as on a venue with one wallet per asset. `instrument` is one isolated account
+            per instrument, each a simulation of that instrument alone with its own
+            `initialFunding`, which is what makes it comparable with a backtest of the instrument
+            but less realistic, since a venue has one wallet per asset and not one per pair. It
+            needs the instruments of the run named: a wildcard is refused, on every plan.
     UpdateLiveRequest:
       type: object
       properties:
@@ -7142,11 +7170,22 @@ components:
     LivePaperAccount:
       type: object
       required: [currency, initialFunding, equity, realisedPnl, trades, gaps, openPositions]
-      description: One simulated account — one per quote currency the run trades.
+      description: >-
+        One simulated account: one per quote currency the run trades, or one per instrument when
+        the run was started with `accounts: instrument`.
       properties:
         currency:
           type: string
           description: The account's quote currency; every amount below is in it.
+        instrument:
+          type: string
+          example: BTC/USDT
+          description: >-
+            With `accounts: instrument`, the instrument the account is: `currency` is then its quote
+            and several accounts can share it. Absent for the shared account of a currency. Such an
+            account has no `instruments`, since it already is one instrument: its `unrealisedPnl`
+            and `totalPnl` are that instrument's own. Its `initialFunding` is its own: never add it
+            to another account's.
         initialFunding:
           type: number
           format: double
@@ -7193,8 +7232,9 @@ components:
         instruments:
           type: array
           description: >-
-            What the account realised per instrument: one entry for every instrument that has
-            closed a trade or holds a position now, in instrument order. Exact for what was
+            Only for the shared account of a currency. What the account realised per instrument:
+            one entry for every instrument that has closed a trade or holds a position now, in
+            instrument order. Exact for what was
             realised, and not how the instrument would have done on its own, since its entries
             depended on what the others had locked from the same account. The instruments'
             `realisedPnl` add up to the account's.
@@ -7364,7 +7404,8 @@ components:
               example: BTC/USDT
               description: >-
                 Present when the curve is one instrument's (`measure` is `realisedPnl` or
-                `totalPnl`).
+                `totalPnl`) and, in a run started with `accounts: instrument`, when it is the
+                curve of the account that instrument is (`measure` is `equity`).
             measure:
               type: string
               enum: [equity, realisedPnl, totalPnl]

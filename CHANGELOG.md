@@ -7,6 +7,25 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.45] — 2026-10-22
+
+### Added
+
+- The `paper` block of `POST /strategy/{strategyId}/live` takes `accounts`: `currency` (the default, one shared account
+  per quote currency, as every run has had) or `instrument`, one isolated account per instrument, each a simulation of
+  that instrument alone with its own `initialFunding`, comparable with a backtest of it. The split is fixed at start and
+  returned with the block when given. With `instrument` the instruments must be named: a wildcard (`*`, or a pair with
+  a `*` on one side) is a `400` on every plan, and without `percentAmountToLock` an entry locks the whole free balance,
+  as a backtest does (the shared account keeps its 10% default). Schema `LivePaperConfig`.
+- `GET /live/{runId}/paper`: with `accounts: instrument`, each account carries `instrument`, the instrument it is
+  (`currency` is its quote and several accounts can share it), and has no `instruments`; the `unrealisedPnl` and
+  `totalPnl` every account carries (0.128.44) are then that instrument's own. `initialFunding` is per account and is
+  never the run's total: the guide says accounts are never added together. Schema `LivePaperAccount`.
+- `GET /live/{runId}/paper/equity`: with `accounts: instrument`, `instrument` selects the account that instrument is and
+  the answer is that account's own curve (`measure: equity`, with its `gaps`, and the `instrument` beside the
+  `currency`); `measure` is a `400` there, and with several accounts one has to be named.
+- `docs/live_paper.md` has a section "One account per instrument", examples of both routes, and the new refusals.
+
 ## [0.128.44] — 2026-10-22
 
 ### Added
