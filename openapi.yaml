@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.41
+  version: 0.128.42
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -1131,7 +1131,9 @@ paths:
         endpoints) — send `datasetId` in place of `instrument`. See `PrepareRequest` below for the
         two request shapes. A `ticker` prepare takes any dataset; a `kline` prepare takes a dataset
         whose `type` is `klines` (its rows are the bars, at its own cadence or a coarser exact
-        multiple of it) and is `400` over any other, naming the dataset's type.
+        multiple of it) and is `400` over any other, naming the dataset's type. The `type` that
+        counts is the one of the version the prepare reads (the current one, or the one
+        `datasetVersionId` pins), and it is read from the data: a file of candles is `klines`.
       parameters:
         - name: exchangeId
           in: path
@@ -5907,12 +5909,20 @@ components:
           type: string
           enum: [ticker, klines]
           description: |
-            `ticker` for an upload, a `dex` import with no `cadence` requested (native per-trade
-            data) or a `cex` import with `dataType: ticker`. `klines` for a `dex` import that
-            requested a candle `cadence` — pre-aggregated bars rather than raw ticks — or a `cex`
-            import with `dataType: klines`. Purely informational; both shapes are read the same
-            way.
-          example: "ticker"
+            What the rows of the current version are, decided when the version became `ready`. An
+            import that knows what it fetched says so: a `cex` import is its `dataType`, a `dex`
+            import of candles is `klines`. Everything else (an upload, a `dex` import of on-chain
+            swaps) is read from the data: `ticker` when any row carries an order book (`bid`,
+            `bidSize`, `ask`, `askSize`), or when there is only a price, or only some of
+            `open`/`high`/`low`/`close`; `klines` when there is no book and `open`, `high`, `low`
+            and `close` are on every row (candles). A file with no book whose `high` and `low`
+            hardly ever change, or whose opens do not follow the closes before them (the
+            exchange's 24-hour figures), stays `ticker`. A `kline` backtest needs `klines`; a
+            `ticker` one takes either. Before the first version is
+            `ready` it is only the label of the way the dataset was created (`ticker` for an
+            upload, `klines` for an import that asked for candles). Datasets stored before this
+            rule keep the `type` they had.
+          example: "klines"
         instrument:
           $ref: '#/components/schemas/Instrument'
         createdAt:
@@ -6092,7 +6102,10 @@ components:
             type:
               type: string
               enum: [ticker]
-              description: Always `ticker` in v1.
+              description: |
+                The label of a dataset that has no data yet, always `ticker` for an upload. The
+                dataset's `type` is read from the data once the upload has been ingested (see
+                `Dataset.type`): a file of candles is `klines` then.
               example: "ticker"
             instrument:
               $ref: '#/components/schemas/Instrument'

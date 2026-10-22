@@ -16,8 +16,10 @@ Backtest against a CSV, parquet, or lastra file you upload instead of a managed 
 | `POST` | `/datasets/imports` | Create a dataset by fetching history instead of uploading it |
 | `GET` | `/datasets/{datasetId}/imports/{importId}` | Poll fetch/ingest state |
 
-v1 is ticker data only — `type` is always `"ticker"`. `instrument` must be a plain spot pair
-(`BASE/QUOTE`, exactly one `/`); derivative forms (`BTC/USDT:USDT`) are rejected.
+A dataset holds one instrument, and its `type` — `ticker` or `klines` — says what its rows are: it
+is read from the data when an upload or an import has been ingested, see [What `type`
+is](#what-type-is). `instrument` must be a plain spot pair (`BASE/QUOTE`, exactly one `/`);
+derivative forms (`BTC/USDT:USDT`) are rejected.
 
 ## Creating a dataset
 
@@ -55,6 +57,10 @@ relevant lifecycle stages.
 
 `uploadId` is what you pass to [finalize](#finalizing-an-upload-triggering-ingest); `upload.url`
 is the presigned target — `PUT` the raw file there directly, no `Authorization` header.
+
+The `"type": "ticker"` of this response is provisional: the dataset has no data yet. Once the
+upload has been ingested its `type` is what the file holds ([What `type` is](#what-type-is)), so a
+file of candles is `klines` when you read it back.
 
 Lost this response? Nothing lost — call [`POST .../uploads`](#opening-a-new-upload-session) on
 this dataset's id and you get the very same upload session back, as long as you haven't finalized
@@ -238,7 +244,8 @@ A `dex` import has two data shapes, chosen by the top-level `cadence`:
 * Omitted/blank (default) — on-chain swap history, replayed directly from the pool/pair's own
   chain, each swap at its own timestamp (native per-trade cadence).
 * `1s` \| `1m` \| `5m` — pre-aggregated candles at that width instead of raw trades. The resulting
-  dataset's `type` is `klines`, not `ticker`.
+  dataset's `type` is `klines`, not `ticker` ([What `type` is](#what-type-is): candles carry no
+  book). Swaps replayed as bars of a width, with no book either, come out as `klines` too.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -329,7 +336,7 @@ block that says what to import changes:
 |---|---|---|
 | `cex.exchange` | string | required, the `id` of a centralized exchange (`venueType` `cex`) of `GET /exchanges`, lower-case. A decentralized exchange's id is `400`: use `type: dex` |
 | `cex.segment` | string | required, one of the exchange's `segments`. `spot` is the only segment a `cex` import takes today, which matches `instrument` being a plain spot pair |
-| `cex.dataType` | string | required, `"ticker"` \| `"klines"`. It is also the resulting dataset's `type` |
+| `cex.dataType` | string | required, `"ticker"` \| `"klines"`. What is fetched, and so the resulting dataset's `type` ([What `type` is](#what-type-is): the tickers carry the book, the klines do not) |
 
 `cadence` is optional, and takes the same labels as the cadence of a backtest preparation, for
 tickers and for klines alike: `1s`, `5s`, `1m`, `3m`, `5m`, `15m`, `30m`, `1h`, `2h`, `4h`, `8h`,
@@ -402,6 +409,41 @@ curl https://api.qtsurfer.net/v1/datasets/$DATASET_ID/imports/$IMPORT_ID \
 
 Errors: `404` no such dataset for this user, or genuinely nothing known about this `importId`.
 
+## What `type` is
+
+A dataset's `type` says what its rows are. It is decided when a version becomes `ready`, and it is
+the `type` of the **current** version. An import that already knows what it fetched says so, and
+nothing is guessed: a `cex` import is its `dataType`, and a `dex` import that asked for candles is
+`klines`. Everything else (a CSV, Lastra or Parquet upload, a `dex` import of on-chain swaps) is
+read from the rows:
+
+| The rows | `type` |
+|---|---|
+| carry an order book (`bid`, `bidSize`, `ask` or `askSize`) on any row | `ticker` |
+| have no book, and `open`, `high`, `low` and `close` on every row | `klines` |
+| anything else: only a `close` (a file of `timestamp,close` is a price), or only some of the four OHLC columns, or only some rows | `ticker` |
+
+Two more checks keep a ticker from passing for candles. In a ticker the open, high, low and volume
+are the exchange's rolling 24-hour figures, not those of an interval. A file with no book stays
+`ticker` if either holds:
+
+* **The high and low hardly ever change.** At least 100 rows in which they change between fewer
+  than 1 in 200 consecutive rows. A file where every row has the same price (`high` equal to `low`,
+  an instrument nobody traded) is still candles. This check cannot tell 24-hour figures from bars
+  at a coarse cadence (an hour or more).
+* **The opens do not follow the closes.** A bar opens where the previous one closed (within 0.01 %
+  of it); the open of a 24-hour window does not. At least 20 rows of which fewer than 1 in 20 open
+  at the close before them.
+
+Only the rows of an upload and of a `dex` import of swaps go through these checks. They decide
+nothing for an import that declares its `type`.
+
+Until the first version is `ready` the `type` is only the label of the way the dataset was created
+(`ticker` for an upload, `klines` for an import that asked for candles). A later upload of another
+kind of data changes the dataset's `type`; each version keeps its own, and a backtest that pins
+`datasetVersionId` is judged by that version's. Datasets stored before this rule keep the `type`
+they had.
+
 ## Dataset shape
 
 Both [`GET /datasets`](#listing-your-datasets) and [`GET
@@ -412,7 +454,7 @@ don't need a second call to see what a dataset covers.
 
 | Field | Notes |
 |---|---|
-| `datasetId`, `name`, `type` (`"ticker"` \| `"klines"`), `instrument`, `createdAt`, `status` | always present. `type` is `"klines"` for a `dex` import that requested a candle `cadence` and for a `cex` import with `dataType: "klines"`; `"ticker"` for everything else (uploads, native-cadence `dex` imports, and `cex` imports with `dataType: "ticker"`) |
+| `datasetId`, `name`, `type` (`"ticker"` \| `"klines"`), `instrument`, `createdAt`, `status` | always present. `type` says what the rows of the current version are, decided when the version became `ready` ([What `type` is](#what-type-is)): `"klines"` for candles (an upload with `open`, `high`, `low` and `close` on every row and no book; a `dex` import that requested a candle `cadence`; a `cex` import with `dataType: "klines"`), `"ticker"` for a book or a bare price. Before the first version is `ready` it is only the label of the way the dataset was created |
 | `currentVersionId` | the most recently finalized, successfully ingested version. **Absent until at least one upload has finished ingesting** |
 | `status` | `ready` — `currentVersionId` is set and the fields below describe it; `failed` — the most recent upload or import attempt failed, there is nothing to read yet (see `error`); `pending` — nothing has ever been attempted (just created, or an upload was never finalized) |
 | `updatedAt` | when `currentVersionId` last changed; absent until it has a value |
@@ -497,11 +539,20 @@ By default each row is one bar, at the dataset's own `cadence`. A coarser `caden
 multiple of it aggregates the rows into wider bars, and a bar the range covers only partly is
 dropped rather than emitted short. `execute`, `executeSweep` and walk-forward all take it.
 
+The bar a row belongs to is its timestamp floored to the dataset's cadence, so a file stamped at the
+open of each bar and one stamped at its close (the last millisecond of the bar) give the same bars.
+A timestamp that sits off the grid of the cadence (a one-minute file stamped at :20 of each minute)
+is floored onto it, and the first bar, which then opens before your `from`, is dropped like any bar
+the range covers only partly.
+
 A `kline` prepare over a dataset that is not `klines` is refused with a `400` that names the
 dataset's type, before anything is queued, and says to prepare it as ticker data instead. A
 `ticker` run over a `klines` dataset is accepted: each bar is read as one sample, with no order
 book.
 
-The `type` is what this table reads. A file you upload is `type: ticker`, so it runs as ticker
-data; a dataset of candles comes from an [import](#importing-a-dataset-instead-of-uploading-one) of
-an exchange's candles (or a `dex` import that asks for a candle `cadence`).
+The `type` this table reads is the one of the version the run will read: the current version, or
+the one a `datasetVersionId` pins ([What `type` is](#what-type-is)). A file you upload is therefore
+`klines` once ingested if it holds candles (`open`, `high`, `low` and `close` on every row, each
+open at the close before it, no book), and runs as bars; a file with a book, or only a price, is `ticker`. A dataset of candles also
+comes from an [import](#importing-a-dataset-instead-of-uploading-one) of an exchange's candles (or a
+`dex` import that asks for a candle `cadence`).

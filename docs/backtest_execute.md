@@ -64,10 +64,12 @@ curl -X POST https://api.qtsurfer.net/v1/backtest/binance/kline/execute \
 ### Kline over your own data
 
 With `exchangeId: user`, a `kline` run reads the bars of a dataset whose `type` is `klines`: its rows
-are the bars, at the dataset's own cadence unless you prepare at a coarser exact multiple of it. A
-dataset of `type` `ticker` has no bars to give, so its `kline` prepare is `400`, naming the
-dataset's type; the same dataset prepared as `ticker` runs as always. See [which datasets run under
-which `{type}`](datasets.md#which-datasets-run-under-which-type).
+are the bars, at the dataset's own cadence unless you prepare at a coarser exact multiple of it. That
+includes a file you uploaded, if it holds candles (`open`, `high`, `low` and `close` on every row and
+no order book): its `type` is read from the data when it has been ingested, see [What `type`
+is](datasets.md#what-type-is). A dataset of `type` `ticker` has no bars to give, so its `kline`
+prepare is `400`, naming the dataset's type; the same dataset prepared as `ticker` runs as always.
+See [which datasets run under which `{type}`](datasets.md#which-datasets-run-under-which-type).
 
 ## Preparing data
 

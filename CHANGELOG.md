@@ -7,6 +7,32 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.42] — 2026-10-21
+
+### Changed
+
+- The `type` of a dataset follows its data. It was only the label of the way the dataset was created
+  (an upload was always `ticker`); it is now read from the rows when a version becomes `ready`, and
+  it is the `type` of the current version. Any row with an order book (`bid`, `bidSize`, `ask`,
+  `askSize`) makes a `ticker`; no book and `open`, `high`, `low` and `close` on every row make
+  `klines`; anything else (only a `close`, only some of the OHLC columns, or only some rows) is a
+  `ticker`. A file with no book whose high and low hardly ever change, or whose opens do not follow
+  the closes before them (the exchange's 24-hour figures), stays `ticker`.
+- An import does not guess: a `cex` import has the `type` of its `dataType`, and a `dex` import that
+  asked for candles is `klines`. Only uploads and `dex` imports of on-chain swaps are read from the
+  rows.
+- A file of candles you upload is therefore `klines` once ingested, and a `kline` backtest runs over
+  it. Before, every upload was `ticker` and a `kline` prepare over it was `400`.
+- A `kline` prepare judges the `type` of the version it reads: the current one, or the one
+  `datasetVersionId` pins.
+- Before the first version is `ready` the `type` is only the label of the way the dataset was
+  created, so `DatasetCreated.type` is still `ticker` for an upload. Datasets stored before this
+  rule keep the `type` they had.
+
+### Added
+
+- `docs/datasets.md`: "What `type` is".
+
 ## [0.128.41] — 2026-10-21
 
 ### Changed
