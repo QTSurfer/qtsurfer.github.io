@@ -7,6 +7,24 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.43] — 2026-10-22
+
+### Added
+
+- `GET /live/{runId}/paper`: each account carries `instruments`, what it realised per instrument. One entry for
+  every instrument that has closed a trade or holds a position now: `instrument`, `trades`, `wins`, `losses`,
+  `realisedPnl`, `contributionPct` (the realised PnL as a percent of the account's `initialFunding`, so the
+  contributions add up to the account's realised return), `openPosition` when it holds one, and `kpi` (the KPIs of its
+  closed trades alone, read against the account's `initialFunding`). It is exact for what was realised and it is not how
+  the instrument would have done on its own: the account is shared. The schema is `LivePaperInstrument`.
+- `GET /live/{runId}/paper/equity?instrument=BTC/USDT`: one instrument's cumulative realised PnL from 0, a point at
+  each of its closed trades, in the same curve shape and with the same options and paging. `currency` need not be
+  given (an instrument belongs to the account of its quote currency; another `currency` is a `400`); `gaps` is empty,
+  since a gap belongs to the account.
+- The answer of that route says what its values are in `measure`: `equity` for an account's curve (always present now)
+  and `realisedPnl` for an instrument's, with `instrument` beside it. The shape still names the values `equity`.
+- `docs/live_paper.md` has a section "Per instrument", and "The equity curve" a paragraph on an instrument's curve.
+
 ## [0.128.42] — 2026-10-21
 
 ### Changed

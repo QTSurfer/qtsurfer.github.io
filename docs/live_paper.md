@@ -137,6 +137,54 @@ The KPIs use the backtest's units: `winRate` and `cagr` are ratios (`0.15` = 15%
 `sortinoRatio` are per trade, not annualised, and `null` until there are enough trades to compute
 them.
 
+### Per instrument
+
+An account is shared by every instrument of its quote currency, so each account also says what it
+realised **per instrument**: `instruments`, one entry for every instrument that has closed a trade or
+holds a position now, in instrument order. For a run with BTC/USDT and ETH/USDT on one 1000 USDT
+account:
+
+```
+"instruments": [
+  {
+    "instrument": "BTC/USDT", "trades": 3, "wins": 2, "losses": 1,
+    "realisedPnl": 12.0, "contributionPct": 1.2,
+    "kpi": {
+      "totalTrades": 3, "winCount": 2, "lossCount": 1, "winRate": 0.6667,
+      "pnlTotal": 12.0, "pnlTotalPercent": 1.2,
+      "sharpeRatio": 0.6794, "sortinoRatio": 1.7321, "cagr": 0.012,
+      "maxDrawdown": 4.0, "maxDrawdownPercent": 0.396
+    }
+  },
+  {
+    "instrument": "ETH/USDT", "trades": 2, "wins": 0, "losses": 2,
+    "realisedPnl": -3.0, "contributionPct": -0.3,
+    "openPosition": {"base": 0.05948, "cost": 160.0},
+    "kpi": {
+      "totalTrades": 2, "winCount": 0, "lossCount": 2, "winRate": 0.0,
+      "pnlTotal": -3.0, "pnlTotalPercent": -0.3,
+      "sharpeRatio": -1.0, "sortinoRatio": -0.7071, "cagr": -0.003,
+      "maxDrawdown": 3.0, "maxDrawdownPercent": 0.3
+    }
+  }
+]
+```
+
+| field | meaning |
+|---|---|
+| `instrument` | The pair. |
+| `trades`, `wins`, `losses` | Its closed trades. A trade wins if its PnL is above zero, so a trade with a PnL of exactly zero is a loss. |
+| `realisedPnl` | Sum of the PnL of its closed trades, in the account's currency. The `realisedPnl` of the instruments add up to the account's. |
+| `contributionPct` | `realisedPnl` as a percent of the account's `initialFunding` (0–100 scale), so the contributions of the instruments add up to the account's realised return. |
+| `openPosition` | What it holds now (`base` in the base asset, `cost` in the account's currency); absent when it holds nothing. An instrument that holds a position but has not closed a trade yet is listed, without a `kpi`. |
+| `kpi` | The KPIs of that instrument's closed trades alone, with the account's `initialFunding` as the capital, so its `pnlTotalPercent` equals its `contributionPct`. Same units as the account's; absent until its first closed trade. |
+
+**What the breakdown is, and what it is not.** It is exact for what was realised. It is not how the
+instrument would have done on its own: its entries depended on what the others had already locked from
+the same account (with `percentAmountToLock: 20`, a second entry locks 20 % of what the first left
+free), so a different mix of instruments would have sized it differently. It answers which instrument
+adds to the account and which one takes away.
+
 ## The equity curve
 
 `GET /v1/live/{runId}/paper/equity` returns an account's whole curve, oldest first, in the same shape
@@ -176,6 +224,7 @@ GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity
 200
 {
   "currency": "USDT",
+  "measure": "equity",
   "points": [
     {"timestamp": 1758330060000, "equity": 999.62},
     {"timestamp": 1758330078000, "equity": 999.59},
@@ -197,6 +246,7 @@ GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?outMode=SHORT&differential=true
 200
 {
   "currency": "USDT",
+  "measure": "equity",
   "timestamps": [1758330060000, 18000, 42000, 31000, 89000],
   "equities": [999.62, -0.03, 0.85, -0.13, -0.12],
   "gaps": [],
@@ -221,6 +271,7 @@ GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?limit=3
 200
 {
   "currency": "USDT",
+  "measure": "equity",
   "points": [
     {"timestamp": 1758330060000, "equity": 999.62},
     {"timestamp": 1758330078000, "equity": 999.59},
@@ -238,6 +289,7 @@ Follow `_links.next` as given (the cursor is opaque); a page without `_links` is
 200
 {
   "currency": "USDT",
+  "measure": "equity",
   "points": [
     {"timestamp": 1758330151000, "equity": 1000.31},
     {"timestamp": 1758330240000, "equity": 1000.19}
@@ -265,12 +317,44 @@ GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?currency=BTC
 200
 {
   "currency": "BTC",
+  "measure": "equity",
   "points": [
     {"timestamp": 1758330060000, "equity": 999.9981},
     {"timestamp": 1758330097000, "equity": 1000.0012}
   ],
   "gaps": [],
   "meta": {"inputPointCount": 2, "outputPointCount": 2, "resampled": false, "differential": false, "outMode": "ARRAY"}
+}
+```
+
+**One instrument's curve.** For the breakdown above (see [Per instrument](#per-instrument)),
+`?instrument=BTC/USDT` answers that instrument's **cumulative realised PnL**, from 0: a point at each
+of its closed trades. It is the same curve shape, with the same options and paging, and the answer
+says what its values are in `measure`: `equity` on an account's curve, `realisedPnl` on an
+instrument's (the shape names its values `equity` either way). An instrument belongs to the account
+of its quote currency, so `currency` need not be given, and a different one is a `400`. The last
+values of the curves of all the instruments of an account add up to the account's `realisedPnl`. In
+between they follow the realised part of the account's own curve only up to the order the trades were
+processed in: the account's curve is recorded in that order and this one is served by event time, and
+two instruments that close almost together can be stamped slightly out of it, so at those points the
+two differ by one trade. The account's gaps are not attributed to an instrument, so `gaps` is empty
+here.
+
+```
+GET /v1/live/6TzAPiPpsOWwBLdLBZCxwH/paper/equity?instrument=BTC/USDT
+
+200
+{
+  "currency": "USDT",
+  "instrument": "BTC/USDT",
+  "measure": "realisedPnl",
+  "points": [
+    {"timestamp": 1758330078000, "equity": 10.0},
+    {"timestamp": 1758330190000, "equity": 6.0},
+    {"timestamp": 1758330310000, "equity": 12.0}
+  ],
+  "gaps": [],
+  "meta": {"inputPointCount": 3, "outputPointCount": 3, "resampled": false, "differential": false, "outMode": "ARRAY"}
 }
 ```
 

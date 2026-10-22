@@ -236,6 +236,10 @@ guard. What differs is that the curve is live and what rides beside it:
   summed; it may be left out only when the run has a single account). `gaps` lists, as epoch
   milliseconds, the moments open positions were lost because the run was restarted with them open. A
   gap is not a point of the curve and `meta` does not count it.
+- **An instrument's own curve.** `?instrument=BTC/USDT` answers that instrument's cumulative realised
+  PnL from 0, a point at each of its closed trades, in this same shape and with the same options. `measure`
+  says what the values are: `equity` for an account's curve, `realisedPnl` for an instrument's. See
+  [Per instrument](live_paper.md#per-instrument).
 - **`sinceMs` starts from a market time, inclusive,** so a client that already holds the curve reads
   only what is new. A curve too long to be read in one request answers `400`: narrow it with
   `sinceMs`, or page it.
@@ -252,6 +256,7 @@ curl "https://api.qtsurfer.net/v1/live/$RUN_ID/paper/equity?currency=USDT&outMod
 ```json
 {
   "currency": "USDT",
+  "measure": "equity",
   "timestamps": [1758330060000, 18000, 42000],
   "equities": [999.62, -0.03, 0.85],
   "gaps": [],

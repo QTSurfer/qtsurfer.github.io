@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.42
+  version: 0.128.43
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -3535,6 +3535,12 @@ paths:
         mark`, taken every minute of market time). Until either exists the account holds its
         starting capital.
 
+        An account is shared by every instrument of its quote currency, so each account also says
+        what it realised per instrument, in `instruments`: the trades, the realised PnL, its
+        contribution as a percent of the account's starting capital, the position it holds and its
+        KPIs. It is exact for what was realised, and it is not how the instrument would have done
+        on its own: its entries depended on what the others had locked from the same account.
+
         Readable by the run's owner, and by anyone if the run is `public` and has reached the `live`
         stage. A run started without a `paper` block answers `404`.
       parameters:
@@ -3578,6 +3584,34 @@ paths:
                       cagr: -0.41
                       maxDrawdown: 3.4
                       maxDrawdownPercent: 0.34
+                    instruments:
+                      - instrument: BTC/USDT
+                        trades: 9
+                        wins: 5
+                        losses: 4
+                        realisedPnl: 1.9
+                        contributionPct: 0.19
+                        openPosition:
+                          base: 0.0023
+                          cost: 194.2
+                        kpi:
+                          totalTrades: 9
+                          winCount: 5
+                          lossCount: 4
+                          winRate: 0.5556
+                          pnlTotal: 1.9
+                          pnlTotalPercent: 0.19
+                          sharpeRatio: 0.12
+                          sortinoRatio: 0.2
+                          cagr: 0.43
+                          maxDrawdown: 1.6
+                          maxDrawdownPercent: 0.16
+                      - instrument: ETH/USDT
+                        trades: 5
+                        wins: 1
+                        losses: 4
+                        realisedPnl: -4
+                        contributionPct: -0.4
         '403':
           $ref: '#/components/responses/InsufficientScope'
         '404':
@@ -3623,6 +3657,18 @@ paths:
         entries (a gap counts as one), and `resample` cannot be combined with it. The cursor is
         opaque: follow `_links.next.href` as given.
 
+        With `instrument` the answer is that instrument's cumulative realised PnL, from 0, in the
+        same shape, with the same options and paging: a point at each of its closed trades. The
+        instrument belongs to the account of its quote currency, so `currency` need not be given.
+        `measure` says what the values are: `equity` for an account's curve, `realisedPnl` for an
+        instrument's (the shape calls them `equity` either way). The last values of the curves of
+        the instruments of an account add up to the account's `realisedPnl`. In between they
+        follow the realised part of the account's own curve only up to the order the trades were
+        processed in: that curve is recorded in that order and this one is served by event time,
+        and two instruments that close almost together can be stamped slightly out of it, so at
+        those points the two differ by one trade. The gaps of an account are not attributed to an
+        instrument, so `gaps` is empty.
+
         Readable by the run's owner, and by anyone if the run is `public` and has reached the `live`
         stage.
       parameters:
@@ -3638,7 +3684,17 @@ paths:
             type: string
           description: >-
             One account's quote currency, e.g. `USDT`. May be left out when the run has a single
-            account, or none yet.
+            account, or none yet, or when `instrument` is given.
+        - name: instrument
+          in: query
+          required: false
+          schema:
+            type: string
+            example: BTC/USDT
+          description: >-
+            One instrument of the account, as `BASE/QUOTE`: answers its cumulative realised PnL
+            instead of the account's equity. Its account is its quote currency; a `currency` that
+            is another one is a `400`.
         - name: sinceMs
           in: query
           required: false
@@ -3703,6 +3759,7 @@ paths:
                 $ref: '#/components/schemas/LivePaperEquityCurve'
               example:
                 currency: USDT
+                measure: equity
                 points:
                   - timestamp: 1758330060000
                     equity: 999.62
@@ -3720,8 +3777,9 @@ paths:
         '400':
           description: >-
             `sinceMs`, `limit` or `cursor` is malformed, `resample` is combined with `limit` or
-            `cursor`, the run has several accounts and `currency` is missing, or the curve is too
-            long to be read in one request (narrow it with `sinceMs`, or page it).
+            `cursor`, the run has several accounts and `currency` is missing, `instrument` is not
+            `BASE/QUOTE` or `currency` is another account than the instrument's, or the curve is
+            too long to be read in one request (narrow it with `sinceMs`, or page it).
           content:
             application/json:
               schema:
@@ -7084,6 +7142,66 @@ components:
             $ref: '#/components/schemas/LivePaperPosition'
         kpi:
           $ref: '#/components/schemas/LivePaperKpi'
+        instruments:
+          type: array
+          description: >-
+            What the account realised per instrument: one entry for every instrument that has
+            closed a trade or holds a position now, in instrument order. Exact for what was
+            realised, and not how the instrument would have done on its own, since its entries
+            depended on what the others had locked from the same account. The instruments'
+            `realisedPnl` add up to the account's.
+          items:
+            $ref: '#/components/schemas/LivePaperInstrument'
+    LivePaperInstrument:
+      type: object
+      required: [instrument, trades, wins, losses, realisedPnl]
+      description: One instrument's part of a shared paper account.
+      properties:
+        instrument:
+          type: string
+          example: BTC/USDT
+        trades:
+          type: integer
+          format: int64
+          description: Its closed trades.
+        wins:
+          type: integer
+          format: int64
+          description: Closed trades with a PnL above zero.
+        losses:
+          type: integer
+          format: int64
+          description: The other closed trades; a trade with a PnL of exactly zero is a loss.
+        realisedPnl:
+          type: number
+          format: double
+          description: Sum of the PnL of its closed trades, in the account's currency.
+        contributionPct:
+          type: number
+          format: double
+          description: >-
+            `realisedPnl` as a percent of the account's `initialFunding` (0-100 scale), so the
+            contributions of the instruments add up to the account's realised return.
+        openPosition:
+          type: object
+          description: What it holds now. Absent when it holds nothing.
+          required: [base, cost]
+          properties:
+            base:
+              type: number
+              format: double
+              description: Amount held, in the base asset.
+            cost:
+              type: number
+              format: double
+              description: What it cost, in the account's currency.
+        kpi:
+          allOf:
+            - $ref: '#/components/schemas/LivePaperKpi'
+          description: >-
+            The KPIs of this instrument's closed trades alone, with the account's `initialFunding`
+            as the capital (so `pnlTotalPercent` equals `contributionPct`). Absent until its first
+            closed trade.
     LivePaperPosition:
       type: object
       required: [instrument, base, cost]
@@ -7148,13 +7266,23 @@ components:
       allOf:
         - $ref: '#/components/schemas/EquityCurveResult'
         - type: object
-          required: [gaps]
+          required: [gaps, measure]
           properties:
             currency:
               type: string
               description: >-
                 The account's quote currency. Absent only when the run has no account yet, which
                 gives an empty curve.
+            instrument:
+              type: string
+              example: BTC/USDT
+              description: Present when the curve is one instrument's (`measure` is `realisedPnl`).
+            measure:
+              type: string
+              enum: [equity, realisedPnl]
+              description: >-
+                What the values of the curve are: the account's `equity`, or an instrument's
+                cumulative `realisedPnl` from 0. The shape names its values `equity` either way.
             gaps:
               type: array
               description: >-
