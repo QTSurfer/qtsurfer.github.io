@@ -7,6 +7,12 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+### Changed
+
+- Guides only, no change to the API. The live guide says which SDKs manage the WebSocket connection: Java and TypeScript do, Python
+  does not and reads a live run's signals through a stream URL. The backtest guide says a backtest runs over one instrument, the
+  prepared one: the strategy is fed that instrument's ticks only, so one that trades another instrument ends `Completed` with no trades.
+
 ## [0.128.47] — 2026-10-23
 
 ### Added

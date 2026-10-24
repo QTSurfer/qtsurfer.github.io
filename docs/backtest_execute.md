@@ -172,6 +172,14 @@ params)` → same `jobId` (idempotent) — a request that omits `equityCurve`, `
 dedupes exactly as it did before those fields existed. Two different `params` vectors over one
 prepare are two different jobs, and `9` and `9.0` are the same one.
 
+**A backtest runs over one instrument**: the one the prepare named, or the dataset's own. The strategy
+is fed that instrument's ticks and no other: `getInstruments()` lists only it, so another instrument
+the strategy accepts never ticks and has no indicators. A strategy that trades only some other
+instrument still ends `Completed`, not as an error, with no trades and no metrics. A strategy whose
+logic spans several instruments, reading the others' indicators or a triangular arbitrage with a leg
+on each pair, cannot be backtested the way it runs live. A live run is different: its source takes
+several instruments.
+
 Optionally takes `params`: strategy properties for this one run, applied without recompiling.
 Use this to re-run a sweep row as an ordinary backtest result with a chosen parameter vector — for
 example, when you need the plain-backtest result alongside a sweep curve (see

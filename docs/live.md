@@ -488,9 +488,11 @@ machine-readable contract is [`asyncapi.yaml`](../asyncapi.yaml), next to the Op
 URL, every frame, the channel names, the `live.params` call and the error codes, with the signal
 payload shared with the REST schema `LiveSignal`.
 
-The QTSurfer SDKs already wrap this connection — see
-[Clients and SDKs](https://www.qtsurfer.com/docs/developers/clients-and-sdks) — so you may not need
-to speak the protocol directly at all. Going direct, the easiest client is an official Centrifugo
+The Java and TypeScript SDKs already wrap this connection (`connectLive`) — see
+[Clients and SDKs](https://www.qtsurfer.com/docs/developers/clients-and-sdks) — so with one of them
+you may not need to speak the protocol directly at all. The Python SDK does not: it covers the REST
+side of a live run, retained signals included, and a Python program receives signals as they happen
+through a [stream URL](#a-plain-websocket-stream-of-a-run). Going direct, the easiest client is an official Centrifugo
 library — [`centrifuge`](https://github.com/centrifugal/centrifuge-js) (JavaScript/TypeScript),
 [`centrifuge-java`](https://github.com/centrifugal/centrifuge-java),
 [`centrifuge-python`](https://github.com/centrifugal/centrifuge-python) and
