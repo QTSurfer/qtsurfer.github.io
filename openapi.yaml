@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: QTSurfer API
   summary: QTSurfer backend services API
-  version: 0.128.46
+  version: 0.128.47
   contact:
     name: QTSurfer Support
     email: support@qtsurfer.com
@@ -2737,6 +2737,12 @@ paths:
         complete. The value in effect, yours or the platform's, comes back as `warmFrom`. It can be set only here,
         when the run is started. See the "Live execution" guide, "Warming up".
 
+        **How long the sandbox lasts.** A new run is tried in the sandbox for at least as long as the shortest trial your plan
+        gives, and for no more than 24 hours. Pass `sandboxMinutes` (an integer from 5 to 1440) to ask for a longer one; asking
+        for less than your plan gives is `429`. Omitted, the run gets your plan's shortest trial. The value in effect comes back
+        as `sandboxMinutes`. It can be set only here, when the run is started. See the "Live execution" guide, "How long the
+        sandbox lasts".
+
         **A plain WebSocket stream.** Pass `stream: true` to get a secret URL for this run's signals that a simple
         client, or a service that passes them on to others, can open as an ordinary WebSocket, from the sandbox stage
         on. The URL is in the response (`streamUrl`) and in `GET /strategy/{strategyId}/live`; treat it like a
@@ -2792,7 +2798,7 @@ paths:
                 relay: false
                 startedAtMs: 1758330000000
         '400':
-          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `venueType`, `exchange` and `segment` that `GET /exchanges` does not list together, or a segment with no live data (the message names what it lists), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events. A `relay` or `stream` that is not `true` or `false`, or a `stream` where streams are not available yet. A `warmFrom` that is not an integer from 0 to 3600. An `instruments` that is empty or `null`.
+          description: Malformed `sources` (not exactly one entry, missing field, unsupported `type`), a `venueType`, `exchange` and `segment` that `GET /exchanges` does not list together, or a segment with no live data (the message names what it lists), a `type` the strategy cannot consume (a ticker strategy with a `kline` source, or the reverse; the message names both), an invalid `visibility`, an invalid `paper` block (an unknown field, a wrong type or an out-of-range value), or no `paper` block for a strategy that listens to its own execution events. A `relay` or `stream` that is not `true` or `false`, or a `stream` where streams are not available yet. A `warmFrom` that is not an integer from 0 to 3600. A `sandboxMinutes` that is not an integer from 5 to 1440. An `instruments` that is empty or `null`.
           content:
             application/json:
               schema:
@@ -2817,7 +2823,7 @@ paths:
         '429':
           description: |
             One of two kinds. **Your plan** does not include live runs, would exceed your concurrent-run or
-            instrument-count limit, or does not let you ask for a `stream`: the message names your plan, and
+            instrument-count limit, does not let you ask for a `stream`, or asks for a `sandboxMinutes` shorter than the trial its plan gives: the message names your plan, and
             retrying will not help until something changes, so there is no `Retry-After`. Or **the platform is at
             capacity** right now: a `Retry-After` header says when to try again.
           headers:
@@ -6725,6 +6731,20 @@ components:
             It can be set **only when the run is started**: it is not a parameter of `PUT /live/{runId}/params`, and
             changing it means stopping the run and starting it again. Anything that is not an integer from 0 to 3600
             is `400`. See the "Live execution" guide, "Warming up".
+        sandboxMinutes:
+          type: integer
+          minimum: 5
+          maximum: 1440
+          description: |
+            How long, in minutes, the run is tried in the `sandbox` stage before it can be promoted to `live`. Every plan has a
+            shortest trial; asking for less than your plan gives is `429`, and the longest is 1440 (24 hours). Omitted, the run
+            gets your plan's shortest. The trial is also not over until the platform has fed the run enough of the market
+            feed to judge it, about one update for each second of the trial, so a run on a quiet instrument can stay in the
+            sandbox past this time, up to the 24 hours. The value in effect is reported back as `sandboxMinutes` on the run.
+            It can be set **only when the run is started**: changing it means stopping the run and starting it again.
+            Anything that is not an integer from 5 to 1440 (a string, a fraction, `null`) is `400`. A start that goes
+            straight to `live` because the strategy has already been through the trial has no sandbox and records none.
+            See the "Live execution" guide, "How long the sandbox lasts".
         name:
           type: string
         description:
@@ -6856,7 +6876,7 @@ components:
         stage:
           type: string
           enum: [SANDBOX, LIVE]
-          description: 'A new run starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up. A run of a strategy that an earlier run of yours already took through the trial starts `LIVE`, unless you started it with `sandbox: true`.'
+          description: 'A new run starts `SANDBOX`, a trial of `sandboxMinutes` minutes at least, and never more than 24 hours, in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the trial is over. A run of a strategy that an earlier run of yours already took through the trial starts `LIVE`, unless you started it with `sandbox: true`.'
         state:
           type: string
           description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused, could not start or failed while running; `reason` says why) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'
@@ -6900,7 +6920,7 @@ components:
         gate:
           type: object
           additionalProperties: true
-          description: 'The sandbox trial''s promotion verdict. Absent for the whole 24-hour trial and present once it ends, so an absent `gate` means the trial has not finished. A run that started in `LIVE` without a trial has it from the start: the verdict of the earlier run it relies on, with `inheritedFrom` naming that run. `passed` is the verdict; the rest is diagnostic detail whose shape is not yet stabilized as public API: treat it as opaque.'
+          description: 'The sandbox trial''s promotion verdict. Absent for the whole trial and present once it ends, so an absent `gate` means the trial has not finished. A run that started in `LIVE` without a trial has it from the start: the verdict of the earlier run it relies on, with `inheritedFrom` naming that run. `passed` is the verdict; the rest is diagnostic detail whose shape is not yet stabilized as public API: treat it as opaque.'
         paper:
           allOf:
             - $ref: '#/components/schemas/LivePaperConfig'
@@ -6957,6 +6977,15 @@ components:
         the one the platform chose (the distance from the run's start back to the start of the current 15-minute block,
         0 to 900). It is never `null`. It is present on every run started since the field exists and absent from a run
         started before it existed. It never changes while the run exists.
+    SandboxMinutes:
+      type: integer
+      minimum: 5
+      maximum: 1440
+      description: >-
+        The sandbox trial this run was given, in minutes: the one requested when the run was started or, when none was, the
+        shortest one its plan gives. It is a minimum: a run that has not yet been fed enough of the market feed to be judged
+        stays in the sandbox past it, up to 24 hours. It is never `null`. It is absent from a run that has none: one started
+        before the field existed, and one that started in `LIVE` without a trial. It never changes while the run exists.
     LiveRunDetail:
       description: A run as returned by `GET /live/{runId}`, the full state of `LiveRun` plus when it last changed.
       allOf:
@@ -6966,21 +6995,25 @@ components:
           properties:
             warmFrom:
               $ref: '#/components/schemas/WarmFrom'
+            sandboxMinutes:
+              $ref: '#/components/schemas/SandboxMinutes'
             updatedAtMs:
               type: integer
               format: int64
               description: Epoch milliseconds of the run's last change, from any cause. It only moves forward, so of two reads of the same run the one with the larger value is the newer.
     LiveRunWithStream:
       description: |
-        A run as `LiveRun` describes it, plus its `warmFrom` (absent only for a run started before the field existed) and its `streamUrl` when it has one. It is what **starting a run** and
+        A run as `LiveRun` describes it, plus its `warmFrom` (absent only for a run started before the field existed), its `sandboxMinutes` (absent from a run that has no trial) and its `streamUrl` when it has one. It is what **starting a run** and
         `GET /strategy/{strategyId}/live` return: your own run, read with your own credentials. Stopping a run
-        returns `LiveRun`, which carries neither `warmFrom` nor the URL, and `GET /live/{runId}` returns `LiveRunDetail`, which carries `warmFrom` and never the URL.
+        returns `LiveRun`, which carries none of `warmFrom`, `sandboxMinutes` or the URL, and `GET /live/{runId}` returns `LiveRunDetail`, which carries `warmFrom` and `sandboxMinutes` and never the URL.
       allOf:
         - $ref: '#/components/schemas/LiveRun'
         - type: object
           properties:
             warmFrom:
               $ref: '#/components/schemas/WarmFrom'
+            sandboxMinutes:
+              $ref: '#/components/schemas/SandboxMinutes'
             streamUrl:
               type: string
               format: uri
@@ -7052,7 +7085,7 @@ components:
         stage:
           type: string
           enum: [SANDBOX, LIVE]
-          description: 'A new run starts `SANDBOX`, a 24-hour trial in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the 24 hours are up. A run of a strategy that an earlier run of yours already took through the trial starts `LIVE`, unless you started it with `sandbox: true`.'
+          description: 'A new run starts `SANDBOX`, a trial of `sandboxMinutes` minutes at least, and never more than 24 hours, in which it is compared against a second execution and checked for resource use and stability. A run that passes moves to `LIVE` automatically when the trial is over. A run of a strategy that an earlier run of yours already took through the trial starts `LIVE`, unless you started it with `sandbox: true`.'
         state:
           type: string
           description: 'The run''s health right now: `STARTING` (no runner has reported on it yet), `RUNNING`, `LAGGING` (behind the market data, usually while catching up; clears by itself), `HUNG` (stuck inside one strategy call for longer than allowed; clears when it returns), `DEGRADED` (its independent executions produced different signals), `FAILED` (refused, could not start or failed while running; `reason` says why) or `STOPPED`. `LAGGING`, `HUNG` and `DEGRADED` come and go on a running run. The set may grow: read an unknown value as a running run with something to look at. See the Live execution guide.'

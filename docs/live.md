@@ -22,7 +22,8 @@ change its parameters without restarting it.
 ## Lifecycle: sandbox, then live
 
 Starting a run (`POST /strategy/{strategyId}/live`) never puts it in front of anyone but you. It
-begins in the `sandbox` stage, a trial of **24 hours**. During it the platform runs an independent
+begins in the `sandbox` stage, a trial whose length depends on your plan: every plan has a shortest one, and the longest any
+run has is **24 hours** ([How long the sandbox lasts](#how-long-the-sandbox-lasts-sandboxminutes)). During it the platform runs an independent
 second execution of your strategy beside the first and checks four things: that the run is
 processing market data, that its memory use and per-tick time stay within the platform's allowance,
 that it does not hang or fail repeatedly, and that the two executions produce the same signals.
@@ -31,7 +32,7 @@ Only you can read a sandbox run: over the WebSocket channel from its first signa
 [stream URL](#a-plain-websocket-stream-of-a-run) if you create one for it, which lets whoever you give it
 to read the run's signals from the sandbox on.
 
-A run that passes is promoted to `live` automatically when the 24 hours are up. There is no
+A run that passes is promoted to `live` automatically when its trial is over. There is no
 separate "promote" call and nothing for you to do while you wait. A run that does not pass is not
 promoted, and keeps running in the sandbox.
 
@@ -39,7 +40,7 @@ promoted, and keeps running in the sandbox.
 
 A strategy that has been through the trial once does not go through it again. When you stop a run
 that was promoted and start the strategy again, the new run begins in `live` at once, with no
-24-hour wait. That holds when an earlier run of yours of **the same compiled strategy** was
+wait. That holds when an earlier run of yours of **the same compiled strategy** was
 promoted, and none of that compilation's runs was stopped for using more resources than allowed.
 The parameters, sources and instruments of the new run may differ from the earlier one. If you submit
 the strategy again (`POST /strategy`) it is compiled anew, and the new compilation goes through the
@@ -332,6 +333,41 @@ replay from. Set it in the body of `POST /strategy/{strategyId}/live`, next to `
   `GET /strategy/{strategyId}/live` and `GET /live/{runId}`; the response to stopping a run does not carry it): the one you asked for or, if you left it out, the
   one the platform chose. Send that number to get the same amount of warm-up in another run. A run started
   before this field existed has no `warmFrom` at all; it is never `null`.
+
+## How long the sandbox lasts: `sandboxMinutes`
+
+Every run starts with a trial in the `sandbox` stage (see [Lifecycle](#lifecycle-sandbox-then-live)). How long it lasts depends on
+your plan: each plan has a **shortest trial**, anything from an hour to a full day, and the longest any run has is **24 hours**.
+A run that asks for nothing gets the shortest trial its plan gives.
+
+`sandboxMinutes` is how you ask for a longer one. Set it in the body of `POST /strategy/{strategyId}/live`, next to `sources`:
+
+```json
+{
+  "sources": [
+    {"venueType": "cex", "exchange": "binance", "segment": "spot", "type": "ticker", "instruments": ["BTC/USDT"]}
+  ],
+  "sandboxMinutes": 480
+}
+```
+
+| `sandboxMinutes` | What happens |
+|---|---|
+| omitted | The shortest trial your plan gives. |
+| from your plan's shortest to `1440` | The run is tried for at least that many minutes. |
+| less than your plan's shortest | `429`: the message names your plan and the number. Retrying with the same value will not help. |
+
+- It is an integer number of minutes from `5` to `1440`. Anything else (a string, a fraction, `null`, a number outside the range)
+  is refused with `400`.
+- It is a **minimum**, not the moment of the promotion. A trial is also not over until the platform has fed the run enough of the
+  market feed to judge it, about one update for each second of the trial. A run on a quiet instrument, with few updates, can stay
+  in the sandbox past `sandboxMinutes`, up to the 24 hours, and is judged then with what it has been given.
+- It can be set **only when the run is started**. It is not one of the parameters `PUT /live/{runId}/params` accepts: to change it,
+  stop the run and start it again.
+- The run reports the value in effect back as `sandboxMinutes` when you read it (the start response, `GET /strategy/{strategyId}/live`
+  and `GET /live/{runId}`; the response to stopping a run does not carry it). A run that has no trial has no `sandboxMinutes` at all
+  (never `null`): one started before this field existed, and one that [starts straight in `live`](#starting-again-does-not-repeat-the-trial)
+  because the strategy has already been through the trial. `"sandbox": true` asks for the trial, and then the same time applies.
 
 ## Listing your runs
 

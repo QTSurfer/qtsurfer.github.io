@@ -7,6 +7,25 @@ pre-1.0, its version follows the version in `openapi.yaml`.
 
 ## [Unreleased]
 
+## [0.128.47] — 2026-10-23
+
+### Added
+
+- `POST /strategy/{strategyId}/live` takes `sandboxMinutes`, an integer from 5 to 1440: how long, in minutes, the run is tried in the
+  `sandbox` stage before it can be promoted. Every plan has a shortest trial and the longest is 24 hours; omitted, the run gets its
+  plan's shortest; less than the plan gives is `429` (the message names the plan and the number), and anything that is not an integer
+  from 5 to 1440 is `400`. It is a minimum: a run that has not been fed enough of the market feed to be judged (about one update for
+  each second of the trial) stays in the sandbox past it, up to the 24 hours. Set only at start. Schemas `StartLiveRequest` and `SandboxMinutes`.
+- `sandboxMinutes` on the run, in the start response, `GET /strategy/{strategyId}/live` and `GET /live/{runId}` (`LiveRunWithStream`,
+  `LiveRunDetail`): the trial the run was given. Absent from a run that has none, never `null`. The guide has a new section, "How long
+  the sandbox lasts".
+
+### Changed
+
+- The sandbox trial is no longer described as 24 hours for everyone: it lasts at least the plan's shortest trial and at most 24 hours
+  (`stage`, `gate` and the lifecycle section of the guide). Runs that do not ask for anything and are on a plan whose shortest trial is
+  24 hours behave as before.
+
 ## [0.128.46] — 2026-10-22
 
 ### Fixed
